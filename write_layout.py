@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+content = """import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -75,3 +75,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     </html>
   );
 }
+"""
+
+with open("src/app/layout.tsx", "w", encoding="utf-8") as f:
+    f.write(content)
+print("Done!")

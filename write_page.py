@@ -1,4 +1,4 @@
-import Link from "next/link";
+content = """import Link from "next/link";
 import { getCards } from "@/lib/api";
 
 export default async function HomePage() {
@@ -86,3 +86,8 @@ export default async function HomePage() {
     </div>
   );
 }
+"""
+
+with open("src/app/page.tsx", "w", encoding="utf-8") as f:
+    f.write(content)
+print("Done!")
