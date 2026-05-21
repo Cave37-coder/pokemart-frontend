@@ -156,7 +156,7 @@ const SPECIAL_GROUPS: { label: string; color: string; sets: {code:string;name:st
 
 
 const SUPERTYPES = [
-  { label: "Pokemon", value: "Pokemon" },
+  { label: "Pokemon", value: "Pok\u00e9mon" },
   { label: "Trainer", value: "Trainer" },
   { label: "Energy", value: "Energy" },
 ];
