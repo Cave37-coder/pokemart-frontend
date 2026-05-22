@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://pokemart-api-production.up.railway.app";
 
 const SHIPPING_OPTIONS = [
   { id: "collection", label: "Cash on Collection (COC)", price: 0,  desc: "Collect from Birchleigh North, Kempton Park. Pay cash on collection. Mon-Fri 18:30-21:00 | Sat 10:00-18:00 | Sun 10:00-15:00. Give us 24hrs notice!" },

@@ -63,7 +63,7 @@ export default function OrderDetailPage() {
   useEffect(() => {
     const token = localStorage.getItem("access_token");
     if (!token) { setError("Please sign in."); setLoading(false); return; }
-    const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+    const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://pokemart-api-production.up.railway.app";
     fetch(`${API_URL}/api/orders/${id}/`, { headers: { Authorization: `Bearer ${token}` } })
       .then(r => { if (!r.ok) throw new Error("Order not found"); return r.json(); })
       .then(data => { setOrder(data); setLoading(false); })

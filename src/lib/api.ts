@@ -1,6 +1,6 @@
-import axios from "axios";
+﻿import axios from "axios";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://pokemart-api-production.up.railway.app";
+const API_URL = process.env.API_URL || process.env.NEXT_PUBLIC_API_URL || "https://pokemart-api-production.up.railway.app";
 
 export const api = axios.create({
   baseURL: API_URL,
@@ -48,6 +48,7 @@ export interface Card {
   in_stock: boolean;
   tcgplayer_id: string;
   gengar_id: string;
+  tcgcsv_product_id: number | null;
   pokemon_types: { id: number; name: string }[];
   card_set: {
     id: number;
