@@ -552,8 +552,8 @@ export default async function CardsPage({ searchParams }: { searchParams: Promis
             <div key={card.pb_id || card.id} style={{ background:"#1a1a24", border:`${vb.width} solid ${vb.color}`, borderRadius:"8px", overflow:"hidden", opacity: hasStock ? 1 : 0.6 }}>
               <Link href={`/cards/${card.id}`} style={{ textDecoration:"none" }}>
                 <div style={{ position:"relative", width:"100%", aspectRatio:"3/4" }}>
-                  {card.image_small_url ? (
-                    <img src={card.image_small_url} alt={card.name} style={{ width:"100%", height:"100%", objectFit:"cover", display:"block", filter: hasStock ? "none" : "grayscale(100%)" }} />
+                  {card.image_url ? (
+                    <img src={card.image_url} alt={card.name} style={{ width:"100%", height:"100%", objectFit:"cover", display:"block", filter: hasStock ? "none" : "grayscale(100%)" }} />
                   ) : (
                     <div style={{ width:"100%", height:"100%", background:"#12121a", display:"flex", alignItems:"center", justifyContent:"center", fontSize:"36px" }}>🃏</div>
                   )}
