@@ -49,7 +49,7 @@ export default function NavBar() {
       position:"sticky", top:0, zIndex:100,
     }}>
       <Link href="/" style={{ display:"flex", alignItems:"center", gap:"10px", textDecoration:"none" }}>
-        <span style={{ fontSize:"24px" }}>⚡</span>
+        <img src="/pokebulk-logo.png" alt="PokeBulk SA" style={{ height:"48px", width:"48px", objectFit:"contain" }} />
         <span style={{ fontWeight:700, fontSize:"18px", color:"#fff" }}>PokeBulk</span>
         <span style={{ color:"#ff6b35", fontWeight:700, fontSize:"18px" }}>SA</span>
       </Link>
