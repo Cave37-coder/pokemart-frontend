@@ -9,7 +9,7 @@ const SHIPPING_OPTIONS = [
   { id: "collection", label: "Cash on Collection (COC)", price: 0,  desc: "Collect from Birchleigh North, Kempton Park. Pay cash on collection. Mon-Fri 18:30-21:00 | Sat 10:00-18:00 | Sun 10:00-15:00. Give us 24hrs notice!" },
   { id: "pudo_locker", label: "Pudo Kiosk-to-Locker",   price: 75, desc: "1-4 business days. Delivered to your nearest Pudo locker." },
   { id: "pudo_door",   label: "Pudo Door-to-Door",       price: 95, desc: "2-4 business days. Delivered to your door." },
-  { id: "postnet",     label: "Postnet-to-Postnet",      price: 85, desc: "2-5 business days. Collect from your nearest PostNet." },
+  { id: "postnet",     label: "Postnet-to-Postnet",      price: 130, desc: "2-5 business days. Collect from your nearest PostNet." },
 ];
 
 const PAYMENT_OPTIONS = [
@@ -115,6 +115,7 @@ export default function CheckoutPage() {
           customer_note:       note,
           shipping_method:     shipping,
           shipping_cost:       shippingCost,
+          payment_method:      isCollection ? 'coc' : payment,
           pudo_locker_name:    delivery.pudo_locker_name,
           pudo_locker_address: delivery.pudo_locker_address,
         }),
