@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 import { useEffect, useState } from "react";
 import Link from "next/link";
 
@@ -55,7 +55,8 @@ export default function NavBar() {
       </Link>
 
       <div style={{ display:"flex", gap:"1.5rem", alignItems:"center" }}>
-        <Link href="/cards" style={{ color:"#a0a0b0", textDecoration:"none", fontSize:"14px" }}>Browse Cards</Link>
+              <Link href="/cards" style={{ color: "#a0a0b0", textDecoration: "none", fontSize: "14px" }}>Browse Cards</Link>
+              <Link href="/bundles" style={{ color: "#a0a0b0", textDecoration: "none", fontSize: "14px" }}>Bundles</Link>
 
         {user && (
           <Link href="/orders" style={{ color:"#a0a0b0", textDecoration:"none", fontSize:"14px" }}>My Orders</Link>
@@ -73,7 +74,7 @@ export default function NavBar() {
 
         {user ? (
           <div style={{ display:"flex", alignItems:"center", gap:"12px" }}>
-            <span style={{ color:"#a0a0b0", fontSize:"13px" }}>👋 {user}</span>
+            <span style={{ color:"#a0a0b0", fontSize:"13px" }}>?? {user}</span>
             <button onClick={logout} style={{
               background:"transparent", border:"1px solid #2a2a3a", color:"#a0a0b0",
               padding:"7px 14px", borderRadius:"8px", fontSize:"13px", cursor:"pointer",
@@ -89,3 +90,4 @@ export default function NavBar() {
     </nav>
   );
 }
+

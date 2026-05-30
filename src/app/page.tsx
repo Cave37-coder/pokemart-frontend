@@ -27,7 +27,7 @@ export default async function HomePage() {
       <div style={{ background:"linear-gradient(135deg, #0a0a0f 0%, #1a0a2e 50%, #0a0a0f 100%)", padding:"80px 2rem", textAlign:"center", borderBottom:"1px solid #2a2a3a" }}>
         <img src="/pokebulk-logo.png" alt="PokeBulk SA" style={{ height:"120px", width:"120px", objectFit:"contain", marginBottom:"16px" }} />
         <h1 style={{ fontSize:"clamp(32px, 6vw, 56px)", fontWeight:800, marginBottom:"16px", lineHeight:1.1 }}>
-          South Africa&apos;s Premier<br />
+          South Africa&apos;s Premier Bulk<br />
           <span style={{ color:"#ff6b35" }}>Pokemon Card</span> Store
         </h1>
         <p style={{ color:"#a0a0b0", fontSize:"18px", maxWidth:"500px", margin:"0 auto 32px" }}>
