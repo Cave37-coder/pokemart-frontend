@@ -1,8 +1,7 @@
-﻿import Link from "next/link";
+import Link from "next/link";
 import AddToPileButton from "@/components/AddToPileButton";
 import { getCards } from "@/lib/api";
 
-// Fetched from API at runtime
 async function getSets() {
   try {
     const API_URL = process.env.API_URL || process.env.NEXT_PUBLIC_API_URL || "https://pokemart-api-production.up.railway.app";
@@ -18,27 +17,67 @@ async function getSets() {
 }
 
 const ERA_ORDER = [
-  { code: "B1", label: "WotC Base Era" },
-  { code: "B2", label: "EX Era" },
-  { code: "B3", label: "D&P / HG&SS" },
-  { code: "B4", label: "Black & White" },
-  { code: "B5", label: "XY Era" },
-  { code: "B6", label: "Sun & Moon" },
-  { code: "B7", label: "Sword & Shield" },
-  { code: "B8", label: "Scarlet & Violet" },
-  { code: "B9", label: "Mega Evolution" },
+  { code: "WotC", label: "WotC Base Era" },
+  { code: "EX", label: "EX Era" },
+  { code: "DP", label: "D&P / HG&SS" },
+  { code: "BW", label: "Black & White" },
+  { code: "XY", label: "XY Era" },
+  { code: "SM", label: "Sun & Moon" },
+  { code: "SWSH", label: "Sword & Shield" },
+  { code: "SV", label: "Scarlet & Violet" },
+  { code: "MEG", label: "Mega Evolution" },
 ];
 
-// Special group definitions — sets are populated from API
+// Every code that must NEVER appear in era chip rows.
+// These are either special-group-only, empty shells, or duplicates.
+const ALWAYS_SPECIAL_CODES = new Set([
+  // ── Promos ──
+  "PR-WB","PR-NB","PR-NP","PR-DPP","PR-HS","PR-BLW","PR-XY","PR-SM","PR-SW","PR-SWSH","PR-SV","SVP",
+  // PR-era orphans (era=PR)
+  "PR","BP","RU1",
+  // ── POP Series ──
+  "POP1","POP2","POP3","POP4","POP5","POP6","POP7","POP8","POP9",
+  // ── McDonalds ──
+  "MCD11","MCD12","MCD14","MCD15","MCD16","MCD17","MCD18","MCD19","MCD21","MCD22","MCD23","MCD24",
+  // ── Trainer Gallery ──
+  "BRSTG","ASRTG","LORTG","SITTG","CRZGG","ST",
+  // ── Trick or Trade ──
+  "TOT22","TOT23","TOT24","TTBB","TTBB23","TTBB24",
+  // ── Prize Pack individual series ──
+  "PPS1","PPS2","PPS3","PPS4","PPS5","PPS6","PPS7","PPS8",
+  // ── WCD & Exclusives / zero-card shells ──
+  "PRIZEPACK","TCGCL","LTRRC","GENRC","DRV","KSS","DCR","SI1","PR-BEST",
+  "BSS","RUM","BP","CCC","CELCC","HIFSV","SHFSV","SMA",
+  "BTA","BA22","BA24","FPP",
+  "KWBP","BKP-BK","SAMPLE","JUMBO","WCD","LEAGUE","PWCP","BSTEX","MCAP","ALTART","BLE","CCP","PPP",
+  // ── Trainer Kit sets (zero cards, not real sets) ──
+  "TK1","TK1A","TK1B","TK2","TK2A","TK2B",
+  "TK-DP","TK-HS","TK-BLW","TK-SN","TK-BW2","TK-LL","TK-PS",
+  "SMK1","SMK2",
+  // SM orphan codes from API (duplicate SM sets under wrong era)
+  "SM03","SM04","SM05","SM06","SHL","SMK1","SMK2",
+  // Other API duplicates
+  "EXP",
+
+  // ── Other duplicates/orphans ──
+  "EXP","PR-NB","BS2",
+]);
+
 const SPECIAL_GROUP_DEFS = [
-  { label: "Promos",         color: "#F59E0B", eraCodes: ["B1","B2","B3","B4","B5","B6","B7","B8","B9"], codePatterns: ["PR-"] },
-  { label: "POP Series",     color: "#10B981", codePatterns: ["POP"] },
-  { label: "McDonalds",      color: "#EF4444", codePatterns: ["MCD","M11","M12","M14","M15","M16","M17","M18","M19","M21","M22","M23","M24"] },
-  { label: "Trainer Gallery",color: "#8B5CF6", codePatterns: ["TG","GG","ASRTG","BRSTG","LORTG","SITTG","CRZGG","BST","ST","SWSH9TG","SWSH10TG","SWSH11TG","SWSH12TG"] },
-  { label: "Trick or Trade", color: "#EC4899", codePatterns: ["TOT","TTBB"] },
-  { label: "Battle Academy",  color: "#14B8A6", codePatterns: ["BTA","BA22","BA24"] },
-  { label: "Prize Pack",     color: "#F97316", codePatterns: ["PRIZEPACK","PPS"] },
-  { label: "WCD & Exclusives",color: "#6B7280", codePatterns: ["WCD","BLE","MCAP","LEAGUE","JUMBO","ALTART","PPP","CCP","PWCP","KWBP","BKP-BK","SAMPLE","RUM","DEP","TCGCL","LTRRC","GENRC","DRV","KSS","DCR","SI1","PR-BEST"] },
+  { label: "Promos",          color: "#F59E0B", codePatterns: ["PR-","SVP","PR","BP","RU1"] },
+  { label: "POP Series",      color: "#10B981", codePatterns: ["POP"] },
+  { label: "McDonalds",       color: "#EF4444", codePatterns: ["MCD"] },
+  { label: "Trainer Gallery", color: "#8B5CF6", codePatterns: ["BRSTG","ASRTG","LORTG","SITTG","CRZGG","ST"] },
+  { label: "Trick or Trade",  color: "#EC4899", codePatterns: ["TOT","TTBB"] },
+  { label: "Prize Pack",      color: "#F97316", codePatterns: ["PPS"] },
+  { label: "WCD & Exclusives",color: "#6B7280", codePatterns: [
+    "WCD","BLE","MCAP","LEAGUE","JUMBO","ALTART","PPP","CCP","PWCP","KWBP","SAMPLE","BSTEX",
+    "PRIZEPACK","TCGCL","LTRRC","GENRC","DRV","KSS","DCR","SI1","PR-BEST",
+    "BSS","RUM","CCC","CELCC","HIFSV","SHFSV","SMA",
+    "BTA","BA22","BA24","FPP",
+    "TK1","TK1A","TK1B","TK2","TK2A","TK2B",
+    "TK-DP","TK-HS","TK-BLW","TK-SN","TK-BW2","TK-LL","TK-PS","SMK1","SMK2",
+  ]},
 ];
 
 const LEGALITY_OPTIONS = [
@@ -50,33 +89,33 @@ const LEGALITY_OPTIONS = [
 ];
 
 const SUPERTYPES = [
-  { label: "Pokemon", value: "Pok\u00e9mon" },
+  { label: "Pokemon", value: "Pokémon" },
   { label: "Trainer", value: "Trainer" },
-  { label: "Energy", value: "Energy" },
+  { label: "Energy",  value: "Energy" },
 ];
 
 const TRAINER_SUBTYPES = [
-  { label: "Supporter", value: "Supporter" },
-  { label: "Item", value: "Item" },
-  { label: "Stadium", value: "Stadium" },
-  { label: "Pokemon Tool", value: "Tool" },
-  { label: "ACE SPEC", value: "ACE SPEC" },
+  { label: "Supporter",         value: "Supporter" },
+  { label: "Item",              value: "Item" },
+  { label: "Stadium",           value: "Stadium" },
+  { label: "Pokemon Tool",      value: "Tool" },
+  { label: "ACE SPEC",          value: "ACE SPEC" },
   { label: "Technical Machine", value: "Technical Machine" },
 ];
 
 const ENERGY_SUBTYPES = [{ label: "Special Energy", value: "Special" }];
 
 const POKEMON_SUBTYPES = [
-  { label: "Basic", value: "Basic" },
-  { label: "Stage 1", value: "Stage 1" },
-  { label: "Stage 2", value: "Stage 2" },
-  { label: "EX", value: "EX" },
-  { label: "ex", value: "ex" },
-  { label: "GX", value: "GX" },
+  { label: "Basic",    value: "Basic" },
+  { label: "Stage 1",  value: "Stage 1" },
+  { label: "Stage 2",  value: "Stage 2" },
+  { label: "EX",       value: "EX" },
+  { label: "ex",       value: "ex" },
+  { label: "GX",       value: "GX" },
   { label: "V / VMAX", value: "V" },
-  { label: "MEGA", value: "MEGA" },
-  { label: "BREAK", value: "BREAK" },
-  { label: "Tera", value: "Tera" },
+  { label: "MEGA",     value: "MEGA" },
+  { label: "BREAK",    value: "BREAK" },
+  { label: "Tera",     value: "Tera" },
 ];
 
 const ENERGY_TYPES = [
@@ -106,13 +145,13 @@ const RARITIES = [
 ];
 
 const SORT_OPTIONS = [
-  { value: "card_number", label: "Card # (low to high)" },
-  { value: "-card_number", label: "Card # (high to low)" },
+  { value: "card_number",    label: "Card # (low to high)" },
+  { value: "-card_number",   label: "Card # (high to low)" },
   { value: "pokedex_number", label: "Pokedex # (low to high)" },
-  { value: "-pokedex_number", label: "Pokedex # (high to low)" },
-  { value: "price", label: "Price (low to high)" },
-  { value: "-price", label: "Price (high to low)" },
-  { value: "name", label: "Name A to Z" },
+  { value: "-pokedex_number",label: "Pokedex # (high to low)" },
+  { value: "price",          label: "Price (low to high)" },
+  { value: "-price",         label: "Price (high to low)" },
+  { value: "name",           label: "Name A to Z" },
 ];
 
 type VariantKey = "N"|"H"|"RH"|"ERH"|"RH-PB"|"RH-MB"|"BRH-FB"|"BRH-LB"|"BRH-QB"|"BRH-DB"|"BRH-R"|"DR"|"AS"|"MH"|"1ST"|"IR"|"SIR"|"HR";
@@ -168,7 +207,7 @@ const VARIANT_BORDER: Record<VariantKey, { color: string; width: string }> = {
   HR:       { color: "#7F77DD", width: "2px" },
 };
 
-// ── VARIANT OVERLAY – DO NOT REMOVE OR ALTER (except adding new variants) ──
+// ── VARIANT OVERLAY – DO NOT REMOVE OR ALTER ──
 function VariantOverlay({ vk }: { vk: VariantKey }) {
   const badge = (label: string, bg: string, color: string, pos: "tr"|"tl" = "tr") => (
     <div style={{ position:"absolute", ...(pos==="tr"?{top:5,right:5}:{top:5,left:5}), background:bg, color, fontSize:9, fontWeight:600, padding:"2px 6px", borderRadius:10, zIndex:4, letterSpacing:"0.3px", lineHeight:1.4 }}>{label}</div>
@@ -208,7 +247,7 @@ function VariantOverlay({ vk }: { vk: VariantKey }) {
     case "BRH-LB": return (<>{badge("LB","#72243E","#F4C0D1")}{ball("#D4537E","#D4537E","#D4537E",undefined,undefined,true)}</>);
     case "BRH-QB": return (<>{badge("QB","#633806","#FAC775")}{ball("#EF9F27","#f5f5e0","#333",undefined,true)}</>);
     case "BRH-DB": return (<>{badge("DB","#04342C","#5DCAA5")}{ball("#0F6E56","#c0c0b0","#222","#1D9E75")}</>);
-    case "BRH-R": return (<>{diag("rgba(226,75,74,0.15)")}{badge("R","#791F1F","#F7C1C1")}<div style={{ position:"absolute",bottom:4,right:6,fontSize:14,fontWeight:700,color:"#E24B4A",zIndex:3,lineHeight:1 }}>R</div></>);
+    case "BRH-R": return (<>{diag("rgba(226,75,74,0.15)")}{badge("R","#791F1F","#F7C1C1")}{badge("R","#791F1F","#F7C1C1")}<div style={{ position:"absolute",bottom:4,right:6,fontSize:14,fontWeight:700,color:"#E24B4A",zIndex:3,lineHeight:1 }}>R</div></>);
     case "DR": return (<>{diag("rgba(180,178,169,0.12)")}{badge("EX","#444441","#D3D1C7")}</>);
     case "AS": return (<>{aceBorder}{badge("ACE","linear-gradient(90deg,#a32d2d,#854F0B,#27500A,#185FA5,#534AB7)","#fff")}</>);
     case "MH": return (<><div style={{ position:"absolute",inset:0,zIndex:1,pointerEvents:"none",background:"repeating-linear-gradient(90deg,transparent,transparent 4px,rgba(55,138,221,0.1) 4px,rgba(55,138,221,0.1) 5px)" }}/><div style={{ position:"absolute",inset:0,zIndex:1,pointerEvents:"none",background:"repeating-linear-gradient(0deg,transparent,transparent 4px,rgba(55,138,221,0.07) 4px,rgba(55,138,221,0.07) 5px)" }}/>{badge("MH","#0C447C","#B5D4F4")}</>);
@@ -219,7 +258,7 @@ function VariantOverlay({ vk }: { vk: VariantKey }) {
     default: return null;
   }
 }
-// ── END VARIANT OVERLAY – DO NOT REMOVE OR ALTER ──
+// ── END VARIANT OVERLAY ──
 
 function buildHref(current: Record<string, string | undefined>, overrides: Record<string, string | undefined>) {
   const merged = { ...current, ...overrides, page: "1" };
@@ -277,10 +316,7 @@ function SetChip({ set, active, href, color }: { set: any; active: boolean; href
 }
 
 export default async function CardsPage({ searchParams }: { searchParams: Promise<{ [key: string]: string | undefined }> }) {
-  const [params, allSets] = await Promise.all([
-    searchParams,
-    getSets(),
-  ]);
+  const [params, allSets] = await Promise.all([searchParams, getSets()]);
 
   const page = parseInt(params.page || "1");
   const showInStock = params.show_out_of_stock !== "true";
@@ -288,47 +324,62 @@ export default async function CardsPage({ searchParams }: { searchParams: Promis
   const activeEraCode = params.era || "";
   const activeSetCode = params.card_set || "";
 
-  // Group sets by era, deduplicate by name (keep first occurrence = newest release date)
+  // Group sets by era — deduplicate by code, exclude special-only codes
   const setsByEra: Record<string, any[]> = {};
-  const seenNames = new Set<string>();
-  // allSets already sorted by release_date desc from API
+  const seenCodes = new Set<string>();
   for (const set of allSets) {
+    if (seenCodes.has(set.code)) continue;
+    seenCodes.add(set.code);
+    if (ALWAYS_SPECIAL_CODES.has(set.code)) continue;
     const ec = set.era_code || "OTHER";
-    const nameKey = ec + "|" + set.name;
-    if (seenNames.has(nameKey)) continue;
-    seenNames.add(nameKey);
     if (!setsByEra[ec]) setsByEra[ec] = [];
     setsByEra[ec].push(set);
   }
+  for (const ec of Object.keys(setsByEra)) {
+    setsByEra[ec].sort((a: any, b: any) =>
+      (a.release_date || "9999").localeCompare(b.release_date || "9999")
+    );
+  }
 
-  // Identify special sets
-  const specialSetCodes = new Set<string>();
+  // Build special groups
   const specialGroups = SPECIAL_GROUP_DEFS.map(def => {
+    const seen = new Set<string>();
     const sets = allSets.filter((s: any) => {
-      return def.codePatterns?.some((p: string) => s.code.startsWith(p) || s.code === p);
+      if (seen.has(s.code)) return false;
+      const match = def.codePatterns.some((p: string) => s.code === p || s.code.startsWith(p));
+      if (match) seen.add(s.code);
+      return match;
     });
-    sets.forEach((s: any) => specialSetCodes.add(s.code));
+    if (def.label === "Prize Pack") {
+      sets.sort((a: any, b: any) => {
+        const na = parseInt(a.code.replace(/\D/g, "") || "0");
+        const nb = parseInt(b.code.replace(/\D/g, "") || "0");
+        return na - nb;
+      });
+    } else {
+      sets.sort((a: any, b: any) =>
+        (a.release_date || "9999").localeCompare(b.release_date || "9999")
+      );
+    }
     return { ...def, sets };
   }).filter(g => g.sets.length > 0);
 
-  // Main era sets — exclude special ones
   const mainSetsByEra = ERA_ORDER.map(era => ({
     ...era,
-    sets: (setsByEra[era.code] || []).filter((s: any) => !specialSetCodes.has(s.code)),
+    sets: setsByEra[era.code] || [],
   }));
 
-  // Find active era and special group
   const activeEra = mainSetsByEra.find(e => e.code === activeEraCode);
-  const activeSpecialGroup = specialGroups.find(g => g.sets.some((s: any) => s.code === activeSetCode) && !activeEraCode);
-
-  // Find active set for symbol display
+  const activeSpecialGroup = specialGroups.find(g =>
+    g.sets.some((s: any) => s.code === activeSetCode) && !activeEraCode
+  );
   const activeSet = allSets.find((s: any) => s.code === activeSetCode);
 
   const subtypeOptions = currentSupertype === "Trainer" ? TRAINER_SUBTYPES
     : currentSupertype === "Energy" ? ENERGY_SUBTYPES
-    : currentSupertype === "Pokemon" ? POKEMON_SUBTYPES
+    : currentSupertype === "Pokémon" ? POKEMON_SUBTYPES
     : [];
-  const showEnergyTypes = !currentSupertype || currentSupertype === "Pokemon";
+  const showEnergyTypes = !currentSupertype || currentSupertype === "Pokémon";
 
   let data: any = { count: 0, results: [] };
   try {
@@ -347,7 +398,7 @@ export default async function CardsPage({ searchParams }: { searchParams: Promis
       ...(params.pokedex && { pokedex: params.pokedex }),
       min_price: "0.01",
     });
-  } catch (e) {
+  } catch {
     data = { count: 0, results: [] };
   }
 
@@ -374,7 +425,6 @@ export default async function CardsPage({ searchParams }: { searchParams: Promis
           ))}
         </div>
 
-        {/* SET CHIPS for active era */}
         {activeEra && activeEra.sets.length > 0 && !activeSpecialGroup && (
           <div style={{ background:"#1a1a24", border:"1px solid #2a2a3a", borderTop:"2px solid #ff6b35", borderRadius:"0 6px 6px 6px", padding:"10px 12px", display:"flex", gap:"6px", flexWrap:"wrap", marginBottom:"4px" }}>
             <Link href={buildHref(params, { card_set: undefined, page:"1" })} style={{
@@ -413,7 +463,6 @@ export default async function CardsPage({ searchParams }: { searchParams: Promis
         })}
       </div>
 
-      {/* SPECIAL SET PICKER */}
       {activeSpecialGroup && (
         <div style={{ background:"#1a1a24", border:"1px solid #2a2a3a", borderTop:`2px solid ${activeSpecialGroup.color}`, borderRadius:"6px", padding:"10px 12px", display:"flex", gap:"6px", flexWrap:"wrap", marginBottom:"8px" }}>
           {activeSpecialGroup.sets.map((s: any) => (
@@ -422,7 +471,6 @@ export default async function CardsPage({ searchParams }: { searchParams: Promis
         </div>
       )}
 
-      {/* Active set header - symbol + name only, no logo (unreliable from API) */}
       {activeSet && activeSet.symbol_url && (
         <div style={{ display:"flex", alignItems:"center", gap:"12px", marginBottom:"10px", padding:"10px 14px", background:"#1a1a24", borderRadius:"8px", border:"1px solid #2a2a3a" }}>
           <img src={activeSet.symbol_url} alt="" style={{ width:24, height:24, objectFit:"contain" }} />
@@ -431,7 +479,7 @@ export default async function CardsPage({ searchParams }: { searchParams: Promis
         </div>
       )}
 
-      {/* ── SUPERTYPE ROW + IN STOCK TOGGLE ── */}
+      {/* ── SUPERTYPE + IN STOCK ── */}
       <div style={{ display:"flex", gap:"6px", marginBottom:"6px", flexWrap:"wrap", alignItems:"center" }}>
         {SUPERTYPES.map((t) => (
           <Link key={t.value} href={buildHref(params, { supertype: params.supertype === t.value ? undefined : t.value, energy_type: undefined, subtype: undefined, page:"1" })} style={{
@@ -454,7 +502,6 @@ export default async function CardsPage({ searchParams }: { searchParams: Promis
         </div>
       </div>
 
-      {/* ── SUBTYPE ROW ── */}
       {subtypeOptions.length > 0 && (
         <div style={{ display:"flex", gap:"5px", flexWrap:"wrap", marginBottom:"6px" }}>
           {subtypeOptions.map((t) => (
@@ -468,7 +515,6 @@ export default async function CardsPage({ searchParams }: { searchParams: Promis
         </div>
       )}
 
-      {/* ── ENERGY TYPE ROW ── */}
       {showEnergyTypes && (
         <div style={{ display:"flex", gap:"5px", flexWrap:"wrap", marginBottom:"8px" }}>
           {ENERGY_TYPES.map((t) => (
@@ -482,7 +528,7 @@ export default async function CardsPage({ searchParams }: { searchParams: Promis
         </div>
       )}
 
-      {/* ── SEARCH + RARITY + SORT ── */}
+      {/* ── SEARCH ── */}
       <form method="GET" style={{ display:"flex", gap:"10px", marginBottom:"12px", flexWrap:"wrap", alignItems:"center" }}>
         {params.era && <input type="hidden" name="era" value={params.era} />}
         {params.card_set && <input type="hidden" name="card_set" value={params.card_set} />}
@@ -509,18 +555,16 @@ export default async function CardsPage({ searchParams }: { searchParams: Promis
         )}
       </form>
 
-      {/* COUNT */}
       <div style={{ color:"#a0a0b0", fontSize:"13px", marginBottom:"16px" }}>
         <strong style={{ color:"#fff" }}>{data.count?.toLocaleString()}</strong> cards {showInStock ? "in stock" : "total"}
         {params.subtype && <span style={{ color:"#ff6b35" }}> · {params.subtype}</span>}
       </div>
 
-      {/* TOP PAGINATION */}
       <div style={{ marginBottom:"20px" }}>
         <Paginator current={page} total={totalPages} params={params} />
       </div>
 
-      {/* CARD GRID */}
+      {/* ── CARD GRID ── */}
       <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill, minmax(155px, 1fr))", gap:"10px" }}>
         {data.results.map((card: any) => {
           const vk = getVariantKey(card) as VariantKey;
@@ -547,8 +591,8 @@ export default async function CardsPage({ searchParams }: { searchParams: Promis
                     {eraCode} · {setCode} · #{cardNum}
                   </div>
                   <div style={{ fontSize:"11px", color:"#ddd", marginBottom:"3px", lineHeight:1.3, fontWeight:500 }}>{card.name}</div>
-                          {card.pokedex_number && <div style={{ fontSize: "9px", color: "#a0a0b0", marginBottom: "1px" }}>#{String(card.pokedex_number).padStart(4, "0")}</div>}
-                          <div style={{ fontSize: "10px", color: "#555", marginBottom: "5px" }}>{card.rarity?.replace(/_/g, " ").toUpperCase()}</div>
+                  {card.pokedex_number && <div style={{ fontSize:"9px", color:"#a0a0b0", marginBottom:"1px" }}>#{String(card.pokedex_number).padStart(4,"0")}</div>}
+                  <div style={{ fontSize:"10px", color:"#555", marginBottom:"5px" }}>{card.rarity?.replace(/_/g," ").toUpperCase()}</div>
                   <div style={{ fontWeight:700, color:"#ff6b35", fontSize:"14px" }}>R {parseFloat(card.price).toFixed(2)}</div>
                 </div>
               </Link>
@@ -560,7 +604,6 @@ export default async function CardsPage({ searchParams }: { searchParams: Promis
         })}
       </div>
 
-      {/* BOTTOM PAGINATION */}
       <div style={{ marginTop:"32px", marginBottom:"24px" }}>
         <Paginator current={page} total={totalPages} params={params} />
       </div>
@@ -573,4 +616,3 @@ export default async function CardsPage({ searchParams }: { searchParams: Promis
     </div>
   );
 }
-
