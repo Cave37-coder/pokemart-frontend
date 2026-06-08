@@ -42,7 +42,7 @@ const ALWAYS_SPECIAL_CODES = new Set([
     // Trainer Gallery
     "BRSTG", "ASRTG", "LORTG", "SITTG", "CRZGG",
     // Trick or Trade
-    "TT22", "TT23", "TT24", "TOT22", "TOT23", "TOT24",
+    "TK22", "TK23", "TK24",
     // Prize Pack
     "PRIZEPACK", "PPS1", "PPS2", "PPS3", "PPS4", "PPS5", "PPS6", "PPS7", "PPS8",
     // WCD & Exclusives / shells / duplicates with 0 records
@@ -57,7 +57,7 @@ const ALWAYS_SPECIAL_CODES = new Set([
     // SV empty shells (real records are in SVI/PAL/OBF/PAR/PAF)
     "SV1", "SV2", "SV3", "SV3PT5", "SV4", "SV4PT5",
     // SWSH duplicates/shells
-    "ST", "CHP",
+    "ST",
     // WotC duplicates
     "BS2", "EXP", "PR-NB",
     // DB duplicates
@@ -73,7 +73,7 @@ const SPECIAL_GROUP_DEFS = [
     { label: "POP Series", color: "#10B981", codePatterns: ["POP1", "POP2", "POP3", "POP4", "POP5", "POP6", "POP7", "POP8", "POP9"] },
     { label: "McDonalds", color: "#EF4444", codePatterns: ["MCD"] },
     { label: "Trainer Gallery", color: "#8B5CF6", codePatterns: ["BRSTG", "ASRTG", "LORTG", "SITTG", "CRZGG", "ST"] },
-    { label: "Trick or Trade", color: "#EC4899", codePatterns: ["TT22", "TT23", "TT24", "TOT22", "TOT23", "TOT24"] },
+    { label: "Trick or Trade", color: "#EC4899", codePatterns: ["TK22", "TK23", "TK24"] },
     { label: "Prize Pack", color: "#F97316", codePatterns: ["PPS1", "PPS2", "PPS3", "PPS4", "PPS5", "PPS6", "PPS7", "PPS8", "PRIZEPACK"] },
     {
         label: "WCD & Exclusives", color: "#6B7280", codePatterns: [
@@ -162,8 +162,8 @@ const SORT_OPTIONS = [
 
 type VariantKey = "N" | "H" | "RH" | "ERH" | "RH-PB" | "RH-MB" | "BRH-FB" | "BRH-LB" | "BRH-QB" | "BRH-DB" | "BRH-R" | "DR" | "AS" | "MH" | "1ST" | "IR" | "SIR" | "HR";
 
-function getVariantKey(card: { variant_override: string; rarity: string; price_first_edition: string | null; }): VariantKey {
-    const v = (card.variant_override || "").trim();
+function getVariantKey(card: { variant_sort: string; rarity: string; price_first_edition: string | null; }): VariantKey {
+    const v = (card.variant_sort || "").trim();
     const r = card.rarity || "";
     if (card.price_first_edition) return "1ST";
     if (v === "H") return "H";
