@@ -88,7 +88,7 @@ const SPECIAL_GROUP_DEFS = [
 ];
 
 const LEGALITY_OPTIONS = [
-    { value: "", label: "All formats" },
+    { value: "all", label: "All formats" },
     { value: "standard", label: "Standard 2026 (H/I/J)" },
     { value: "expanded", label: "Expanded (D/E/F+)" },
     { value: "rotated_g", label: "Rotated — SV era (G)" },
@@ -332,6 +332,7 @@ export default async function CardsPage({ searchParams }: { searchParams: Promis
 
     const page = parseInt(params.page || "1");
     const showInStock = params.show_out_of_stock !== "true";
+    const effectiveLegality = params.legality || "standard";
     const currentSupertype = params.supertype || "";
     const activeEraCode = params.era || "";
     const activeSetCode = params.card_set || "";
@@ -404,7 +405,7 @@ export default async function CardsPage({ searchParams }: { searchParams: Promis
             ...(params.subtype && { subtype: params.subtype }),
             ...(params.page && { page: params.page }),
             ...(showInStock && { in_stock: "true" }),
-            ...(params.legality && { legality: params.legality }),
+            ...(effectiveLegality !== "all" && { legality: effectiveLegality }),
             ...(params.pokedex && { pokedex: params.pokedex }),
             min_price: "0.01",
         });
@@ -547,7 +548,6 @@ export default async function CardsPage({ searchParams }: { searchParams: Promis
                 {params.supertype && <input type="hidden" name="supertype" value={params.supertype} />}
                 {params.subtype && <input type="hidden" name="subtype" value={params.subtype} />}
                 {params.show_out_of_stock && <input type="hidden" name="show_out_of_stock" value={params.show_out_of_stock} />}
-                {params.legality && <input type="hidden" name="legality" value={params.legality} />}
                 {params.pokedex && <input type="hidden" name="pokedex" value={params.pokedex} />}
                 <input name="search" defaultValue={params.search} placeholder="Search name, set, artist..." style={{ background: "#1a1a24", border: "1px solid #2a2a3a", borderRadius: "6px", padding: "8px 14px", color: "#fff", fontSize: "13px", flex: 1, minWidth: "180px" }} />
                 <input name="pokedex" defaultValue={params.pokedex} placeholder="Dex # e.g. 25" style={{ background: "#1a1a24", border: "1px solid #2a2a3a", borderRadius: "6px", padding: "8px 12px", color: "#fff", fontSize: "13px", width: "120px" }} />
@@ -557,7 +557,7 @@ export default async function CardsPage({ searchParams }: { searchParams: Promis
                 <select name="ordering" defaultValue={params.ordering || "card_number"} style={{ background: "#1a1a24", border: "1px solid #2a2a3a", borderRadius: "6px", padding: "8px 12px", color: "#fff", fontSize: "13px" }}>
                     {SORT_OPTIONS.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
                 </select>
-                <select name="legality" defaultValue={params.legality || ""} style={{ background: "#1a1a24", border: "1px solid #2a2a3a", borderRadius: "6px", padding: "8px 12px", color: "#fff", fontSize: "13px" }}>
+                <select name="legality" defaultValue={effectiveLegality} style={{ background: "#1a1a24", border: "1px solid #2a2a3a", borderRadius: "6px", padding: "8px 12px", color: "#fff", fontSize: "13px" }}>
                     {LEGALITY_OPTIONS.map((l) => <option key={l.value} value={l.value}>{l.label}</option>)}
                 </select>
                 <button type="submit" style={{ background: "#ff6b35", color: "#fff", border: "none", borderRadius: "6px", padding: "8px 18px", fontSize: "13px", fontWeight: 600, cursor: "pointer" }}>Search</button>
