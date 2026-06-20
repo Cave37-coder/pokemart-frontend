@@ -1,4 +1,6 @@
 import Link from "next/link";
+import { notFound } from "next/navigation";
+import axios from "axios";
 import { getCard } from "@/lib/api";
 import AddToPileButton from "./AddToPileButton";
 
@@ -11,7 +13,23 @@ const TYPE_COLORS: Record<string, string> = {
 
 export default async function CardPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const card = await getCard(parseInt(id));
+
+  const parsedId = parseInt(id);
+  if (isNaN(parsedId)) {
+    notFound();
+  }
+
+  let card;
+  try {
+    card = await getCard(parsedId);
+  } catch (err) {
+    if (axios.isAxiosError(err) && err.response?.status === 404) {
+      notFound();
+    }
+    // Anything else (network failure, 500 from Railway, timeout, etc.)
+    // is a real error and should still surface as one.
+    throw err;
+  }
 
   return (
     <div style={{ maxWidth: "1000px", margin: "0 auto", padding: "40px 2rem" }}>

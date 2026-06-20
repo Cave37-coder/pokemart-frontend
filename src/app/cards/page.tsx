@@ -1,6 +1,7 @@
 import Link from "next/link";
 import AddToPileButton from "@/components/AddToPileButton";
 import { getCards } from "@/lib/api";
+import InfoModal from "@/components/InfoModal";
 
 async function getSets() {
     try {
@@ -42,7 +43,7 @@ const ALWAYS_SPECIAL_CODES = new Set([
     // Trainer Gallery
     "BRSTG", "ASRTG", "LORTG", "SITTG", "CRZGG",
     // Trick or Trade
-    "TK22", "TK23", "TK24",
+    "TT22", "TT23", "TT24",
     // Prize Pack
     "PRIZEPACK", "PPS1", "PPS2", "PPS3", "PPS4", "PPS5", "PPS6", "PPS7", "PPS8",
     // WCD & Exclusives / shells / duplicates with 0 records
@@ -59,9 +60,9 @@ const ALWAYS_SPECIAL_CODES = new Set([
     // SWSH duplicates/shells
     "ST",
     // WotC duplicates
-    "BS2", "EXP", "PR-NB",
+    "EXP", "PR-NB",
     // DB duplicates
-    "CoL", "LTRRC",
+    "LTRRC",
     // MEG era energy shown via MEG tab
     "MEE",
     // SVE shown via SV era tab
@@ -72,8 +73,8 @@ const SPECIAL_GROUP_DEFS = [
     { label: "Promos", color: "#F59E0B", codePatterns: ["PR-", "SVP", "MEP"] },
     { label: "POP Series", color: "#10B981", codePatterns: ["POP1", "POP2", "POP3", "POP4", "POP5", "POP6", "POP7", "POP8", "POP9"] },
     { label: "McDonalds", color: "#EF4444", codePatterns: ["MCD"] },
-    { label: "Trainer Gallery", color: "#8B5CF6", codePatterns: ["BRSTG", "ASRTG", "LORTG", "SITTG", "CRZGG", "ST"] },
-    { label: "Trick or Trade", color: "#EC4899", codePatterns: ["TK22", "TK23", "TK24"] },
+    { label: "Trainer Gallery", color: "#8B5CF6", codePatterns: ["BRSTG", "ASRTG", "LORTG", "SITTG", "CRZGG"] },
+    { label: "Trick or Trade", color: "#EC4899", codePatterns: ["TT22", "TT23", "TT24"] },
     { label: "Prize Pack", color: "#F97316", codePatterns: ["PPS1", "PPS2", "PPS3", "PPS4", "PPS5", "PPS6", "PPS7", "PPS8", "PRIZEPACK"] },
     {
         label: "WCD & Exclusives", color: "#6B7280", codePatterns: [
@@ -162,8 +163,8 @@ const SORT_OPTIONS = [
 
 type VariantKey = "N" | "H" | "RH" | "ERH" | "RH-PB" | "RH-MB" | "BRH-FB" | "BRH-LB" | "BRH-QB" | "BRH-DB" | "BRH-R" | "DR" | "AS" | "MH" | "1ST" | "IR" | "SIR" | "HR";
 
-function getVariantKey(card: { variant_sort: string; rarity: string; price_first_edition: string | null; }): VariantKey {
-    const v = (card.variant_sort || "").trim();
+function getVariantKey(card: { variant_override: string; rarity: string; price_first_edition: string | null; }): VariantKey {
+    const v = (card.variant_override || "").trim();
     const r = card.rarity || "";
     if (card.price_first_edition) return "1ST";
     if (v === "H") return "H";
@@ -282,10 +283,9 @@ function buildHref(current: Record<string, string | undefined>, overrides: Recor
 
 function Paginator({ current, total, params }: { current: number; total: number; params: Record<string, string | undefined> }) {
     if (total <= 1) return null;
-    const MAX_PAGE = 50;
     const safeCurrent = Math.min(current, total);
-    const displayTotal = Math.min(total, MAX_PAGE);
-    const isCapped = total > MAX_PAGE;
+    const displayTotal = total;
+    const isCapped = false;
     const pages: (number | "...")[] = [];
     if (displayTotal <= 7) { for (let i = 1; i <= displayTotal; i++) pages.push(i); }
     else {
@@ -302,7 +302,7 @@ function Paginator({ current, total, params }: { current: number; total: number;
             {pages.map((p, i) => p === "..." ? <span key={`e${i}`} style={{ ...btn, background: "transparent", border: "none", color: "#555" }}>...</span> : <Link key={p} href={buildHref(params, { page: String(p) })} style={{ ...btn, background: p === safeCurrent ? "#ff6b35" : "#1a1a24", color: "#fff", borderColor: p === safeCurrent ? "#ff6b35" : "#2a2a3a" }}>{p}</Link>)}
             {safeCurrent < displayTotal && <Link href={buildHref(params, { page: String(safeCurrent + 1) })} style={{ ...btn, background: "#1a1a24", color: "#fff" }}>next</Link>}
             <span style={{ color: "#555", fontSize: "12px", marginLeft: "8px" }}>
-                Page {safeCurrent} of {total}{isCapped ? " — use filters to narrow results" : ""}
+                Page {safeCurrent} of {total}
             </span>
         </div>
     );
@@ -423,6 +423,7 @@ export default async function CardsPage({ searchParams }: { searchParams: Promis
 
     return (
         <div style={{ maxWidth: "1400px", margin: "0 auto", padding: "20px 1.5rem" }}>
+            <InfoModal />
 
             {/* ERA TABS */}
             <div style={{ marginBottom: "4px" }}>
@@ -575,35 +576,72 @@ export default async function CardsPage({ searchParams }: { searchParams: Promis
             </div>
 
             {/* CARD GRID */}
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(155px, 1fr))", gap: "10px" }}>
-                {data.results.map((card: any) => {
+            {(() => {
+                const nmCards = data.results.filter((c: any) => !c.condition || c.condition === 'NM');
+                const playedCards = data.results.filter((c: any) => c.condition && c.condition !== 'NM' && c.stock > 0);
+                const playedByProductId: Record<number, any[]> = {};
+                for (const p of playedCards) {
+                    const pid = p.tcgcsv_product_id;
+                    if (pid) {
+                        if (!playedByProductId[pid]) playedByProductId[pid] = [];
+                        playedByProductId[pid].push(p);
+                    }
+                }
+                const renderCard = (card: any, isPlayed: boolean) => {
                     const vk = getVariantKey(card) as VariantKey;
                     const vb = VARIANT_BORDER[vk];
-                    const cardNum = card.card_number != null ? String(card.card_number).padStart(3, "0") : "???";
+                    const cardNum = card.number || (card.card_number != null ? String(card.card_number).padStart(3, "0") : "???");
                     const setCode = card.card_set?.code || "";
                     const eraCode = card.card_set?.era?.code || "";
                     const symbolUrl = card.card_set?.symbol_url || "";
                     const hasStock = card.stock > 0;
+                    const condLabel = card.condition || 'NM';
                     return (
-                        <div key={card.pb_id || card.id} style={{ background: "#1a1a24", border: `${vb.width} solid ${vb.color}`, borderRadius: "8px", overflow: "hidden", opacity: hasStock ? 1 : 0.6 }}>
+                        <div key={(card.pb_id || card.id) + (isPlayed ? '-played' : '')} style={{
+                            background: isPlayed ? "#1a1510" : "#1a1a24",
+                            border: isPlayed ? "1px solid #b45309" : `${vb.width} solid ${vb.color}`,
+                            borderRadius: "8px", overflow: "hidden",
+                            opacity: hasStock ? 1 : 0.6,
+                            position: "relative",
+                        }}>
+                            {isPlayed && (
+                                <div style={{
+                                    position: "absolute", top: 0, left: 0, right: 0, bottom: 0,
+                                    background: "rgba(234,179,8,0.08)",
+                                    pointerEvents: "none", zIndex: 1, borderRadius: "8px"
+                                }} />
+                            )}
                             <Link href={`/cards/${card.id}`} style={{ textDecoration: "none" }}>
                                 <div style={{ position: "relative", width: "100%", aspectRatio: "3/4" }}>
                                     {card.image_url ? (
-                                        <img src={card.image_url} alt={card.name} style={{ width: "100%", height: "100%", objectFit: "cover", display: "block", filter: hasStock ? "none" : "grayscale(100%)" }} />
+                                        <img src={card.image_url} alt={card.name} crossOrigin="anonymous" style={{
+                                            width: "100%", height: "100%", objectFit: "cover", display: "block",
+                                            filter: isPlayed
+                                                ? `grayscale(15%) sepia(40%) hue-rotate(5deg) brightness(0.85)${!hasStock ? " grayscale(100%)" : ""}`
+                                                : (hasStock ? "none" : "grayscale(100%)")
+                                        }} />
                                     ) : (
                                         <div style={{ width: "100%", height: "100%", background: "#12121a", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "36px" }}>🃏</div>
                                     )}
                                     <VariantOverlay vk={vk} />
+                                    {isPlayed && (
+                                        <div style={{
+                                            position: "absolute", top: 5, left: 5, zIndex: 5,
+                                            background: "#92400e", color: "#fde68a",
+                                            fontSize: 9, fontWeight: 700, padding: "2px 7px",
+                                            borderRadius: 10, letterSpacing: "0.4px", lineHeight: 1.4,
+                                        }}>{condLabel}</div>
+                                    )}
                                 </div>
                                 <div style={{ padding: "8px 10px" }}>
                                     <div style={{ fontSize: "10px", color: "#555", marginBottom: "2px", display: "flex", alignItems: "center", gap: "4px" }}>
                                         {symbolUrl && <img src={symbolUrl} alt="" style={{ width: 10, height: 10, objectFit: "contain", opacity: 0.5 }} />}
-                                        {eraCode} · {setCode} · #{cardNum}
+                                        {eraCode} · {setCode} · {cardNum}
                                     </div>
                                     <div style={{ fontSize: "11px", color: "#ddd", marginBottom: "3px", lineHeight: 1.3, fontWeight: 500 }}>{card.name}</div>
                                     {card.pokedex_number && <div style={{ fontSize: "9px", color: "#a0a0b0", marginBottom: "1px" }}>#{String(card.pokedex_number).padStart(4, "0")}</div>}
                                     <div style={{ fontSize: "10px", color: "#555", marginBottom: "5px" }}>{card.rarity?.replace(/_/g, " ").toUpperCase()}</div>
-                                    <div style={{ fontWeight: 700, color: "#ff6b35", fontSize: "14px" }}>R {parseFloat(card.price).toFixed(2)}</div>
+                                    <div style={{ fontWeight: 700, color: isPlayed ? "#fbbf24" : "#ff6b35", fontSize: "14px" }}>R {parseFloat(card.price).toFixed(2)}</div>
                                 </div>
                             </Link>
                             <div style={{ padding: "0 10px 10px" }}>
@@ -611,8 +649,27 @@ export default async function CardsPage({ searchParams }: { searchParams: Promis
                             </div>
                         </div>
                     );
-                })}
-            </div>
+                };
+                const gridItems: React.ReactNode[] = [];
+                for (const card of nmCards) {
+                    gridItems.push(renderCard(card, false));
+                    const siblings = playedByProductId[card.tcgcsv_product_id] || [];
+                    for (const played of siblings) {
+                        gridItems.push(renderCard(played, true));
+                    }
+                }
+                const pairedIds = new Set(nmCards.map((c: any) => c.tcgcsv_product_id).filter(Boolean));
+                for (const played of playedCards) {
+                    if (!pairedIds.has(played.tcgcsv_product_id)) {
+                        gridItems.push(renderCard(played, true));
+                    }
+                }
+                return (
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(155px, 1fr))", gap: "10px" }}>
+                        {gridItems}
+                    </div>
+                );
+            })()}
 
             <div style={{ marginTop: "32px", marginBottom: "24px" }}>
                 <Paginator current={page} total={totalPages} params={params} />

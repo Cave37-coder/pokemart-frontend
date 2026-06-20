@@ -1,4 +1,6 @@
-﻿import Link from "next/link";
+export const dynamic = 'force-dynamic';
+
+import Link from "next/link";
 import { getCards } from "@/lib/api";
 
 const ERAS = [
@@ -161,5 +163,3 @@ export default async function HomePage() {
     </div>
   );
 }
-
-
