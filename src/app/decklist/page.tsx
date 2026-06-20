@@ -708,7 +708,7 @@ export default function DecklistPage() {
       searchAbort.current = controller;
       setSearching(true);
       setSearchError(false);
-      fetch(`${API_URL}/api/products/?search=${encodeURIComponent(q)}&page_size=24`, { signal: controller.signal })
+      fetch(`${API_URL}/api/products/?search=${encodeURIComponent(q)}&legal_standard=true&page_size=24`, { signal: controller.signal })
         .then((r) => {
           if (!r.ok) throw new Error(`HTTP ${r.status}`);
           return r.json() as Promise<ApiSearchResponse>;
@@ -1391,7 +1391,7 @@ ${notes ? `<div class="st">Notes</div><p style="font-size:10pt;line-height:1.7;c
                 <input
                   value={cardQuery}
                   onChange={(e) => setCardQuery(e.target.value)}
-                  placeholder="Search any card by name…"
+                  placeholder="Search Standard-legal cards by name…"
                   style={{
                     width: "100%",
                     border: `1px solid ${COLORS_THEME.border2}`,
@@ -1421,7 +1421,9 @@ ${notes ? `<div class="st">Notes</div><p style="font-size:10pt;line-height:1.7;c
                       <div style={{ padding: "10px 12px", fontSize: 12, color: COLORS_THEME.red }}>Search unavailable — try again</div>
                     )}
                     {!searching && !searchError && cardResults.length === 0 && (
-                      <div style={{ padding: "10px 12px", fontSize: 12, color: COLORS_THEME.hint }}>No cards found</div>
+                      <div style={{ padding: "10px 12px", fontSize: 12, color: COLORS_THEME.hint }}>
+                        No Standard-legal cards found — older or rotated printings won&apos;t appear here
+                      </div>
                     )}
                     {!searching &&
                       !searchError &&
