@@ -332,7 +332,7 @@ export default async function CardsPage({ searchParams }: { searchParams: Promis
 
     const page = parseInt(params.page || "1");
     const showInStock = params.show_out_of_stock !== "true";
-    const effectiveLegality = params.legality || "standard";
+    const effectiveLegality = params.legality || "all";
     const currentSupertype = params.supertype || "";
     const activeEraCode = params.era || "";
     const activeSetCode = params.card_set || "";
