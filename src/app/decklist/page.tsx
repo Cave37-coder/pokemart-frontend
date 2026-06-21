@@ -160,7 +160,19 @@ function extractSetCode(line: string): string | null {
   return m ? m[1] : null;
 }
 
-function checkLegality(pokemonText: string, trainerText: string, energyText: string): LegalityResult {
+function extractCardNumber(line: string): number | null {
+  const m = line.trim().match(/\b[A-Z][A-Z0-9]{1,4}\s+(\d{1,4})[a-z]?\s*$/);
+  return m ? parseInt(m[1], 10) : null;
+}
+
+// DEFERRED (2026-06-20): this hardcoded engine is kept ONLY for the
+// per-deck sidebar dot indicators (Deck.illegal/Deck.warn), which still
+// recompute on every keystroke via getLegalMeta below. Wiring those to the
+// live API too would mean debouncing+batching across every saved deck
+// simultaneously, not just the open one -- scoped out as a follow-up.
+// The actual banner shown while editing a deck (LegalityBanner) and the
+// print output now use checkLegalityLive instead, see further down.
+function checkLegalityHardcoded(pokemonText: string, trainerText: string, energyText: string): LegalityResult {
   const illegal: IllegalEntry[] = [];
   const reprinted: ReprintEntry[] = [];
   const unknown: string[] = [];
@@ -226,6 +238,133 @@ function checkLegality(pokemonText: string, trainerText: string, energyText: str
 }
 
 // ════════════════════════════════════════════════
+// LIVE LEGALITY ENGINE — queries the real catalog's legal_standard field
+// (Phase 2, 2026-06-20). Resolves each parsed deck line to a real product
+// by (card_set code, card_number), batched and deduplicated so a 60-card
+// deck triggers a handful of requests, not 60. Basic Energy lines are
+// skipped entirely (matches the real rule: always legal regardless of
+// mark, same as checkLegalityHardcoded did).
+// ════════════════════════════════════════════════
+const ROTATED_MARKS_CLIENT = new Set(["A", "B", "C", "D", "E", "F", "G"]);
+
+interface ResolvedCardLegality {
+  legalStandard: boolean;
+  ownMarkRotated: boolean; // true if this exact printing's own mark isn't current
+  apiName: string;
+}
+
+async function resolveCardLegality(setCode: string, cardNumber: number): Promise<ResolvedCardLegality | null> {
+  try {
+    const res = await fetch(
+      `${API_URL}/api/products/?card_set=${encodeURIComponent(setCode)}&card_number=${cardNumber}&page_size=1`
+    );
+    if (!res.ok) return null;
+    const data = await res.json();
+    const card = data.results?.[0];
+    if (!card) return null;
+    const ownMark = ((card.regulation_mark || card.card_set?.regulation_mark || "") as string).toUpperCase();
+    return {
+      legalStandard: Boolean(card.legal_standard),
+      ownMarkRotated: !ownMark || ROTATED_MARKS_CLIENT.has(ownMark),
+      apiName: card.name || "",
+    };
+  } catch {
+    return null;
+  }
+}
+
+interface ParsedDeckLine {
+  code: string;
+  num: number;
+  name: string;
+  fullLine: string;
+  section: "pokemon" | "trainer";
+}
+
+function parseLegalitySection(text: string, section: "pokemon" | "trainer"): ParsedDeckLine[] {
+  return text
+    .trim()
+    .split("\n")
+    .map((raw) => raw.trim())
+    .filter((line) => line && /^\d+\s/.test(line))
+    .map((line) => {
+      const code = extractSetCode(line);
+      const num = extractCardNumber(line);
+      const name = extractCardName(line);
+      const fullLine = line.replace(/^\d+\s+/, "").trim();
+      return { code: code || "", num: num ?? NaN, name, fullLine, section };
+    })
+    .filter((l): l is ParsedDeckLine => Boolean(l.code) && !isNaN(l.num));
+}
+
+async function checkLegalityLive(pokemonText: string, trainerText: string, energyText: string): Promise<LegalityResult> {
+  // Energy lines are intentionally NOT parsed/checked here -- Basic Energy
+  // is always legal regardless of mark, matching the backend's
+  // is_basic_energy() rule. Special (non-basic) Energy is rare enough in
+  // practice that flagging it as "unknown" would be more noise than help;
+  // if this becomes a real need, extend parseLegalitySection to cover it.
+  const allLines = [...parseLegalitySection(pokemonText, "pokemon"), ...parseLegalitySection(trainerText, "trainer")];
+
+  const uniqueKeys = new Map<string, { code: string; num: number }>();
+  for (const l of allLines) {
+    const key = `${l.code}__${l.num}`;
+    if (!uniqueKeys.has(key)) uniqueKeys.set(key, { code: l.code, num: l.num });
+  }
+
+  const resolved = new Map<string, ResolvedCardLegality | null>();
+  const keyEntries = Array.from(uniqueKeys.entries());
+  const CONCURRENCY = 6;
+  for (let i = 0; i < keyEntries.length; i += CONCURRENCY) {
+    const batch = keyEntries.slice(i, i + CONCURRENCY);
+    const results = await Promise.all(batch.map(([, v]) => resolveCardLegality(v.code, v.num)));
+    batch.forEach(([key], idx) => resolved.set(key, results[idx]));
+  }
+
+  const illegal: IllegalEntry[] = [];
+  const reprinted: ReprintEntry[] = [];
+  const unknown: string[] = [];
+
+  for (const l of allLines) {
+    const card = resolved.get(`${l.code}__${l.num}`);
+
+    if (!card) {
+      const label = `${l.code} ${l.num}`;
+      if (!unknown.includes(label)) unknown.push(label);
+      continue;
+    }
+
+    if (card.legalStandard) {
+      if (card.ownMarkRotated) {
+        // Legal specifically because some OTHER printing of this Trainer
+        // card carries a current mark (reprint pass-through) -- this
+        // printing's own mark is rotated or blank.
+        const dispName = card.apiName || l.name;
+        if (!reprinted.find((x) => x.name === dispName)) reprinted.push({ name: dispName, code: l.code });
+      }
+      // else: directly legal on its own current mark, nothing to flag.
+    } else {
+      if (!illegal.find((x) => x.fullLine === l.fullLine && x.section === l.section)) {
+        illegal.push({
+          code: l.code,
+          label: "not Standard legal",
+          name: card.apiName || l.name,
+          fullLine: l.fullLine,
+          section: l.section,
+        });
+      }
+    }
+  }
+
+  let status: LegalityResult["status"];
+  if (illegal.length > 0) status = "bad";
+  else if (unknown.length > 0) status = "warn";
+  else if (reprinted.length > 0) status = "reprint";
+  else status = "ok";
+
+  return { status, illegal, reprinted, unknown };
+}
+
+// ════════════════════════════════════════════════
 // HELPERS
 // ════════════════════════════════════════════════
 const DECKS_KEY = "pokebulk_decklist_decks_v1";
@@ -263,7 +402,7 @@ function cntLines(txt: string): number {
 
 function getLegalMeta(d: { format: FormatName; pokemon: string; trainers: string; energy: string }) {
   if (d.format !== "Standard") return { illegal: 0, warn: 0 };
-  const { illegal, unknown } = checkLegality(d.pokemon, d.trainers, d.energy);
+  const { illegal, unknown } = checkLegalityHardcoded(d.pokemon, d.trainers, d.energy);
   return { illegal: illegal.length, warn: unknown.length };
 }
 
@@ -411,11 +550,18 @@ function appendOrIncrementLine(currentText: string, lineFragment: string): strin
 // ════════════════════════════════════════════════
 // SMALL UI PIECES
 // ════════════════════════════════════════════════
-function LegalityBanner({ result, format }: { result: LegalityResult | null; format: FormatName }) {
+function LegalityBanner({ result, format, loading }: { result: LegalityResult | null; format: FormatName; loading?: boolean }) {
   if (format !== "Standard") {
     return (
       <div style={{ padding: "10px 16px", fontSize: 12, color: COLORS_THEME.hint, borderBottom: `1px solid ${COLORS_THEME.border}` }}>
         {format === "Expanded" ? "Expanded format — different card pool" : "TCG Live format"}
+      </div>
+    );
+  }
+  if (loading && !result) {
+    return (
+      <div style={{ padding: "10px 16px", fontSize: 12, color: COLORS_THEME.hint, borderBottom: `1px solid ${COLORS_THEME.border}` }}>
+        Checking against live catalog…
       </div>
     );
   }
@@ -443,10 +589,10 @@ function LegalityBanner({ result, format }: { result: LegalityResult | null; for
     title = `${result.illegal.length} illegal card${result.illegal.length !== 1 ? "s" : ""} detected`;
     detail = (
       <>
-        {poke.length > 0 && <div>Pokémon — verify regulation mark on card:</div>}
+        {poke.length > 0 && <div>Pokémon — not Standard legal:</div>}
         {trainer.length > 0 && (
           <div>
-            Trainer not in reprint list:{" "}
+            Trainer not Standard legal:{" "}
             {trainer.map((x, i) => (
               <code key={i} style={{ background: "rgba(255,255,255,0.08)", borderRadius: 3, padding: "0 5px", marginRight: 4, fontSize: 11 }}>
                 {x.name || x.code}
@@ -482,8 +628,8 @@ function LegalityBanner({ result, format }: { result: LegalityResult | null; for
     );
   } else if (result.status === "warn") {
     icon = "⚠";
-    title = `${result.unknown.length} unrecognised set code${result.unknown.length !== 1 ? "s" : ""} — verify manually`;
-    detail = "Not found in 2026-27 legal set list. May be newer releases or typos:";
+    title = `${result.unknown.length} card${result.unknown.length !== 1 ? "s" : ""} could not be verified`;
+    detail = "Not found in the live catalog by set + number. May be a typo, or a card not yet added:";
     tags = (
       <>
         {result.unknown.map((c2, i) => (
@@ -685,6 +831,12 @@ export default function DecklistPage() {
   const recheckTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const recheckResetTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // ── Live legality check (Phase 2) ──
+  const [legality, setLegality] = useState<LegalityResult | null>(null);
+  const [legalityLoading, setLegalityLoading] = useState(false);
+  const legalityDebounce = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const legalityRequestId = useRef(0);
+
   // ── Card search ──
   const [cardQuery, setCardQuery] = useState("");
   const [cardResults, setCardResults] = useState<ApiProduct[]>([]);
@@ -825,10 +977,30 @@ export default function DecklistPage() {
     setImported(d.imported || null);
   }
 
-  const legality = useMemo<LegalityResult | null>(() => {
-    if (!pokemonText.trim() && !trainersText.trim() && !energyText.trim()) return null;
-    return checkLegality(pokemonText, trainersText, energyText);
-  }, [pokemonText, trainersText, energyText]);
+  useEffect(() => {
+    if (legalityDebounce.current) clearTimeout(legalityDebounce.current);
+
+    if (format !== "Standard" || (!pokemonText.trim() && !trainersText.trim() && !energyText.trim())) {
+      setLegality(null);
+      setLegalityLoading(false);
+      return;
+    }
+
+    setLegalityLoading(true);
+    const myRequestId = ++legalityRequestId.current;
+    legalityDebounce.current = setTimeout(async () => {
+      const result = await checkLegalityLive(pokemonText, trainersText, energyText);
+      if (myRequestId === legalityRequestId.current) {
+        setLegality(result);
+        setLegalityLoading(false);
+      }
+    }, 900);
+
+    return () => {
+      if (legalityDebounce.current) clearTimeout(legalityDebounce.current);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pokemonText, trainersText, energyText, format]);
 
   const pCount = useMemo(() => cntLines(pokemonText), [pokemonText]);
   const tCount = useMemo(() => cntLines(trainersText), [trainersText]);
@@ -932,13 +1104,20 @@ export default function DecklistPage() {
     setRecheckState("checking");
     if (recheckTimer.current) clearTimeout(recheckTimer.current);
     if (recheckResetTimer.current) clearTimeout(recheckResetTimer.current);
-    recheckTimer.current = setTimeout(() => {
+    if (legalityDebounce.current) clearTimeout(legalityDebounce.current);
+
+    recheckTimer.current = setTimeout(async () => {
       if (format !== "Standard") {
         setRecheckState("idle");
         return;
       }
-      const { status } = checkLegality(pokemonText, trainersText, energyText);
-      const next = status === "ok" || status === "reprint" ? "ok" : status === "bad" ? "bad" : "warn";
+      setLegalityLoading(true);
+      const myRequestId = ++legalityRequestId.current;
+      const result = await checkLegalityLive(pokemonText, trainersText, energyText);
+      if (myRequestId !== legalityRequestId.current) return;
+      setLegality(result);
+      setLegalityLoading(false);
+      const next = result.status === "ok" || result.status === "reprint" ? "ok" : result.status === "bad" ? "bad" : "warn";
       setRecheckState(next);
       recheckResetTimer.current = setTimeout(() => setRecheckState("idle"), 3000);
     }, 420);
@@ -1005,7 +1184,7 @@ export default function DecklistPage() {
     toast("Deck imported!");
   }
 
-  function buildPrintHTML(): string {
+  function buildPrintHTML(legalityResult: LegalityResult | null): string {
     const p = pokemonText.trim();
     const t = trainersText.trim();
     const e = energyText.trim();
@@ -1018,7 +1197,7 @@ export default function DecklistPage() {
     const totalC = pC + tC + eC;
     const logoUrl = typeof window !== "undefined" ? `${window.location.origin}/decklist-logo.jpg` : "/decklist-logo.jpg";
 
-    const lr = format === "Standard" ? checkLegality(p, t, e) : null;
+    const lr = format === "Standard" ? legalityResult : null;
     let legalBlock = "";
     if (lr) {
       const colors =
@@ -1035,8 +1214,8 @@ export default function DecklistPage() {
       } else if (lr.status === "bad") {
         const poke = lr.illegal.filter((x) => x.section === "pokemon").map((x) => x.fullLine).join(", ");
         const trainer = lr.illegal.filter((x) => x.section === "trainer").map((x) => x.name || x.code).join(", ");
-        text = `✗ Illegal cards detected. ${poke ? "Pokémon — verify reg mark: " + poke + ". " : ""}${
-          trainer ? "Trainer not in reprint list: " + trainer : ""
+        text = `✗ Illegal cards detected. ${poke ? "Pokémon — not Standard legal: " + poke + ". " : ""}${
+          trainer ? "Trainer not Standard legal: " + trainer : ""
         }`;
       }
       legalBlock = `<div style="padding:8px 12px;border-radius:6px;margin-bottom:12px;font-size:9pt;font-weight:700;background:${colors.bg};color:${colors.color};border:1px solid ${colors.border}">${text}</div>`;
@@ -1108,7 +1287,7 @@ ${notes ? `<div class="st">Notes</div><p style="font-size:10pt;line-height:1.7;c
       toast("Allow popups to print");
       return;
     }
-    win.document.write(buildPrintHTML());
+    win.document.write(buildPrintHTML(legality));
     win.document.close();
     setTimeout(() => {
       win.focus();
@@ -1381,7 +1560,7 @@ ${notes ? `<div class="st">Notes</div><p style="font-size:10pt;line-height:1.7;c
                 </div>
               </div>
 
-              <LegalityBanner result={legality} format={format} />
+              <LegalityBanner result={legality} format={format} loading={legalityLoading} />
 
               <div className="dl-editor-grid">
                 <div style={{ padding: 13, display: "flex", flexDirection: "column", gap: 5, borderRight: `1px solid ${COLORS_THEME.border}`, overflowY: "auto" }}>
