@@ -53,6 +53,13 @@ export default async function CardPage({ params }: { params: Promise<{ id: strin
             </span>
           </div>
           <h1 style={{ fontSize: "36px", fontWeight: 800, marginBottom: "4px" }}>{card.name}</h1>
+          {card.card_set && (
+            <div style={{ color: "#a0a0b0", fontSize: "14px", marginBottom: card.name_japanese ? "4px" : "16px" }}>
+              {card.card_set.name}
+              {card.card_set.era?.name ? ` · ${card.card_set.era.name}` : ""}
+              {(card.number || card.card_number) ? ` · #${card.number || card.card_number}` : ""}
+            </div>
+          )}
           {card.name_japanese && (
             <div style={{ color: "#a0a0b0", fontSize: "18px", marginBottom: "16px" }}>{card.name_japanese}</div>
           )}

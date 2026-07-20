@@ -16,7 +16,7 @@ interface CartItem {
     image_small_url: string;
     card_set: { code: string; name: string };
     rarity: string;
-  };
+  } | null;
 }
 
 interface Cart {
@@ -101,19 +101,32 @@ export default function PilePage() {
                 background: "#1a1a24", border: "1px solid #2a2a3a", borderRadius: 10,
                 padding: "12px 16px", display: "flex", gap: 12, alignItems: "center",
               }}>
-                {item.product.image_small_url && (
-                  <img src={item.product.image_small_url} alt={item.product.name}
-                    style={{ width: 50, height: 70, objectFit: "cover", borderRadius: 4, flexShrink: 0 }} />
+                {!item.product ? (
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontWeight: 600, color: "#a0a0b0", fontSize: 14, marginBottom: 2 }}>
+                      This card is no longer available
+                    </div>
+                    <div style={{ fontSize: 11, color: "#555" }}>
+                      It was removed from our catalog. Please remove it from your pile.
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    {item.product.image_small_url && (
+                      <img src={item.product.image_small_url} alt={item.product.name}
+                        style={{ width: 50, height: 70, objectFit: "cover", borderRadius: 4, flexShrink: 0 }} />
+                    )}
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontWeight: 600, color: "#fff", fontSize: 14, marginBottom: 2 }}>{item.product.name}</div>
+                      <div style={{ fontSize: 11, color: "#555", marginBottom: 4 }}>
+                        {item.product.card_set?.name} · {item.product.rarity?.replace(/_/g, " ").toUpperCase()}
+                      </div>
+                      <div style={{ fontSize: 11, color: "#a0a0b0" }}>
+                        Qty: {item.quantity} × R {parseFloat(item.product.price).toFixed(2)}
+                      </div>
+                    </div>
+                  </>
                 )}
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontWeight: 600, color: "#fff", fontSize: 14, marginBottom: 2 }}>{item.product.name}</div>
-                  <div style={{ fontSize: 11, color: "#555", marginBottom: 4 }}>
-                    {item.product.card_set?.name} · {item.product.rarity?.replace(/_/g, " ").toUpperCase()}
-                  </div>
-                  <div style={{ fontSize: 11, color: "#a0a0b0" }}>
-                    Qty: {item.quantity} × R {parseFloat(item.product.price).toFixed(2)}
-                  </div>
-                </div>
                 <div style={{ textAlign: "right", flexShrink: 0 }}>
                   <div style={{ fontWeight: 700, color: "#ff6b35", fontSize: 15, marginBottom: 6 }}>
                     R {parseFloat(item.subtotal).toFixed(2)}

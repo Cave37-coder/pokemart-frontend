@@ -22,6 +22,7 @@ export interface Card {
   card_subtypes: string;
   pokedex_number: number;
   card_number: number;
+  number: string;
   variant_override: string;
   weakness_type: string;
   weakness_value: string;
@@ -78,3 +79,4 @@ export const getCard = async (id: number) => {
   const { data } = await api.get<Card>(`/api/products/${id}/`);
   return data;
 };
+

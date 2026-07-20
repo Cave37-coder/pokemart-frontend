@@ -57,7 +57,10 @@ export default function LoginPage() {
               <input style={inp} type="text" value={username} onChange={e => setUsername(e.target.value)} required autoFocus placeholder="your username" />
             </div>
             <div style={{ marginBottom: 24 }}>
-              <label style={{ display: "block", fontSize: 13, color: "#a0a0b0", marginBottom: 6 }}>Password</label>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 6 }}>
+                <label style={{ fontSize: 13, color: "#a0a0b0" }}>Password</label>
+                <Link href="/auth/forgot-password" style={{ fontSize: 12, color: "#ff6b35", textDecoration: "none" }}>Forgot password?</Link>
+              </div>
               <input style={inp} type="password" value={password} onChange={e => setPassword(e.target.value)} required placeholder="password" />
             </div>
             <button type="submit" disabled={loading} style={{

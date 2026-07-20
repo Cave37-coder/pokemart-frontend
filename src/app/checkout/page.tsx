@@ -43,7 +43,7 @@ interface Profile {
 
 interface CartItem {
   id: number; quantity: number; subtotal: string;
-  product: { id: number; name: string; price: string; image_small_url: string; card_set: { code: string; name: string } };
+  product: { id: number; name: string; price: string; image_small_url: string; card_set: { code: string; name: string } } | null;
 }
 
 interface Cart { id: number; total: string; items: CartItem[]; }
@@ -101,7 +101,8 @@ export default function CheckoutPage() {
   const shippingCost = selectedDelivery?.price || 0;
   const cartTotal    = parseFloat(cart?.total || "0");
   const orderTotal   = cartTotal + shippingCost;
-  const items        = cart?.items || [];
+  const items        = (cart?.items || []).filter(item => item.product !== null);
+  const hasUnavailableItems = (cart?.items?.length || 0) > items.length;
 
   const needsAddress  = ["pudo_door","postnet"].includes(shipping);
   const needsLocker   = ["pudo_locker","pudo_kiosk","pudo_medium"].includes(shipping);
@@ -207,6 +208,11 @@ export default function CheckoutPage() {
   return (
     <div style={{ maxWidth:900, margin:"32px auto", padding:"0 1.5rem" }}>
       <h1 style={{ fontSize:22, fontWeight:700, color:"#fff", marginBottom:24 }}>Checkout</h1>
+      {hasUnavailableItems && (
+        <div style={{ background:"#2a1f14", border:"1px solid #6b4a1f", color:"#f0b968", borderRadius:8, padding:"10px 14px", marginBottom:16, fontSize:13 }}>
+          One or more cards in your pile are no longer available and have been left out of this order. You can remove them from your pile afterwards.
+        </div>
+      )}
       <div style={{ display:"grid", gridTemplateColumns:"1fr 340px", gap:24, alignItems:"start" }}>
 
         {/* LEFT */}

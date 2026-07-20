@@ -1,5 +1,6 @@
 'use client';
 import { useState, useEffect, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'https://pokemart-api-production.up.railway.app';
 
@@ -133,10 +134,12 @@ function Overview({ onOpen }: { onOpen: (code: string) => void }) {
 
 // ── CHECKLIST ─────────────────────────────────────────────────────────────────
 function Checklist({ code, onBack }: { code: string; onBack: () => void }) {
+  const router = useRouter();
   const set = SETS[code];
   const [checks, setChecks] = useState<Record<string, boolean>>(() => loadChecks(code));
   const [logoUrl, setLogoUrl] = useState('');
   const [symbolUrl, setSymbolUrl] = useState('');
+  const [buying, setBuying] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     fetch(`${API_BASE}/api/sets/`)
@@ -161,26 +164,58 @@ function Checklist({ code, onBack }: { code: string; onBack: () => void }) {
 
   const [viewMode, setViewMode] = useState<'list'|'grid'>('list');
   const [cardImages, setCardImages] = useState<Record<number, string>>({});
+  const [pidToId, setPidToId] = useState<Record<number, number>>({});
 
   useEffect(() => {
-    const fetchPage = (url: string, acc: Record<number, string>) => {
+    const fetchPage = (url: string, imgAcc: Record<number, string>, idAcc: Record<number, number>) => {
       fetch(url)
         .then(r => r.json())
         .then(data => {
-          (data.results || []).forEach((p: { pb_id: string; id: number; image_url: string }) => {
+          (data.results || []).forEach((p: { pb_id: string; id: number; image_url: string; tcgplayer_id?: number }) => {
             if (p.image_url) {
-              acc[p.id] = p.image_url;
+              imgAcc[p.id] = p.image_url;
               const match = p.pb_id && p.pb_id.match(/TCGCSV-(\d+)/);
-              if (match) acc[parseInt(match[1], 10)] = p.image_url;
+              if (match) imgAcc[parseInt(match[1], 10)] = p.image_url;
             }
+            if (p.tcgplayer_id) idAcc[p.tcgplayer_id] = p.id;
           });
-          if (data.next) fetchPage(data.next, acc);
-          else setCardImages({ ...acc });
+          if (data.next) fetchPage(data.next, imgAcc, idAcc);
+          else { setCardImages({ ...imgAcc }); setPidToId({ ...idAcc }); }
         })
         .catch(() => {});
     };
-    fetchPage(`${API_BASE}/api/products/?card_set=${code}&page_size=400`, {});
+    fetchPage(`${API_BASE}/api/products/?card_set=${code}&page_size=400`, {}, {});
   }, [code]);
+
+  const buyCard = async (pid: number, key: string, zar: number, cardName: string) => {
+    const token = localStorage.getItem('access_token');
+    if (!token) { router.push('/auth/login'); return; }
+    const dbId = pidToId[pid];
+    if (!dbId) {
+      // Fallback if this product wasn't in the loaded set page (shouldn't normally happen)
+      window.location.href = `/cards?search=${encodeURIComponent(cardName)}&set_code=${code}`;
+      return;
+    }
+    setBuying(prev => new Set(prev).add(key));
+    try {
+      const res = await fetch(`${API_BASE}/api/cart/add/`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ product_id: dbId, quantity: 1 }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({} as { error?: string }));
+        alert(err.error || 'Could not add to pile — it may be out of stock.');
+        return;
+      }
+      window.dispatchEvent(new Event('pile-updated'));
+      toggle(key, zar);
+    } catch {
+      alert('Network error — could not add to pile.');
+    } finally {
+      setBuying(prev => { const n = new Set(prev); n.delete(key); return n; });
+    }
+  };
 
   const toggle = useCallback((key: string, zar: number) => {
     setChecks(prev => {
@@ -316,6 +351,14 @@ function Checklist({ code, onBack }: { code: string; onBack: () => void }) {
                       borderRadius: '50%', width: '18px', height: '18px', display: 'flex',
                       alignItems: 'center', justifyContent: 'center', fontSize: '10px', color: '#fff' }}>✓</div>
                   )}
+                  {code === 'PRIZEPACK' && (
+                    <img
+                      src="https://images.pokebulk.co.za/sets/symbols/prizepack_stamp.png"
+                      alt="Play! Pokemon stamp"
+                      style={{ position: 'absolute', bottom: '4px', left: '4px', width: '20px', height: '14px',
+                        objectFit: 'contain', filter: 'drop-shadow(0 1px 2px rgba(0,0,0,0.6))' }}
+                    />
+                  )}
                 </div>
                 {/* Card name */}
                 <div style={{ fontSize: '9px', color: '#666', textAlign: 'center', margin: '3px 0 4px',
@@ -336,13 +379,18 @@ function Checklist({ code, onBack }: { code: string; onBack: () => void }) {
                     return (
                       <div key={v.vc} onClick={() => toggle(key, v.zar)}
                         style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px', cursor: 'pointer' }}>
-                        <div style={{
-                          background: checks[key] ? col : '#1a1a2e',
-                          border: `1px solid ${col}`,
-                          borderRadius: '4px', padding: '2px 5px',
-                          fontSize: '8px', fontWeight: 700, color: checks[key] ? '#fff' : col,
-                          textTransform: 'uppercase', lineHeight: 1.2,
-                        }}>{v.vc}</div>
+                        <div style={{ position: 'relative' }}>
+                          <div style={{
+                            background: checks[key] ? col : '#1a1a2e',
+                            border: `1px solid ${col}`,
+                            borderRadius: '4px', padding: '2px 5px',
+                            fontSize: '8px', fontWeight: 700, color: checks[key] ? '#fff' : col,
+                            textTransform: 'uppercase', lineHeight: 1.2,
+                          }}>{v.vc}</div>
+                          {code === 'PRIZEPACK' && v.vc === 'H' && (
+                            <span style={{ position: 'absolute', top: '-5px', right: '-5px', fontSize: '7px', color: '#CECBF6' }} title="Cosmos Holo">✦</span>
+                          )}
+                        </div>
                         <span style={{ fontSize: '7px', color: '#444' }}>{v.zar > 0 ? 'R'+v.zar.toFixed(0) : ''}</span>
                       </div>
                     );
@@ -389,10 +437,12 @@ function Checklist({ code, onBack }: { code: string; onBack: () => void }) {
                             textTransform: 'uppercase', lineHeight: 1.3, cursor: 'pointer',
                           }}>{v.vc}</div>
                           {!checks[key] && inStock.has(v.pid) && (
-                            <a href={`/cards?search=${encodeURIComponent(card.name)}&set_code=${code}`}
-                              style={{ fontSize: '7px', color: '#ff6b35', textDecoration: 'none', border: '1px solid #ff6b35', borderRadius: '3px', padding: '0px 3px', fontWeight: 700, lineHeight: 1.4 }}>
-                              Buy
-                            </a>
+                            <button
+                              onClick={() => buyCard(v.pid, key, v.zar, card.name)}
+                              disabled={buying.has(key)}
+                              style={{ fontSize: '7px', color: '#ff6b35', background: 'transparent', textDecoration: 'none', border: '1px solid #ff6b35', borderRadius: '3px', padding: '0px 3px', fontWeight: 700, lineHeight: 1.4, cursor: buying.has(key) ? 'default' : 'pointer', opacity: buying.has(key) ? 0.5 : 1 }}>
+                              {buying.has(key) ? '…' : 'Buy'}
+                            </button>
                           )}
                           {!inStock.has(v.pid) && (
                             <span style={{ fontSize: '7px', color: '#333', lineHeight: 1.2 }}>{v.zar > 0 ? 'R'+v.zar.toFixed(0) : ''}</span>

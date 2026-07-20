@@ -48,7 +48,7 @@ const ALWAYS_SPECIAL_CODES = new Set([
     "PRIZEPACK", "PPS1", "PPS2", "PPS3", "PPS4", "PPS5", "PPS6", "PPS7", "PPS8",
     // WCD & Exclusives / shells / duplicates with 0 records
     "TCGCL", "LTRRC", "GENRC", "SI1", "SI",
-    "BSS", "RUM", "RM", "BP", "CCC", "CELCC", "HIFSV", "SHFSV", "SMA", "FUT20",
+    "RUM", "RM", "BP", "CCC", "CELCC", "HIFSV", "SHFSV", "SMA", "FUT20",
     "BTA", "BA22", "BA24", "FPP", "RU1",
     "KWBP", "SAMPLE", "JUMBO", "WCD", "LEAGUE", "PWCP", "BSTEX", "MCAP", "ALTART", "BLE", "CCP", "PPP",
     "TK1A", "TK1B", "TK2A", "TK2B",
@@ -76,10 +76,14 @@ const SPECIAL_GROUP_DEFS = [
     { label: "Trainer Gallery", color: "#8B5CF6", codePatterns: ["BRSTG", "ASRTG", "LORTG", "SITTG", "CRZGG"] },
     { label: "Trick or Trade", color: "#EC4899", codePatterns: ["TT22", "TT23", "TT24"] },
     { label: "Prize Pack", color: "#F97316", codePatterns: ["PPS1", "PPS2", "PPS3", "PPS4", "PPS5", "PPS6", "PPS7", "PPS8", "PRIZEPACK"] },
+    { label: "Radiant Collections", color: "#06B6D4", codePatterns: ["GENRC", "LTRRC"] },
+    { label: "Shiny Vault", color: "#6366F1", codePatterns: ["HIFSV", "SHFSV"] },
+    { label: "Celebrations: Classic Collection", color: "#FACC15", codePatterns: ["CCC"] },
+    { label: "Rumble", color: "#84CC16", codePatterns: ["RUM"] },
     {
         label: "WCD & Exclusives", color: "#6B7280", codePatterns: [
             "WCD", "BLE", "MCAP", "LEAGUE", "JUMBO", "ALTART", "PPP", "CCP", "PWCP", "KWBP", "SAMPLE", "BSTEX", "PR-BEST",
-            "TCGCL", "LTRRC", "GENRC", "SI1", "SI", "BSS", "RUM", "RM", "CCC", "CELCC", "HIFSV", "SHFSV", "SMA", "FUT20",
+            "TCGCL", "SI1", "SI", "RM", "SMA", "FUT20",
             "BTA", "BA22", "BA24", "FPP",
             "TK1A", "TK1B", "TK2A", "TK2B",
             "TK-DP", "TK-HS", "TK-BLW", "TK-SN", "TK-BW2", "TK-LL", "TK-PS", "SMK1", "SMK2",
@@ -273,8 +277,31 @@ function VariantOverlay({ vk }: { vk: VariantKey }) {
     }
 }
 
+function PrizePackOverlay({ series, vk }: { series: string; vk: VariantKey }) {
+    if (!series) return null;
+    // Per the official Play! Pokémon rules: Prize Pack foils use Cosmos Holofoil,
+    // except ex/ACE SPEC/V/etc cards which keep their normal foil pattern.
+    // vk === "H" specifically means a plain Holo print (not DR/AS/IR/etc),
+    // so this naturally only flags the cards that are genuinely Cosmos Holo.
+    const isCosmosHolo = vk === "H";
+    return (
+        <div style={{ position: "absolute", bottom: 5, left: 5, zIndex: 4, display: "flex", flexDirection: "column", gap: 2, alignItems: "flex-start" }}>
+            <img
+                src="https://images.pokebulk.co.za/sets/symbols/prizepack_stamp.png"
+                alt="Play! Pokemon stamp"
+                style={{ width: 22, height: 16, objectFit: "contain", filter: "drop-shadow(0 1px 2px rgba(0,0,0,0.6))" }}
+            />
+            {isCosmosHolo && (
+                <div style={{ background: "#3C3489", color: "#CECBF6", fontSize: 8, fontWeight: 600, padding: "1px 5px", borderRadius: 8, letterSpacing: "0.3px", lineHeight: 1.4 }}>
+                    ✦ COSMOS
+                </div>
+            )}
+        </div>
+    );
+}
+
 function buildHref(current: Record<string, string | undefined>, overrides: Record<string, string | undefined>) {
-    const merged = { ...current, ...overrides, page: "1" };
+    const merged = { ...current, prize_pack_series: undefined, ...overrides, page: "1" };
     if ("page" in overrides) merged.page = overrides.page || "1";
     const p = new URLSearchParams();
     for (const [k, v] of Object.entries(merged)) { if (v) p.set(k, v); }
@@ -400,6 +427,7 @@ export default async function CardsPage({ searchParams }: { searchParams: Promis
             ...(params.ordering && { ordering: params.ordering }),
             ...(params.era && { era: params.era }),
             ...(params.card_set && { card_set: params.card_set }),
+            ...(params.prize_pack_series && { prize_pack_series: params.prize_pack_series }),
             ...(params.energy_type && { energy_type: params.energy_type }),
             ...(params.supertype && { supertype: params.supertype }),
             ...(params.subtype && { subtype: params.subtype }),
@@ -475,7 +503,30 @@ export default async function CardsPage({ searchParams }: { searchParams: Promis
                 })}
             </div>
 
-            {activeSpecialGroup && (
+            {activeSpecialGroup && activeSpecialGroup.label === "Prize Pack" && (
+                <div style={{ background: "#1a1a24", border: "1px solid #2a2a3a", borderTop: `2px solid ${activeSpecialGroup.color}`, borderRadius: "6px", padding: "10px 12px", display: "flex", gap: "6px", flexWrap: "wrap", marginBottom: "8px" }}>
+                    <Link href={buildHref(params, { card_set: "PRIZEPACK", prize_pack_series: undefined, era: undefined, page: "1" })} style={{
+                        background: !params.prize_pack_series ? activeSpecialGroup.color + "22" : "#12121a",
+                        border: `1px solid ${!params.prize_pack_series ? activeSpecialGroup.color : "#2a2a3a"}`,
+                        color: !params.prize_pack_series ? activeSpecialGroup.color : "#a0a0b0",
+                        padding: "4px 10px", borderRadius: "6px", textDecoration: "none", fontSize: "12px", fontWeight: 500,
+                    }}>All Series</Link>
+                    {Array.from({ length: 9 }, (_, i) => i + 1).map((n) => (
+                        <Link key={n}
+                            href={buildHref(params, { card_set: "PRIZEPACK", prize_pack_series: String(n), era: undefined, page: "1" })}
+                            style={{
+                                background: params.prize_pack_series === String(n) ? activeSpecialGroup.color + "22" : "#12121a",
+                                border: `1px solid ${params.prize_pack_series === String(n) ? activeSpecialGroup.color : "#2a2a3a"}`,
+                                color: params.prize_pack_series === String(n) ? activeSpecialGroup.color : "#a0a0b0",
+                                padding: "4px 10px", borderRadius: "6px", textDecoration: "none", fontSize: "12px", fontWeight: 500,
+                            }}>
+                            Series {n}
+                        </Link>
+                    ))}
+                </div>
+            )}
+
+            {activeSpecialGroup && activeSpecialGroup.label !== "Prize Pack" && (
                 <div style={{ background: "#1a1a24", border: "1px solid #2a2a3a", borderTop: `2px solid ${activeSpecialGroup.color}`, borderRadius: "6px", padding: "10px 12px", display: "flex", gap: "6px", flexWrap: "wrap", marginBottom: "8px" }}>
                     {activeSpecialGroup.sets.map((s: any) => (
                         <SetChip key={s.code} set={s} active={activeSetCode === s.code} href={buildHref(params, { card_set: s.code, era: undefined, page: "1" })} color={activeSpecialGroup.color} />
@@ -614,16 +665,19 @@ export default async function CardsPage({ searchParams }: { searchParams: Promis
                             <Link href={`/cards/${card.id}`} style={{ textDecoration: "none" }}>
                                 <div style={{ position: "relative", width: "100%", aspectRatio: "3/4" }}>
                                     {card.image_url ? (
-                                        <img src={card.image_url} alt={card.name} crossOrigin="anonymous" style={{
-                                            width: "100%", height: "100%", objectFit: "cover", display: "block",
-                                            filter: isPlayed
-                                                ? `grayscale(15%) sepia(40%) hue-rotate(5deg) brightness(0.85)${!hasStock ? " grayscale(100%)" : ""}`
-                                                : (hasStock ? "none" : "grayscale(100%)")
-                                        }} />
+                                        <img src={card.image_url} alt={card.name}
+                                            style={{
+                                                position: "absolute", inset: 0,
+                                                width: "100%", height: "100%", objectFit: "cover", display: "block",
+                                                filter: isPlayed
+                                                    ? `grayscale(15%) sepia(40%) hue-rotate(5deg) brightness(0.85)${!hasStock ? " grayscale(100%)" : ""}`
+                                                    : (hasStock ? "none" : "grayscale(100%)")
+                                            }} />
                                     ) : (
-                                        <div style={{ width: "100%", height: "100%", background: "#12121a", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "36px" }}>🃏</div>
+                                        <div style={{ position: "absolute", inset: 0, background: "#12121a", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "36px" }}>🃏</div>
                                     )}
                                     <VariantOverlay vk={vk} />
+                                    <PrizePackOverlay series={card.prize_pack_series || ""} vk={vk} />
                                     {isPlayed && (
                                         <div style={{
                                             position: "absolute", top: 5, left: 5, zIndex: 5,
