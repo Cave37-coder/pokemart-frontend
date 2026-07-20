@@ -9,7 +9,8 @@ interface OrderTracking {
 }
 interface OrderItem {
   id: number;
-  product: { id: number; name: string; image_small_url: string; card_set: { code: string; name: string } };
+  product: { id: number; name: string; image_small_url: string; card_set: { code: string; name: string } } | null;
+  product_name: string; product_sku: string;
   quantity: number; price_at_purchase: string; subtotal: string;
 }
 interface Order {
@@ -226,13 +227,15 @@ export default function OrderDetailPage() {
         {order.items.map(item => (
           <div key={item.id} style={{ display:"flex", gap:12, alignItems:"center", padding:"8px 0", borderBottom:"1px solid #12121a" }}>
             <div style={{ width:40, height:56, borderRadius:6, overflow:"hidden", flexShrink:0, background:"#12121a" }}>
-              {item.product.image_small_url
+              {item.product?.image_small_url
                 ? <img src={item.product.image_small_url} alt={item.product.name} style={{ width:"100%", height:"100%", objectFit:"cover" }} />
                 : <div style={{ width:"100%", height:"100%", display:"flex", alignItems:"center", justifyContent:"center", fontSize:18 }}>🃏</div>}
             </div>
             <div style={{ flex:1, minWidth:0 }}>
-              <div style={{ fontSize:13, color:"#fff", fontWeight:500, marginBottom:2, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{item.product.name}</div>
-              <div style={{ fontSize:11, color:"#555" }}>{item.product.card_set?.name} · x{item.quantity}</div>
+              <div style={{ fontSize:13, color:"#fff", fontWeight:500, marginBottom:2, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+                {item.product?.name || item.product_name || "Item no longer available"}
+              </div>
+              <div style={{ fontSize:11, color:"#555" }}>{item.product?.card_set?.name} · x{item.quantity}</div>
             </div>
             <div style={{ fontSize:14, fontWeight:700, color:"#ff6b35", flexShrink:0 }}>R{parseFloat(item.subtotal).toFixed(2)}</div>
           </div>
