@@ -101,7 +101,9 @@ export default function CheckoutPage() {
   const shippingCost = selectedDelivery?.price || 0;
   const cartTotal    = parseFloat(cart?.total || "0");
   const orderTotal   = cartTotal + shippingCost;
-  const items        = (cart?.items || []).filter(item => item.product !== null);
+  const items        = (cart?.items || []).filter(
+    (item): item is CartItem & { product: NonNullable<CartItem["product"]> } => item.product !== null
+  );
   const hasUnavailableItems = (cart?.items?.length || 0) > items.length;
 
   const needsAddress  = ["pudo_door","postnet"].includes(shipping);
