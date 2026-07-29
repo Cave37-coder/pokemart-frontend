@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 import NavBar from "@/components/NavBar";
 import ProfileCompletionPopup from "@/components/ProfileCompletionPopup";
+import { Analytics } from '@vercel/analytics/next';
 
 export const metadata: Metadata = {
   title: "PokeBulk SA - Premium Pokemon Cards",
@@ -80,6 +81,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             2026 PokeBulk SA. All rights reserved. Partnered with Gengar Games.
           </div>
         </footer>
+        <Analytics />
       </body>
     </html>
   );
