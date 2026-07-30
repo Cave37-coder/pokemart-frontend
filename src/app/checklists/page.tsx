@@ -1,6 +1,7 @@
 'use client';
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
+import { authFetch, SessionExpiredError } from '@/lib/api';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'https://pokemart-api-production.up.railway.app';
 
@@ -15,11 +16,80 @@ interface Card { num: string; name: string; rarity: string; variants: Variant[] 
 interface SetData { name: string; era: string; cards: Card[] }
 interface SetMeta { code: string; name: string; era: string; cards: number; variants: number; set_zar: number; logo_url?: string; symbol_url?: string }
 
+// Checklist progress now lives in the customer's account (ChecklistEntry
+// rows on the backend), not the browser -- localStorage['pb_cl_'+code] used
+// to be the only copy, which meant it vanished the moment a customer's
+// login token went stale or they opened the site on a different device.
+//
+// checklistCache is a simple in-memory mirror of the account's checked
+// cards, fetched once per page load via ensureChecklistData() and kept in
+// sync as the customer ticks boxes. loadChecks/saveChecks keep their old
+// names and signatures so the rest of this file (Overview's getProgress,
+// Checklist's initial state, the toggle handler) didn't need to change.
+let checklistCache: Record<string, Record<string, boolean>> = {};
+let checklistCacheReady = false;
+
 function loadChecks(code: string): Record<string, boolean> {
-  try { const d = localStorage.getItem('pb_cl_' + code); return d ? JSON.parse(d) : {}; } catch { return {}; }
+  return checklistCache[code] || {};
 }
 function saveChecks(code: string, checks: Record<string, boolean>) {
-  try { localStorage.setItem('pb_cl_' + code, JSON.stringify(checks)); } catch {}
+  checklistCache[code] = checks;
+}
+
+// One-time upload of any pre-existing localStorage checklist data into the
+// account, so nobody's progress from before this change appears to vanish.
+// Safe to call more than once -- the backend ignores duplicates, and this
+// only ever runs once per browser thanks to the 'pb_cl_migrated' flag.
+async function migrateLocalChecklistData(): Promise<void> {
+  if (typeof window === 'undefined') return;
+  if (localStorage.getItem('pb_cl_migrated')) return;
+  const entries: { card_set: string; card_key: string }[] = [];
+  for (let i = 0; i < localStorage.length; i++) {
+    const k = localStorage.key(i);
+    if (!k || !k.startsWith('pb_cl_') || k === 'pb_cl_migrated') continue;
+    try {
+      const local = JSON.parse(localStorage.getItem(k) || '{}');
+      const code = k.slice('pb_cl_'.length);
+      Object.keys(local).forEach(key => { if (local[key]) entries.push({ card_set: code, card_key: key }); });
+    } catch {}
+  }
+  try {
+    if (entries.length > 0) {
+      await authFetch('/api/checklists/import/', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ entries }),
+      });
+    }
+    localStorage.setItem('pb_cl_migrated', '1');
+  } catch {
+    // Session wasn't valid enough to migrate right now -- try again next visit.
+  }
+}
+
+// Fetches every checked card for the logged-in customer, once per page load.
+// Guests (no access_token) just get an empty checklist -- toggling prompts
+// them to log in, same pattern as My Pile.
+async function ensureChecklistData(): Promise<void> {
+  if (checklistCacheReady) return;
+  const token = typeof window !== 'undefined' ? localStorage.getItem('access_token') : null;
+  if (!token) { checklistCacheReady = true; return; }
+
+  await migrateLocalChecklistData();
+
+  try {
+    const res = await authFetch('/api/checklists/entries/');
+    const data: Record<string, string[]> = await res.json();
+    const grouped: Record<string, Record<string, boolean>> = {};
+    Object.keys(data).forEach(code => {
+      grouped[code] = {};
+      data[code].forEach(key => { grouped[code][key] = true; });
+    });
+    checklistCache = grouped;
+  } catch {
+    checklistCache = {};
+  }
+  checklistCacheReady = true;
 }
 function getProgress(code: string) {
   const set = SETS[code]; if (!set) return { owned: 0, total: 0, pct: 0, collectionZar: 0 };
@@ -198,9 +268,9 @@ function Checklist({ code, onBack }: { code: string; onBack: () => void }) {
     }
     setBuying(prev => new Set(prev).add(key));
     try {
-      const res = await fetch(`${API_BASE}/api/cart/add/`, {
+      const res = await authFetch('/api/cart/add/', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ product_id: dbId, quantity: 1 }),
       });
       if (!res.ok) {
@@ -210,26 +280,52 @@ function Checklist({ code, onBack }: { code: string; onBack: () => void }) {
       }
       window.dispatchEvent(new Event('pile-updated'));
       toggle(key, zar);
-    } catch {
-      alert('Network error — could not add to pile.');
+    } catch (e) {
+      if (e instanceof SessionExpiredError) {
+        router.push('/auth/login');
+      } else {
+        alert('Network error — could not add to pile.');
+      }
     } finally {
       setBuying(prev => { const n = new Set(prev); n.delete(key); return n; });
     }
   };
 
   const toggle = useCallback((key: string, zar: number) => {
-    setChecks(prev => {
+    const token = localStorage.getItem('access_token');
+    if (!token) { router.push('/auth/login'); return; }
+
+    // Flips the local checkbox state; calling this twice returns to the
+    // original state, which is how we undo an optimistic update below if
+    // it turns out it didn't actually save.
+    const flip = () => setChecks(prev => {
       const next = { ...prev };
       if (next[key]) delete next[key]; else next[key] = true;
       saveChecks(code, next);
       return next;
     });
-  }, [code]);
+
+    flip(); // optimistic -- the checkbox responds instantly
+    authFetch('/api/checklists/toggle/', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ card_set: code, card_key: key }),
+    }).catch(() => {
+      // Genuinely couldn't save (session really did expire) -- flip back so
+      // the checkbox reflects what's actually saved on the account.
+      flip();
+    });
+  }, [code, router]);
 
   const resetSet = () => {
     if (!confirm('Reset all checks for ' + set.name + '?')) return;
-    try { localStorage.removeItem('pb_cl_' + code); } catch {}
     setChecks({});
+    saveChecks(code, {});
+    authFetch('/api/checklists/clear-set/', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ card_set: code }),
+    }).catch(() => {});
   };
 
   // Stats
@@ -482,14 +578,26 @@ function Checklist({ code, onBack }: { code: string; onBack: () => void }) {
 
 export default function ChecklistsPage() {
   const [activeSet, setActiveSet] = useState<string | null>(null);
+  const [ready, setReady] = useState(checklistCacheReady);
+
+  useEffect(() => {
+    ensureChecklistData().then(() => setReady(true));
+  }, []);
+
   return (
     <div style={{ minHeight: '100vh', background: '#12121a', color: '#e0e0e0' }}>
       <div style={{ maxWidth: '1200px', margin: '0 auto' }}>
         <div style={{ padding: '20px 20px 0' }}>
           <h1 style={{ fontSize: '22px', fontWeight: 700, color: '#fff', marginBottom: '4px' }}>Set Checklists</h1>
-          <p style={{ fontSize: '13px', color: '#555' }}>Track your collection across all 146 sets. Progress saves automatically in your browser.</p>
+          <p style={{ fontSize: '13px', color: '#555' }}>Track your collection across all 146 sets. Log in to save your progress to your account.</p>
         </div>
-        {activeSet ? <Checklist code={activeSet} onBack={() => setActiveSet(null)} /> : <Overview onOpen={setActiveSet} />}
+        {!ready ? (
+          <div style={{ padding: '60px 20px', textAlign: 'center', color: '#555', fontSize: '13px' }}>Loading your checklist progress...</div>
+        ) : activeSet ? (
+          <Checklist code={activeSet} onBack={() => setActiveSet(null)} />
+        ) : (
+          <Overview onOpen={setActiveSet} />
+        )}
       </div>
     </div>
   );
