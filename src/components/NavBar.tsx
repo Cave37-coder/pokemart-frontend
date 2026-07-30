@@ -114,7 +114,12 @@ export default function NavBar() {
           nav { padding: 0 1rem !important; }
           .pb-nav-hamburger { display: flex !important; }
           .pb-nav-links {
-            display: none;
+            /* !important here too, same reason as position below: this div
+               also carries an inline style={{ display: 'flex' }} for the
+               desktop layout, and inline styles beat a plain class rule --
+               without !important the closed state never actually hides the
+               menu, it just sits there permanently visible. */
+            display: none !important;
             /* !important on position/left/right/width is load-bearing here:
                the element also carries an inline style={{ position: 'relative' }}
                (needed for desktop layout), and inline styles always beat a
