@@ -38,6 +38,8 @@ interface Profile {
   pudo_locker_address: string;
   pudo_locker_code: string;
   trainer_level: string;
+  public_display_name: string;
+  checklist_public: boolean;
 }
 
 function splitPhone(phone: string): { dial: string; number: string } {
@@ -87,6 +89,8 @@ export default function ProfilePage() {
   const [pudoName, setPudoName] = useState("");
   const [pudoAddress, setPudoAddress] = useState("");
   const [pudoCode, setPudoCode] = useState("");
+  const [publicDisplayName, setPublicDisplayName] = useState("");
+  const [checklistPublic, setChecklistPublic] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [success, setSuccess] = useState(false);
@@ -116,6 +120,8 @@ export default function ProfilePage() {
         setPudoName(data.pudo_locker_name || "");
         setPudoAddress(data.pudo_locker_address || "");
         setPudoCode(data.pudo_locker_code || "");
+        setPublicDisplayName(data.public_display_name || "");
+        setChecklistPublic(!!data.checklist_public);
       })
       .catch(() => setError("Failed to load profile."))
       .finally(() => setLoading(false));
@@ -146,6 +152,8 @@ export default function ProfilePage() {
           pudo_locker_name: pudoName,
           pudo_locker_address: pudoAddress,
           pudo_locker_code: pudoCode,
+          public_display_name: publicDisplayName,
+          checklist_public: checklistPublic,
         }),
       });
       if (!res.ok) throw new Error("Save failed");
@@ -301,6 +309,37 @@ export default function ProfilePage() {
               <input style={inputStyle} value={pudoCode} onChange={(e) => setPudoCode(e.target.value)} placeholder="e.g. GP-KEM-001" />
             </div>
           </div>
+        </div>
+
+        {/* Editable — Checklist Privacy */}
+        <div style={sectionStyle}>
+          <p style={{ color: "#a0a0b0", fontSize: "11px", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", margin: "0 0 4px 0" }}>
+            Checklist Privacy
+          </p>
+          <p style={{ color: "#555", fontSize: "12px", margin: "0 0 16px 0" }}>
+            Opt-in only — you won&apos;t appear on any leaderboard or the Wall of Honour unless you set a display name AND turn this on.
+          </p>
+          <div style={{ marginBottom: "16px" }}>
+            <label style={labelStyle}>Public Display Name</label>
+            <input
+              style={inputStyle}
+              value={publicDisplayName}
+              onChange={(e) => setPublicDisplayName(e.target.value)}
+              placeholder="Shown instead of your username, e.g. TrainerMike"
+              maxLength={40}
+            />
+          </div>
+          <label style={{ display: "flex", alignItems: "center", gap: "10px", cursor: "pointer" }}>
+            <input
+              type="checkbox"
+              checked={checklistPublic}
+              onChange={(e) => setChecklistPublic(e.target.checked)}
+              style={{ width: "18px", height: "18px", cursor: "pointer" }}
+            />
+            <span style={{ color: "#e0e0e0", fontSize: "13px" }}>
+              Show my checklist progress on leaderboards and the Wall of Honour
+            </span>
+          </label>
         </div>
 
         {/* Feedback */}

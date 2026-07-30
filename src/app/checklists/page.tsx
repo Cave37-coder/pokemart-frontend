@@ -122,6 +122,17 @@ function Overview({ onOpen }: { onOpen: (code: string) => void }) {
   const [, forceUpdate] = useState(0);
   const [logos, setLogos] = useState<Record<string, { logo_url: string; symbol_url: string; release_date?: string }>>({});
 
+  // Wall of Honour -- site-wide feed of completion events (Checklist Phase 1).
+  // Public endpoint, no set filter -- last 100 events, we only show the most
+  // recent handful as a compact widget on the landing page.
+  const [wallEvents, setWallEvents] = useState<{ display_name: string; avatar: string | null; set_code: string; set_name: string; logo_url: string; tier: string; tier_label: string; completed_at: string }[]>([]);
+  useEffect(() => {
+    fetch(`${API_BASE}/api/checklists/wall-of-honour/`)
+      .then(r => r.json())
+      .then(data => setWallEvents((data.events || []).slice(0, 8)))
+      .catch(() => setWallEvents([]));
+  }, []);
+
   useEffect(() => {
     fetch(`${API_BASE}/api/sets/`)
       .then(r => r.json())
@@ -232,6 +243,28 @@ function Overview({ onOpen }: { onOpen: (code: string) => void }) {
         <span style={{ fontSize: '12px', color: '#555' }}>{filtered.length} sets</span>
       </div>
 
+      {wallEvents.length > 0 && (
+        <div style={{ background: '#1e1e2a', border: '1px solid #2a2a3a', borderRadius: '8px', padding: '10px 14px', marginBottom: '18px' }}>
+          <div style={{ fontSize: '10px', fontWeight: 700, letterSpacing: '1px', textTransform: 'uppercase', color: '#a0a0b0', marginBottom: '8px' }}>🏆 Wall of Honour</div>
+          <div style={{ display: 'flex', gap: '10px', overflowX: 'auto', paddingBottom: '2px' }}>
+            {wallEvents.map((e, i) => (
+              <div key={i} onClick={() => onOpen(e.set_code)}
+                style={{ display: 'flex', alignItems: 'center', gap: '8px', background: '#12121a', border: '1px solid #2a2a3a', borderRadius: '7px', padding: '7px 12px', cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0 }}>
+                {e.avatar ? (
+                  <img src={e.avatar} alt="" style={{ width: '18px', height: '18px', borderRadius: '50%', objectFit: 'cover' }} />
+                ) : (
+                  <span style={{ width: '18px', height: '18px', borderRadius: '50%', background: '#2a2a3a', display: 'inline-block' }} />
+                )}
+                {e.logo_url && <img src={e.logo_url} alt="" style={{ height: '14px', maxWidth: '50px', objectFit: 'contain' }} />}
+                <span style={{ fontSize: '12px', color: '#e0e0e0' }}>
+                  <strong>{e.display_name}</strong> completed <span style={{ color: '#ff6b35' }}>{e.tier_label}</span> of {e.set_name}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {MAIN_ERAS.map(era => {
         const sets = byEra[era]; if (!sets?.length) return null;
         const color = ERA_COLORS[era] || '#555';
@@ -296,6 +329,36 @@ function Checklist({ code, onBack }: { code: string; onBack: () => void }) {
   const [viewMode, setViewMode] = useState<'list'|'grid'>('list');
   const [cardImages, setCardImages] = useState<Record<number, string>>({});
   const [pidToId, setPidToId] = useState<Record<number, number>>({});
+
+  // ── Leaderboard (Checklist Phase 1: Compare & Compete) ──────────────────
+  // A set is "simple" (single Complete Set tier) when no card in it has more
+  // than one checkable variant -- same rule as the backend's is_simple_set()
+  // in products/completion.py. The static SETS data here only ever contains
+  // tracked/checkable variant codes to begin with, so this client-side check
+  // reliably matches what the backend decides without needing an extra call.
+  const isSimpleSet = set.cards.every(c => c.variants.length <= 1);
+  const tierTabs: { key: string; label: string }[] = isSimpleSet
+    ? [{ key: 'complete_set', label: 'Complete Set' }]
+    : [
+        { key: 'broke_base', label: 'Broke Base' },
+        { key: 'base_set', label: 'Base Set' },
+        { key: 'special_set_base', label: 'Special Set Base' },
+        { key: 'master_set', label: 'Master Set' },
+      ];
+  const [lbTier, setLbTier] = useState(tierTabs[0].key);
+  const [leaderboard, setLeaderboard] = useState<{ display_name: string; avatar: string | null; owned: number; required: number; pct: number; complete: boolean; completed_at: string | null }[]>([]);
+  const [lbLoading, setLbLoading] = useState(false);
+
+  useEffect(() => { setLbTier(tierTabs[0].key); }, [code]);
+
+  useEffect(() => {
+    setLbLoading(true);
+    fetch(`${API_BASE}/api/checklists/leaderboard/?set=${code}&tier=${lbTier}`)
+      .then(r => r.json())
+      .then(data => setLeaderboard(data.leaderboard || []))
+      .catch(() => setLeaderboard([]))
+      .finally(() => setLbLoading(false));
+  }, [code, lbTier]);
 
   useEffect(() => {
     const fetchPage = (url: string, imgAcc: Record<number, string>, idAcc: Record<number, number>) => {
@@ -453,6 +516,50 @@ function Checklist({ code, onBack }: { code: string; onBack: () => void }) {
         <div style={{ textAlign: 'center' }}>
           <div style={{ fontSize: '20px', fontWeight: 700, color: eraColor }}>{pct}%</div>
           <div style={{ fontSize: '9px', color: '#555', textTransform: 'uppercase' }}>Complete</div>
+        </div>
+      </div>
+
+      {/* Leaderboard */}
+      <div style={{ background: '#1e1e2a', border: '1px solid #2a2a3a', borderRadius: '8px', padding: '12px 16px', marginBottom: '12px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px', marginBottom: '10px' }}>
+          <div style={{ fontSize: '11px', fontWeight: 700, letterSpacing: '1px', textTransform: 'uppercase', color: '#a0a0b0' }}>🏆 Leaderboard</div>
+          {tierTabs.length > 1 && (
+            <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+              {tierTabs.map(t => (
+                <button key={t.key} onClick={() => setLbTier(t.key)}
+                  style={{ padding: '4px 10px', fontSize: '11px', borderRadius: '5px', border: '1px solid', borderColor: lbTier === t.key ? eraColor : '#2a2a3a', background: lbTier === t.key ? eraColor : 'transparent', color: lbTier === t.key ? '#fff' : '#a0a0b0', cursor: 'pointer' }}>
+                  {t.label}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+        {lbLoading ? (
+          <div style={{ fontSize: '12px', color: '#555' }}>Loading leaderboard…</div>
+        ) : leaderboard.length === 0 ? (
+          <div style={{ fontSize: '12px', color: '#555' }}>No one has completed this tier yet — be the first!</div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+            {leaderboard.map((row, i) => (
+              <div key={row.display_name + i} style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '13px' }}>
+                <span style={{ width: '18px', textAlign: 'center', color: i === 0 ? '#ffd700' : i === 1 ? '#c0c0c0' : i === 2 ? '#cd7f32' : '#555', fontWeight: 700 }}>{i + 1}</span>
+                {row.avatar ? (
+                  <img src={row.avatar} alt="" style={{ width: '20px', height: '20px', borderRadius: '50%', objectFit: 'cover' }} />
+                ) : (
+                  <span style={{ width: '20px', height: '20px', borderRadius: '50%', background: '#2a2a3a', display: 'inline-block' }} />
+                )}
+                <span style={{ color: '#e0e0e0', flex: 1 }}>{row.display_name}</span>
+                {row.complete ? (
+                  <span style={{ color: '#66cc66', fontSize: '11px' }}>✓ Complete{row.completed_at ? ' · ' + new Date(row.completed_at).toLocaleDateString('en-ZA') : ''}</span>
+                ) : (
+                  <span style={{ color: '#555', fontSize: '11px' }}>{row.owned}/{row.required} · {row.pct}%</span>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+        <div style={{ fontSize: '10px', color: '#444', marginTop: '10px' }}>
+          Want to appear here? Set a display name and enable checklist sharing in your <a href="/profile" style={{ color: eraColor }}>Profile</a>.
         </div>
       </div>
 
