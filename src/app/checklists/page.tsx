@@ -246,10 +246,10 @@ function Overview({ onOpen }: { onOpen: (code: string) => void }) {
       {wallEvents.length > 0 && (
         <div style={{ background: '#1e1e2a', border: '1px solid #2a2a3a', borderRadius: '8px', padding: '10px 14px', marginBottom: '18px' }}>
           <div style={{ fontSize: '10px', fontWeight: 700, letterSpacing: '1px', textTransform: 'uppercase', color: '#a0a0b0', marginBottom: '8px' }}>🏆 Wall of Honour</div>
-          <div style={{ display: 'flex', gap: '10px', overflowX: 'auto', paddingBottom: '2px' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '260px', overflowY: 'auto' }}>
             {wallEvents.map((e, i) => (
               <div key={i} onClick={() => onOpen(e.set_code)}
-                style={{ display: 'flex', alignItems: 'center', gap: '8px', background: '#12121a', border: '1px solid #2a2a3a', borderRadius: '7px', padding: '7px 12px', cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0 }}>
+                style={{ display: 'flex', alignItems: 'center', gap: '8px', background: '#12121a', border: '1px solid #2a2a3a', borderRadius: '7px', padding: '7px 12px', cursor: 'pointer' }}>
                 {e.avatar ? (
                   <img src={e.avatar} alt="" style={{ width: '18px', height: '18px', borderRadius: '50%', objectFit: 'cover' }} />
                 ) : (
