@@ -36,6 +36,7 @@ function NavGlow() {
 export default function NavBar() {
   const [user, setUser] = useState<string | null>(null);
   const [pileCount, setPileCount] = useState(0);
+  const [menuOpen, setMenuOpen] = useState(false);
   const pathname = usePathname();
 
   const fetchPileCount = async () => {
@@ -63,6 +64,10 @@ export default function NavBar() {
     window.addEventListener("pile-updated", fetchPileCount);
     return () => window.removeEventListener("pile-updated", fetchPileCount);
   }, []);
+
+  // Close the mobile dropdown whenever the route changes -- otherwise it
+  // stays open and covers the new page after tapping a link.
+  useEffect(() => { setMenuOpen(false); }, [pathname]);
 
   const logout = () => {
     localStorage.removeItem("access_token");
@@ -99,6 +104,46 @@ export default function NavBar() {
         .pb-nav-signout:hover { border-color: #ff6b35; color: #fff; }
         .pb-nav-signin { transition: transform 0.15s ease, box-shadow 0.15s ease; }
         .pb-nav-signin:hover { transform: translateY(-1px); box-shadow: 0 4px 14px rgba(255,107,53,0.3); }
+        .pb-nav-hamburger { display: none; }
+
+        /* Below this width the link row no longer fits -- collapse it into
+           a hamburger-triggered dropdown instead of letting it overflow and
+           drag the whole page into horizontal scroll (the bug this whole
+           block exists to fix). */
+        @media (max-width: 900px) {
+          nav { padding: 0 1rem !important; }
+          .pb-nav-hamburger { display: flex !important; }
+          .pb-nav-links {
+            display: none;
+            position: fixed;
+            top: 64px; left: 0; right: 0;
+            max-height: calc(100vh - 64px);
+            overflow-y: auto;
+            background: #12121a;
+            border-bottom: 1px solid #2a2a3a;
+            flex-direction: column !important;
+            align-items: stretch !important;
+            gap: 0 !important;
+            padding: 8px 0 16px !important;
+          }
+          .pb-nav-links.pb-nav-open { display: flex !important; }
+          .pb-nav-links a, .pb-nav-links button {
+            width: 100%;
+            box-sizing: border-box;
+            padding: 13px 20px !important;
+            border-radius: 0 !important;
+            border: none !important;
+            justify-content: flex-start !important;
+          }
+          .pb-nav-links .pb-nav-row {
+            flex-direction: column !important;
+            align-items: stretch !important;
+            gap: 0 !important;
+            width: 100%;
+          }
+          .pb-nav-links .pb-nav-signin { display: block !important; text-align: center; margin: 8px 20px; width: calc(100% - 40px); }
+          .pb-nav-links .pb-nav-underline { display: none; }
+        }
       `}</style>
 
       <Link href="/" style={{ display: "flex", alignItems: "center", gap: "10px", textDecoration: "none", position: "relative", zIndex: 1 }}>
@@ -107,7 +152,20 @@ export default function NavBar() {
         <span style={{ color: "#ff6b35", fontWeight: 700, fontSize: "18px" }}>SA</span>
       </Link>
 
-      <div style={{ display: "flex", gap: "1.5rem", alignItems: "center", position: "relative", zIndex: 1 }}>
+      <button
+        className="pb-nav-hamburger"
+        onClick={() => setMenuOpen((o) => !o)}
+        aria-label={menuOpen ? "Close menu" : "Open menu"}
+        style={{
+          background: "transparent", border: "1px solid #2a2a3a", borderRadius: "8px",
+          width: "40px", height: "40px", alignItems: "center", justifyContent: "center",
+          color: "#fff", fontSize: "20px", cursor: "pointer", position: "relative", zIndex: 2,
+        }}
+      >
+        {menuOpen ? "✕" : "☰"}
+      </button>
+
+      <div className={`pb-nav-links${menuOpen ? " pb-nav-open" : ""}`} style={{ display: "flex", gap: "1.5rem", alignItems: "center", position: "relative", zIndex: 1 }}>
         {navLinks.map((link) => (
           <Link
             key={link.href}
@@ -126,14 +184,14 @@ export default function NavBar() {
                 padding: "1px 5px", borderRadius: "4px", letterSpacing: "0.03em",
               }}>BETA</span>
             )}
-            {isActive(link.href) && <FoilUnderline />}
+            {isActive(link.href) && <span className="pb-nav-underline"><FoilUnderline /></span>}
           </Link>
         ))}
 
         {user && (
           <Link href="/orders" className="pb-nav-link" style={{ color: isActive("/orders") ? "#fff" : "#a0a0b0", textDecoration: "none", fontSize: "14px", position: "relative" }}>
             My Orders
-            {isActive("/orders") && <FoilUnderline />}
+            {isActive("/orders") && <span className="pb-nav-underline"><FoilUnderline /></span>}
           </Link>
         )}
 
@@ -145,11 +203,11 @@ export default function NavBar() {
               borderRadius: "10px", padding: "1px 6px", minWidth: "18px", textAlign: "center",
             }}>{pileCount}</span>
           )}
-          {isActive("/pile") && <FoilUnderline />}
+          {isActive("/pile") && <span className="pb-nav-underline"><FoilUnderline /></span>}
         </Link>
 
         {user ? (
-          <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+          <div className="pb-nav-row" style={{ display: "flex", alignItems: "center", gap: "12px" }}>
             <Link href="/profile" className="pb-nav-link" style={{ color: "#a0a0b0", textDecoration: "none", fontSize: "13px" }}>
               🎴 {user}
             </Link>
