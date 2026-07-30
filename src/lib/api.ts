@@ -80,3 +80,87 @@ export const getCard = async (id: number) => {
   return data;
 };
 
+// ---------------------------------------------------------------------------
+// authFetch — for endpoints that require the customer to be logged in.
+//
+// The backend hands out two tokens at login: a short-lived access_token
+// (sent on every request) and a longer-lived refresh_token (used only to
+// get a new access_token once the old one goes stale). Every page used to
+// read access_token straight out of localStorage and just give up with a
+// hard redirect to the login page the moment it stopped working, even
+// though the refresh_token sitting right next to it could have silently
+// renewed the session instead. That's what was kicking customers out
+// mid-action and losing whatever they were doing (My Pile adds, Checklist
+// "Buy" clicks).
+//
+// authFetch fixes that: it attaches the access token automatically, and if
+// the server says it's no good, it tries to renew it once using the
+// refresh_token before retrying the request. Callers only need to catch
+// SessionExpiredError, which is thrown when the refresh_token is also dead
+// (i.e. the customer hasn't opened the site in 30+ days) -- that's the one
+// case where a real "please log in again" message is actually correct.
+// ---------------------------------------------------------------------------
+
+export class SessionExpiredError extends Error {
+  constructor() {
+    super("Session expired");
+    this.name = "SessionExpiredError";
+  }
+}
+
+function clearSession() {
+  localStorage.removeItem("access_token");
+  localStorage.removeItem("refresh_token");
+  localStorage.removeItem("user");
+}
+
+async function renewAccessToken(): Promise<string | null> {
+  const refreshToken = localStorage.getItem("refresh_token");
+  if (!refreshToken) return null;
+  try {
+    const res = await fetch(`${API_URL}/api/auth/token/refresh/`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ refresh: refreshToken }),
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    if (!data.access) return null;
+    localStorage.setItem("access_token", data.access);
+    return data.access as string;
+  } catch {
+    return null;
+  }
+}
+
+export async function authFetch(path: string, options: RequestInit = {}): Promise<Response> {
+  const token = localStorage.getItem("access_token");
+  if (!token) {
+    throw new SessionExpiredError();
+  }
+
+  const send = (t: string) =>
+    fetch(`${API_URL}${path}`, {
+      ...options,
+      headers: { ...(options.headers as Record<string, string> | undefined), Authorization: `Bearer ${t}` },
+    });
+
+  let res = await send(token);
+
+  if (res.status === 401) {
+    const newToken = await renewAccessToken();
+    if (!newToken) {
+      clearSession();
+      throw new SessionExpiredError();
+    }
+    res = await send(newToken);
+    if (res.status === 401) {
+      // Renewed token was rejected too -- treat as genuinely expired.
+      clearSession();
+      throw new SessionExpiredError();
+    }
+  }
+
+  return res;
+}
+

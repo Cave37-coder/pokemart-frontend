@@ -1,8 +1,8 @@
-"use client";
+﻿"use client";
 import { useEffect, useState } from "react";
 import Link from "next/link";
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://pokemart-api-production.up.railway.app";
+import { trackBeginCheckout } from "@/lib/analytics";
+import { authFetch, SessionExpiredError } from "@/lib/api";
 
 interface CartItem {
   id: number;
@@ -35,14 +35,16 @@ export default function PilePage() {
     const token = localStorage.getItem("access_token");
     if (!token) { setError("Please sign in to view your pile."); setLoading(false); return; }
     try {
-      const res = await fetch(`${API_URL}/api/cart/`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (res.status === 401) { setError("Please sign in to view your pile."); setLoading(false); return; }
+      const res = await authFetch("/api/cart/");
       const data = await res.json();
       setCart(data);
-    } catch { setError("Failed to load pile."); }
-    finally { setLoading(false); }
+    } catch (e) {
+      if (e instanceof SessionExpiredError) {
+        setError("Your session expired — please log in again.");
+      } else {
+        setError("Failed to load pile.");
+      }
+    } finally { setLoading(false); }
   };
 
   useEffect(() => { fetchCart(); }, []);
@@ -52,13 +54,30 @@ export default function PilePage() {
     if (!token) return;
     setRemoving(itemId);
     try {
-      await fetch(`${API_URL}/api/cart/remove/${itemId}/`, {
-        method: "DELETE",
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      await authFetch(`/api/cart/remove/${itemId}/`, { method: "DELETE" });
       window.dispatchEvent(new Event("pile-updated"));
       fetchCart();
+    } catch (e) {
+      if (e instanceof SessionExpiredError) {
+        setError("Your session expired — please log in again.");
+      }
     } finally { setRemoving(null); }
+  };
+
+  const handleCheckoutClick = () => {
+    if (!cart) return;
+    trackBeginCheckout(
+      cart.items
+        .filter((i) => i.product)
+        .map((i) => ({
+          item_id: String(i.product!.id),
+          item_name: i.product!.name,
+          item_category: i.product!.card_set?.code,
+          price: parseFloat(i.product!.price),
+          quantity: i.quantity,
+        })),
+      parseFloat(cart.total)
+    );
   };
 
   if (loading) return (
@@ -150,7 +169,7 @@ export default function PilePage() {
               <span>Shipping calculated at checkout</span>
             </div>
 
-            <Link href="/checkout" style={{
+            <Link href="/checkout" onClick={handleCheckoutClick} style={{
               display: "block", width: "100%", background: "#ff6b35", color: "#fff",
               border: "none", borderRadius: 8, padding: "14px", fontSize: 15,
               fontWeight: 700, cursor: "pointer", textAlign: "center", textDecoration: "none",

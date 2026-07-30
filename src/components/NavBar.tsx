@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { authFetch } from "@/lib/api";
 
 // The same rainbow already used on HR / ACE SPEC card badges (products/cards_page.tsx
 // aceBorder gradient) — reused here as the site's connective foil-stripe signature.
@@ -36,18 +37,21 @@ export default function NavBar() {
   const [user, setUser] = useState<string | null>(null);
   const [pileCount, setPileCount] = useState(0);
   const pathname = usePathname();
-  const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://pokemart-api-production.up.railway.app";
 
   const fetchPileCount = async () => {
     const token = localStorage.getItem("access_token");
     if (!token) { setPileCount(0); return; }
     try {
-      const res = await fetch(`${API_URL}/api/cart/`, { headers: { Authorization: `Bearer ${token}` } });
+      const res = await authFetch("/api/cart/");
       if (res.ok) {
         const data = await res.json();
         setPileCount(data.items?.length || 0);
       }
-    } catch {}
+    } catch {
+      // Session expired or request failed -- just show 0, the Pile page
+      // itself will explain what's going on if they click through.
+      setPileCount(0);
+    }
   };
 
   useEffect(() => {
