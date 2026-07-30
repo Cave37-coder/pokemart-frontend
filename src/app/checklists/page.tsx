@@ -134,6 +134,65 @@ function Overview({ onOpen }: { onOpen: (code: string) => void }) {
   const byEra: Record<string, SetMeta[]> = {};
   filtered.forEach(s => { if (!byEra[s.era]) byEra[s.era] = []; byEra[s.era].push(s); });
 
+  // "Special - X" eras (Trick or Trade, Prize Pack, and any future one-off
+  // product line like McDonald's/Rumble/POP) don't belong to any single
+  // generation, so instead of each getting its own top-level section next
+  // to real eras like "Sword & Shield", they're gathered under one shared
+  // "Special Sets" shelf at the bottom -- still sub-labeled by product line
+  // so they stay distinguishable. Genuine era-tied side products (Trainer
+  // Gallery, Galarian Gallery, Champion's Path, etc.) are NOT part of this
+  // -- those keep living as siblings inside their real era section, per
+  // Michael's call on 2026-07-30.
+  const MAIN_ERAS = ERA_ORDER.filter(e => !e.startsWith('Special - '));
+  const SPECIAL_ERAS = ERA_ORDER.filter(e => e.startsWith('Special - '));
+
+  const renderGrid = (sets: SetMeta[], color: string) => (
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(185px,1fr))', gap: '7px' }}>
+      {sets.slice().sort((a,b) => {
+        const dA = logos[a.code]?.release_date;
+        const dB = logos[b.code]?.release_date;
+        if (dA && dB) return dB.localeCompare(dA);
+        if (dA) return -1;
+        if (dB) return 1;
+        return a.code.localeCompare(b.code);
+      }).map(s => {
+        const prog = getProgress(s.code);
+        const logoCode = s.code;
+        return (
+          <div key={s.code} onClick={() => onOpen(s.code)}
+            style={{ background: '#1e1e2a', border: `1px solid ${prog.owned > 0 ? color : '#2a2a3a'}`, borderRadius: '8px', padding: '10px 12px', cursor: 'pointer', position: 'relative', overflow: 'hidden' }}
+            onMouseEnter={e => (e.currentTarget.style.transform = 'translateY(-1px)')}
+            onMouseLeave={e => (e.currentTarget.style.transform = '')}>
+            {logos[logoCode]?.logo_url && (
+              <img src={logos[logoCode].logo_url} alt="" style={{ position: 'absolute', right: '-8px', top: '50%', transform: 'translateY(-50%)', height: '52px', opacity: 0.12, pointerEvents: 'none', maxWidth: '110px', objectFit: 'contain' }} />
+            )}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '3px' }}>
+              {logos[logoCode]?.symbol_url && (
+                <img src={logos[logoCode].symbol_url} alt="" style={{ height: '14px', width: '14px', objectFit: 'contain', opacity: 0.8 }} />
+              )}
+              <div style={{ fontSize: '9px', fontWeight: 700, letterSpacing: '1px', textTransform: 'uppercase', color: prog.owned > 0 ? color : '#555' }}>{s.code}</div>
+            </div>
+            <div style={{ fontSize: '12px', fontWeight: 600, color: '#e0e0e0', lineHeight: 1.3, marginBottom: '4px' }}>{s.name}</div>
+            <div style={{ fontSize: '10px', color: '#555', marginBottom: '3px' }}>{s.cards} cards · {fmt(s.set_zar)} full set</div>
+            {prog.owned > 0 && (
+              <>
+                <div style={{ height: '3px', background: '#12121a', borderRadius: '2px', marginTop: '6px', overflow: 'hidden' }}>
+                  <div style={{ height: '100%', width: `${prog.pct}%`, background: color, borderRadius: '2px' }} />
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '9px', color: '#555', marginTop: '3px' }}>
+                  <span>{prog.pct}% complete</span>
+                  <span style={{ color: '#ff6b35' }}>{fmt(prog.collectionZar)}</span>
+                </div>
+              </>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+
+  const hasSpecial = SPECIAL_ERAS.some(e => byEra[e]?.length);
+
   return (
     <div style={{ padding: '20px' }}>
       <div style={{ display: 'flex', gap: '10px', marginBottom: '16px', flexWrap: 'wrap', alignItems: 'center' }}>
@@ -142,62 +201,40 @@ function Overview({ onOpen }: { onOpen: (code: string) => void }) {
         <select value={eraFilter} onChange={e => setEraFilter(e.target.value)}
           style={{ padding: '8px 10px', background: '#1e1e2a', border: '1px solid #2a2a3a', borderRadius: '8px', color: '#a0a0b0', fontSize: '13px' }}>
           <option value="">All eras</option>
-          {ERA_ORDER.filter(e => byEra[e]).map(e => <option key={e} value={e}>{e}</option>)}
+          {ERA_ORDER.filter(e => byEra[e]).map(e => (
+            <option key={e} value={e}>{e.startsWith('Special - ') ? 'Special Sets: ' + e.replace('Special - ', '') : e}</option>
+          ))}
         </select>
         <span style={{ fontSize: '12px', color: '#555' }}>{filtered.length} sets</span>
       </div>
 
-      {ERA_ORDER.map(era => {
+      {MAIN_ERAS.map(era => {
         const sets = byEra[era]; if (!sets?.length) return null;
         const color = ERA_COLORS[era] || '#555';
         return (
           <div key={era} style={{ marginBottom: '20px' }}>
             <div style={{ display: 'inline-block', background: color, color: '#fff', fontSize: '10px', fontWeight: 700, letterSpacing: '1px', textTransform: 'uppercase', padding: '3px 10px', borderRadius: '4px', marginBottom: '8px' }}>{era}</div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(185px,1fr))', gap: '7px' }}>
-              {sets.slice().sort((a,b) => {
-                const dA = logos[a.code]?.release_date;
-                const dB = logos[b.code]?.release_date;
-                if (dA && dB) return dB.localeCompare(dA);
-                if (dA) return -1;
-                if (dB) return 1;
-                return a.code.localeCompare(b.code);
-              }).map(s => {
-                const prog = getProgress(s.code);
-                const logoCode = s.code;
-                return (
-                  <div key={s.code} onClick={() => onOpen(s.code)}
-                    style={{ background: '#1e1e2a', border: `1px solid ${prog.owned > 0 ? color : '#2a2a3a'}`, borderRadius: '8px', padding: '10px 12px', cursor: 'pointer', position: 'relative', overflow: 'hidden' }}
-                    onMouseEnter={e => (e.currentTarget.style.transform = 'translateY(-1px)')}
-                    onMouseLeave={e => (e.currentTarget.style.transform = '')}>
-                    {logos[logoCode]?.logo_url && (
-                      <img src={logos[logoCode].logo_url} alt="" style={{ position: 'absolute', right: '-8px', top: '50%', transform: 'translateY(-50%)', height: '52px', opacity: 0.12, pointerEvents: 'none', maxWidth: '110px', objectFit: 'contain' }} />
-                    )}
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '3px' }}>
-                      {logos[logoCode]?.symbol_url && (
-                        <img src={logos[logoCode].symbol_url} alt="" style={{ height: '14px', width: '14px', objectFit: 'contain', opacity: 0.8 }} />
-                      )}
-                      <div style={{ fontSize: '9px', fontWeight: 700, letterSpacing: '1px', textTransform: 'uppercase', color: prog.owned > 0 ? color : '#555' }}>{s.code}</div>
-                    </div>
-                    <div style={{ fontSize: '12px', fontWeight: 600, color: '#e0e0e0', lineHeight: 1.3, marginBottom: '4px' }}>{s.name}</div>
-                    <div style={{ fontSize: '10px', color: '#555', marginBottom: '3px' }}>{s.cards} cards · {fmt(s.set_zar)} full set</div>
-                    {prog.owned > 0 && (
-                      <>
-                        <div style={{ height: '3px', background: '#12121a', borderRadius: '2px', marginTop: '6px', overflow: 'hidden' }}>
-                          <div style={{ height: '100%', width: `${prog.pct}%`, background: color, borderRadius: '2px' }} />
-                        </div>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '9px', color: '#555', marginTop: '3px' }}>
-                          <span>{prog.pct}% complete</span>
-                          <span style={{ color: '#ff6b35' }}>{fmt(prog.collectionZar)}</span>
-                        </div>
-                      </>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
+            {renderGrid(sets, color)}
           </div>
         );
       })}
+
+      {hasSpecial && (
+        <div style={{ marginBottom: '20px' }}>
+          <div style={{ display: 'inline-block', background: '#37474F', color: '#fff', fontSize: '10px', fontWeight: 700, letterSpacing: '1px', textTransform: 'uppercase', padding: '3px 10px', borderRadius: '4px', marginBottom: '10px' }}>Special Sets</div>
+          {SPECIAL_ERAS.map(era => {
+            const sets = byEra[era]; if (!sets?.length) return null;
+            const color = ERA_COLORS[era] || '#555';
+            const label = era.replace('Special - ', '');
+            return (
+              <div key={era} style={{ marginBottom: '14px', marginLeft: '2px' }}>
+                <div style={{ fontSize: '11px', fontWeight: 600, color: '#a0a0b0', marginBottom: '6px' }}>{label}</div>
+                {renderGrid(sets, color)}
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
