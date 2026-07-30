@@ -13,11 +13,9 @@ interface AddToPileButtonProps {
   name?: string;
 }
 
-declare global {
-  interface Window {
-    gtag?: (...args: any[]) => void;
-  }
-}
+// window.gtag is typed globally in src/lib/analytics.ts — no need to
+// redeclare it here. (Two conflicting declarations of the same global,
+// one here and one there, is what broke the last build.)
 
 export default function AddToPileButton({ productId, hasStock, size = "md", price, name }: AddToPileButtonProps) {
   const [loading, setLoading] = useState(false);
