@@ -115,8 +115,15 @@ export default function NavBar() {
           .pb-nav-hamburger { display: flex !important; }
           .pb-nav-links {
             display: none;
-            position: fixed;
-            top: 64px; left: 0; right: 0;
+            /* !important on position/left/right/width is load-bearing here:
+               the element also carries an inline style={{ position: 'relative' }}
+               (needed for desktop layout), and inline styles always beat a
+               plain class rule -- without !important this whole block gets
+               ignored and the "dropdown" ends up sized/positioned like a
+               normal inline flex item instead of spanning the viewport. */
+            position: fixed !important;
+            top: 64px !important; left: 0 !important; right: 0 !important;
+            width: 100% !important;
             max-height: calc(100vh - 64px);
             overflow-y: auto;
             background: #12121a;
@@ -125,6 +132,7 @@ export default function NavBar() {
             align-items: stretch !important;
             gap: 0 !important;
             padding: 8px 0 16px !important;
+            box-shadow: 0 12px 24px rgba(0,0,0,0.4);
           }
           .pb-nav-links.pb-nav-open { display: flex !important; }
           .pb-nav-links a, .pb-nav-links button {
@@ -164,6 +172,16 @@ export default function NavBar() {
       >
         {menuOpen ? "✕" : "☰"}
       </button>
+
+      {/* Tap-anywhere-outside-to-close backdrop. Mobile only (the hamburger
+          itself is display:none above 900px, so menuOpen never becomes true
+          on desktop and this never renders there). */}
+      {menuOpen && (
+        <div
+          onClick={() => setMenuOpen(false)}
+          style={{ position: "fixed", inset: 0, top: "64px", background: "rgba(0,0,0,0.5)", zIndex: 0 }}
+        />
+      )}
 
       <div className={`pb-nav-links${menuOpen ? " pb-nav-open" : ""}`} style={{ display: "flex", gap: "1.5rem", alignItems: "center", position: "relative", zIndex: 1 }}>
         {navLinks.map((link) => (
