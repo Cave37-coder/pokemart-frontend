@@ -243,55 +243,73 @@ function Overview({ onOpen }: { onOpen: (code: string) => void }) {
         <span style={{ fontSize: '12px', color: '#555' }}>{filtered.length} sets</span>
       </div>
 
-      {wallEvents.length > 0 && (
-        <div style={{ background: '#1e1e2a', border: '1px solid #2a2a3a', borderRadius: '8px', padding: '10px 14px', marginBottom: '18px' }}>
-          <div style={{ fontSize: '10px', fontWeight: 700, letterSpacing: '1px', textTransform: 'uppercase', color: '#a0a0b0', marginBottom: '8px' }}>🏆 Wall of Honour</div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '260px', overflowY: 'auto' }}>
-            {wallEvents.map((e, i) => (
-              <div key={i} onClick={() => onOpen(e.set_code)}
-                style={{ display: 'flex', alignItems: 'center', gap: '8px', background: '#12121a', border: '1px solid #2a2a3a', borderRadius: '7px', padding: '7px 12px', cursor: 'pointer' }}>
-                {e.avatar ? (
-                  <img src={e.avatar} alt="" style={{ width: '18px', height: '18px', borderRadius: '50%', objectFit: 'cover' }} />
-                ) : (
-                  <span style={{ width: '18px', height: '18px', borderRadius: '50%', background: '#2a2a3a', display: 'inline-block' }} />
-                )}
-                {e.logo_url && <img src={e.logo_url} alt="" style={{ height: '14px', maxWidth: '50px', objectFit: 'contain' }} />}
-                <span style={{ fontSize: '12px', color: '#e0e0e0' }}>
-                  <strong>{e.display_name}</strong> completed <span style={{ color: '#ff6b35' }}>{e.tier_label}</span> of {e.set_name}
-                </span>
-              </div>
-            ))}
-          </div>
+      {/* Era menu (left) + Wall of Honour (right) side by side on wide
+          screens -- wraps to stacked on narrow ones via flexWrap. Only the
+          clickable headers live here; the actual set-tile grids render
+          full-width further down once an era is expanded, since a grid of
+          set tiles crammed into a narrow sidebar column would be useless. */}
+      <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap', alignItems: 'flex-start', marginBottom: '10px' }}>
+        <div style={{ flex: '0 0 260px', minWidth: '240px' }}>
+          {MAIN_ERAS.map(era => {
+            const sets = byEra[era]; if (!sets?.length) return null;
+            const color = ERA_COLORS[era] || '#555';
+            return <div key={era} style={{ marginBottom: '8px' }}>{sectionHeader(era, color, sets.length, era)}</div>;
+          })}
+          {hasSpecial && (
+            <div style={{ marginBottom: '8px' }}>
+              {sectionHeader('Special Sets', '#37474F', SPECIAL_ERAS.reduce((n, e) => n + (byEra[e]?.length || 0), 0), '__special__')}
+            </div>
+          )}
         </div>
-      )}
 
+        <div style={{ flex: '1 1 320px', minWidth: '260px' }}>
+          {wallEvents.length > 0 && (
+            <div style={{ background: '#1e1e2a', border: '1px solid #2a2a3a', borderRadius: '8px', padding: '10px 14px' }}>
+              <div style={{ fontSize: '10px', fontWeight: 700, letterSpacing: '1px', textTransform: 'uppercase', color: '#a0a0b0', marginBottom: '8px' }}>🏆 Wall of Honour</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '320px', overflowY: 'auto' }}>
+                {wallEvents.map((e, i) => (
+                  <div key={i} onClick={() => onOpen(e.set_code)}
+                    style={{ display: 'flex', alignItems: 'center', gap: '8px', background: '#12121a', border: '1px solid #2a2a3a', borderRadius: '7px', padding: '7px 12px', cursor: 'pointer' }}>
+                    {e.avatar ? (
+                      <img src={e.avatar} alt="" style={{ width: '18px', height: '18px', borderRadius: '50%', objectFit: 'cover' }} />
+                    ) : (
+                      <span style={{ width: '18px', height: '18px', borderRadius: '50%', background: '#2a2a3a', display: 'inline-block' }} />
+                    )}
+                    {e.logo_url && <img src={e.logo_url} alt="" style={{ height: '14px', maxWidth: '50px', objectFit: 'contain' }} />}
+                    <span style={{ fontSize: '12px', color: '#e0e0e0' }}>
+                      <strong>{e.display_name}</strong> completed <span style={{ color: '#ff6b35' }}>{e.tier_label}</span> of {e.set_name}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Expanded era set-tile grids, full width */}
       {MAIN_ERAS.map(era => {
-        const sets = byEra[era]; if (!sets?.length) return null;
+        const sets = byEra[era]; if (!sets?.length || !isOpen(era)) return null;
         const color = ERA_COLORS[era] || '#555';
         return (
-          <div key={era} style={{ marginBottom: '14px' }}>
-            {sectionHeader(era, color, sets.length, era)}
-            {isOpen(era) && renderGrid(sets, color)}
+          <div key={era} style={{ marginBottom: '20px' }}>
+            <div style={{ display: 'inline-block', background: color, color: '#fff', fontSize: '10px', fontWeight: 700, letterSpacing: '1px', textTransform: 'uppercase', padding: '3px 10px', borderRadius: '4px', marginBottom: '8px' }}>{era}</div>
+            {renderGrid(sets, color)}
           </div>
         );
       })}
 
-      {hasSpecial && (
-        <div style={{ marginBottom: '14px' }}>
-          {sectionHeader('Special Sets', '#37474F', SPECIAL_ERAS.reduce((n, e) => n + (byEra[e]?.length || 0), 0), '__special__', { marginBottom: expandedEras.has('__special__') || query || eraFilter ? '10px' : '0px' })}
-          {(!!query || !!eraFilter || expandedEras.has('__special__')) && SPECIAL_ERAS.map(era => {
-            const sets = byEra[era]; if (!sets?.length) return null;
-            const color = ERA_COLORS[era] || '#555';
-            const label = era.replace('Special - ', '');
-            return (
-              <div key={era} style={{ marginBottom: '14px', marginLeft: '2px' }}>
-                <div style={{ fontSize: '11px', fontWeight: 600, color: '#a0a0b0', marginBottom: '6px' }}>{label}</div>
-                {renderGrid(sets, color)}
-              </div>
-            );
-          })}
-        </div>
-      )}
+      {hasSpecial && (!!query || !!eraFilter || expandedEras.has('__special__')) && SPECIAL_ERAS.map(era => {
+        const sets = byEra[era]; if (!sets?.length) return null;
+        const color = ERA_COLORS[era] || '#555';
+        const label = era.replace('Special - ', '');
+        return (
+          <div key={era} style={{ marginBottom: '20px' }}>
+            <div style={{ fontSize: '11px', fontWeight: 600, color: '#a0a0b0', marginBottom: '6px' }}>{label}</div>
+            {renderGrid(sets, color)}
+          </div>
+        );
+      })}
     </div>
   );
 }
