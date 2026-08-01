@@ -332,21 +332,23 @@ function Checklist({ code, onBack }: { code: string; onBack: () => void }) {
       })
       .catch(() => {});
   }, [code]);
-  const [inStock, setInStock] = useState<Set<number>>(new Set());
+  // BUG FIXED 2026-08-01 #3: this used to be a separate call to
+  // /api/checklists/stock-check/, which -- like pidToId before it -- can
+  // only report stock per bare TCGCSV pid, not per exact variant. Since a
+  // card's N/H/RH prints share one pid, an out-of-stock RH could still show
+  // a Buy button just because its sibling N variant had stock. The product
+  // fetch below already carries accurate per-row stock/in_stock, so inStock
+  // is now built from that directly (same `${pid}_${variant}` keying as
+  // pidToId) instead of a second, coarser network call.
+  const [inStock, setInStock] = useState<Set<string>>(new Set());
   const [stockLoaded, setStockLoaded] = useState(false);
   const [filter, setFilter] = useState<'all'|'missing'|'owned'>('all');
 
-  useEffect(() => {
-    const pids = new Set<number>();
-    set.cards.forEach(c => c.variants.forEach(v => { if (v.pid) pids.add(v.pid); }));
-    fetch(`${API_BASE}/api/checklists/stock-check/?product_ids=${Array.from(pids).join(',')}`)
-      .then(r => r.json()).then((d: number[]) => { setInStock(new Set(d)); setStockLoaded(true); })
-      .catch(() => setStockLoaded(true));
-  }, [code]);
-
   const [viewMode, setViewMode] = useState<'list'|'grid'>('list');
   const [cardImages, setCardImages] = useState<Record<number, string>>({});
-  const [pidToId, setPidToId] = useState<Record<number, number>>({});
+  // Keyed by `${pid}_${variant}`, not bare pid -- see the note where this is
+  // populated below for why pid alone isn't unique per card.
+  const [pidToId, setPidToId] = useState<Record<string, number>>({});
 
   // ── Leaderboard (Checklist Phase 1: Compare & Compete) ──────────────────
   // A set is "simple" (single Complete Set tier) when no card in it has more
@@ -379,11 +381,11 @@ function Checklist({ code, onBack }: { code: string; onBack: () => void }) {
   }, [code, lbTier]);
 
   useEffect(() => {
-    const fetchPage = (url: string, imgAcc: Record<number, string>, idAcc: Record<number, number>) => {
+    const fetchPage = (url: string, imgAcc: Record<number, string>, idAcc: Record<string, number>, stockAcc: Set<string>) => {
       fetch(url)
         .then(r => r.json())
         .then(data => {
-          (data.results || []).forEach((p: { pb_id: string; id: number; image_url: string; tcgplayer_id?: number }) => {
+          (data.results || []).forEach((p: { pb_id: string; id: number; image_url: string; tcgplayer_id?: number; variant_override?: string; in_stock?: boolean }) => {
             // BUG FIXED 2026-08-01 (Michael: Buy button on checklist redirects
             // to a search page instead of adding to Pile): pidToId used to be
             // keyed by p.tcgplayer_id, which is blank ("") on essentially
@@ -398,21 +400,40 @@ function Checklist({ code, onBack }: { code: string; onBack: () => void }) {
               imgAcc[p.id] = p.image_url;
               if (match) imgAcc[parseInt(match[1], 10)] = p.image_url;
             }
-            if (match) idAcc[parseInt(match[1], 10)] = p.id;
-            else if (p.tcgplayer_id) idAcc[p.tcgplayer_id] = p.id;
+            // BUG FIXED 2026-08-01 #2 (Michael: Buy on an in-stock variant
+            // added a different, out-of-stock variant instead -- "Insufficient
+            // stock" on a card that showed a Buy button): TCGCSV deliberately
+            // shares ONE catalog number across a card's N/H/RH prints (see
+            // fix_tcgcsv_product_id_links.py) -- confirmed live, Gloom's N and
+            // RH rows both carry pid 662164. Keying pidToId by bare pid alone
+            // meant whichever variant loaded last from this API page silently
+            // won that slot, so buyCard() could resolve to a completely
+            // different print than the one actually clicked. Fixed by keying
+            // on (pid, variant) together, same shape as the checklist's own
+            // checked-state key (card.num + '_' + v.vc) two screens up.
+            const variant = p.variant_override || 'N';
+            if (match) idAcc[`${parseInt(match[1], 10)}_${variant}`] = p.id;
+            else if (p.tcgplayer_id) idAcc[`${p.tcgplayer_id}_${variant}`] = p.id;
+            const stockPid = match ? parseInt(match[1], 10) : p.tcgplayer_id;
+            if (stockPid && p.in_stock) stockAcc.add(`${stockPid}_${variant}`);
           });
-          if (data.next) fetchPage(data.next, imgAcc, idAcc);
-          else { setCardImages({ ...imgAcc }); setPidToId({ ...idAcc }); }
+          if (data.next) fetchPage(data.next, imgAcc, idAcc, stockAcc);
+          else {
+            setCardImages({ ...imgAcc });
+            setPidToId({ ...idAcc });
+            setInStock(stockAcc);
+            setStockLoaded(true);
+          }
         })
-        .catch(() => {});
+        .catch(() => setStockLoaded(true));
     };
-    fetchPage(`${API_BASE}/api/products/?card_set=${code}&page_size=400`, {}, {});
+    fetchPage(`${API_BASE}/api/products/?card_set=${code}&page_size=400`, {}, {}, new Set<string>());
   }, [code]);
 
-  const buyCard = async (pid: number, key: string, zar: number, cardName: string) => {
+  const buyCard = async (pid: number, vc: string, key: string, zar: number, cardName: string) => {
     const token = localStorage.getItem('access_token');
     if (!token) { router.push('/auth/login'); return; }
-    const dbId = pidToId[pid];
+    const dbId = pidToId[`${pid}_${vc}`];
     if (!dbId) {
       // Fallback if this product wasn't in the loaded set page (shouldn't normally happen)
       window.location.href = `/cards?search=${encodeURIComponent(cardName)}&set_code=${code}`;
@@ -728,15 +749,15 @@ function Checklist({ code, onBack }: { code: string; onBack: () => void }) {
                             fontSize: '7px', fontWeight: 700, color: checks[key] ? '#fff' : '#555',
                             textTransform: 'uppercase', lineHeight: 1.3, cursor: 'pointer',
                           }}>{v.vc}</div>
-                          {!checks[key] && inStock.has(v.pid) && (
+                          {!checks[key] && inStock.has(`${v.pid}_${v.vc}`) && (
                             <button
-                              onClick={() => buyCard(v.pid, key, v.zar, card.name)}
+                              onClick={() => buyCard(v.pid, v.vc, key, v.zar, card.name)}
                               disabled={buying.has(key)}
                               style={{ fontSize: '7px', color: '#ff6b35', background: 'transparent', textDecoration: 'none', border: '1px solid #ff6b35', borderRadius: '3px', padding: '0px 3px', fontWeight: 700, lineHeight: 1.4, cursor: buying.has(key) ? 'default' : 'pointer', opacity: buying.has(key) ? 0.5 : 1 }}>
                               {buying.has(key) ? '…' : 'Buy'}
                             </button>
                           )}
-                          {!inStock.has(v.pid) && (
+                          {!inStock.has(`${v.pid}_${v.vc}`) && (
                             <span style={{ fontSize: '7px', color: '#333', lineHeight: 1.2 }}>{v.zar > 0 ? 'R'+v.zar.toFixed(0) : ''}</span>
                           )}
                         </div>
