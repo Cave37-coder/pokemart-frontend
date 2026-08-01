@@ -792,7 +792,19 @@ function ChecklistsPageInner() {
   }, []);
 
   const openSet = (code: string) => router.push(`/checklists?set=${code}`);
-  const closeSet = () => router.push('/checklists');
+  // Prefer a real "go back one step" over pushing a fresh /checklists entry
+  // on top -- opening a set always comes from the Overview being on the
+  // history stack right below it, so back() lands there directly instead
+  // of stacking a redundant duplicate entry. Falls back to a plain push
+  // only if this tab has no history to go back to (e.g. a ?set= link was
+  // opened directly, not via clicking a set on the Overview).
+  const closeSet = () => {
+    if (typeof window !== 'undefined' && window.history.length > 1) {
+      router.back();
+    } else {
+      router.push('/checklists');
+    }
+  };
 
   return (
     <div style={{ minHeight: '100vh', background: '#12121a', color: '#e0e0e0' }}>

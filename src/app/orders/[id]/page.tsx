@@ -1,7 +1,8 @@
-"use client";
+﻿"use client";
 import { useEffect, useState } from "react";
-import Link from "next/link";
 import { useParams, useSearchParams } from "next/navigation";
+import { trackPurchase } from "@/lib/analytics";
+import BackButton from "@/components/BackButton";
 
 interface OrderTracking {
   id: number; status: string; status_display: string;
@@ -52,6 +53,11 @@ function fmt(dt: string) {
   });
 }
 
+// Order states that represent a genuinely completed order (not a cancelled
+// or still-pending-payment attempt) -- these are the ones GA4 should count
+// as a purchase conversion.
+const PURCHASE_CONFIRMATION_RESULTS = ["success", "collection", "eft"];
+
 export default function OrderDetailPage() {
   const params = useParams();
   const searchParams = useSearchParams();
@@ -71,11 +77,42 @@ export default function OrderDetailPage() {
       .catch(e => { setError(e.message); setLoading(false); });
   }, [id]);
 
+  // Fires GA4 purchase exactly once per order, only on a genuine order
+  // confirmation landing (not on every later visit to this same page to
+  // check status). Guarded with sessionStorage so a page refresh right
+  // after checkout doesn't double-count the same order.
+  useEffect(() => {
+    if (!order) return;
+    if (!paymentResult || !PURCHASE_CONFIRMATION_RESULTS.includes(paymentResult)) return;
+
+    const guardKey = `ga4_purchase_tracked_${order.id}`;
+    if (sessionStorage.getItem(guardKey)) return;
+
+    const itemsSubtotal = order.items.reduce((sum, item) => sum + parseFloat(item.subtotal), 0);
+    const total = parseFloat(order.total_price);
+    const shippingCost = Math.max(0, total - itemsSubtotal);
+
+    trackPurchase(
+      String(order.id),
+      order.items.map((item) => ({
+        item_id: item.product?.id ? String(item.product.id) : item.product_sku,
+        item_name: item.product?.name || item.product_name,
+        item_category: item.product?.card_set?.code,
+        price: parseFloat(item.price_at_purchase),
+        quantity: item.quantity,
+      })),
+      total,
+      shippingCost
+    );
+
+    sessionStorage.setItem(guardKey, "1");
+  }, [order, paymentResult]);
+
   if (loading) return <div style={{ maxWidth:680, margin:"60px auto", padding:"0 1.5rem", color:"#a0a0b0", textAlign:"center" }}>Loading...</div>;
   if (error || !order) return (
     <div style={{ maxWidth:680, margin:"60px auto", padding:"0 1.5rem", textAlign:"center" }}>
       <div style={{ color:"#EF4444", marginBottom:16 }}>{error || "Order not found"}</div>
-      <Link href="/orders" style={{ color:"#ff6b35", textDecoration:"none" }}>Back to orders</Link>
+      <BackButton fallbackHref="/orders" style={{ color:"#ff6b35" }}>Back to orders</BackButton>
     </div>
   );
 
@@ -88,9 +125,9 @@ export default function OrderDetailPage() {
 
   return (
     <div style={{ maxWidth:680, margin:"40px auto", padding:"0 1.5rem" }}>
-      <Link href="/orders" style={{ color:"#a0a0b0", fontSize:13, textDecoration:"none", display:"flex", alignItems:"center", gap:4, marginBottom:20 }}>
+      <BackButton fallbackHref="/orders" style={{ fontSize:13, display:"flex", alignItems:"center", gap:4, marginBottom:20 }}>
         Back to orders
-      </Link>
+      </BackButton>
 
       {/* Payment result banners */}
       {paymentResult === "success" && (

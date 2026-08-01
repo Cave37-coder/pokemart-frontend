@@ -1,6 +1,6 @@
 "use client";
 import { useState } from "react";
-import Link from "next/link";
+import BackButton from "@/components/BackButton";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://pokemart-api-production.up.railway.app";
 
@@ -83,7 +83,7 @@ export default function ForgotPasswordPage() {
         </div>
 
         <p style={{ textAlign: "center", color: "#555", fontSize: 13, marginTop: 20 }}>
-          <Link href="/auth/login" style={{ color: "#ff6b35", textDecoration: "none" }}>← Back to sign in</Link>
+          <BackButton fallbackHref="/auth/login" style={{ color: "#ff6b35" }}>← Back to sign in</BackButton>
         </p>
       </div>
     </div>

@@ -1,8 +1,9 @@
-import Link from "next/link";
-import { notFound } from "next/navigation";
+﻿import { notFound } from "next/navigation";
 import axios from "axios";
 import { getCard } from "@/lib/api";
 import AddToPileButton from "./AddToPileButton";
+import ViewItemTracker from "./ViewItemTracker";
+import BackButton from "./BackButton";
 
 const TYPE_COLORS: Record<string, string> = {
   Fire: "#fb923c", Water: "#60a5fa", Grass: "#4ade80",
@@ -33,9 +34,16 @@ export default async function CardPage({ params }: { params: Promise<{ id: strin
 
   return (
     <div style={{ maxWidth: "1000px", margin: "0 auto", padding: "40px 2rem" }}>
-      <Link href="/cards" style={{ color: "#a0a0b0", textDecoration: "none", fontSize: "14px", display: "inline-block", marginBottom: "24px" }}>
-        Back to Cards
-      </Link>
+      <ViewItemTracker
+        item={{
+          item_id: card.sku || String(card.id),
+          item_name: card.name,
+          item_category: card.card_set?.code,
+          price: parseFloat(card.price),
+        }}
+      />
+
+      <BackButton fallbackHref="/cards" style={{ marginBottom: "24px" }} />
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "40px" }}>
         <div>

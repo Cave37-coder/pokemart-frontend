@@ -1,7 +1,9 @@
-"use client";
+﻿"use client";
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { trackAddShippingInfo } from "@/lib/analytics";
+import BackButton from "@/components/BackButton";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://pokemart-api-production.up.railway.app";
 
@@ -124,6 +126,19 @@ export default function CheckoutPage() {
     if (!token) return;
     setPlacing(true);
     setError("");
+
+    trackAddShippingInfo(
+      items.map((item) => ({
+        item_id: String(item.product.id),
+        item_name: item.product.name,
+        item_category: item.product.card_set?.code,
+        price: parseFloat(item.product.price),
+        quantity: item.quantity,
+      })),
+      orderTotal,
+      selectedDelivery?.label || shipping
+    );
+
     try {
       const orderRes = await fetch(`${API_URL}/api/checkout/`, {
         method: "POST",
@@ -420,7 +435,7 @@ export default function CheckoutPage() {
           </div>
 
           <div style={{ marginTop:12 }}>
-            <Link href="/pile" style={{ color:"#a0a0b0", fontSize:12, textDecoration:"none" }}>← Back to pile</Link>
+            <BackButton fallbackHref="/pile" style={{ fontSize:12 }}>← Back to pile</BackButton>
           </div>
         </div>
       </div>
