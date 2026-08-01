@@ -384,12 +384,22 @@ function Checklist({ code, onBack }: { code: string; onBack: () => void }) {
         .then(r => r.json())
         .then(data => {
           (data.results || []).forEach((p: { pb_id: string; id: number; image_url: string; tcgplayer_id?: number }) => {
+            // BUG FIXED 2026-08-01 (Michael: Buy button on checklist redirects
+            // to a search page instead of adding to Pile): pidToId used to be
+            // keyed by p.tcgplayer_id, which is blank ("") on essentially
+            // every product in the catalog -- so this map ended up empty and
+            // buyCard() always fell through to its "couldn't find this
+            // product" search-page fallback. The checklist's own `pid` values
+            // are actually the TCGCSV catalog number embedded in pb_id (e.g.
+            // "TCGCSV-662164"), which was already being extracted correctly
+            // for the image map two lines below -- just never reused here.
+            const match = p.pb_id && p.pb_id.match(/TCGCSV-(\d+)/);
             if (p.image_url) {
               imgAcc[p.id] = p.image_url;
-              const match = p.pb_id && p.pb_id.match(/TCGCSV-(\d+)/);
               if (match) imgAcc[parseInt(match[1], 10)] = p.image_url;
             }
-            if (p.tcgplayer_id) idAcc[p.tcgplayer_id] = p.id;
+            if (match) idAcc[parseInt(match[1], 10)] = p.id;
+            else if (p.tcgplayer_id) idAcc[p.tcgplayer_id] = p.id;
           });
           if (data.next) fetchPage(data.next, imgAcc, idAcc);
           else { setCardImages({ ...imgAcc }); setPidToId({ ...idAcc }); }
