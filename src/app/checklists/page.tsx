@@ -24,6 +24,17 @@ const TIER_COLORS: Record<string, string> = {
   master_set: "#ffd700",
   complete_set: "#ff6b35",
 };
+// Mirrors backend TIER_LABELS (products/completion.py) -- used for the
+// Overview grid's "X complete" badge, which only has the raw tier key
+// available (from /api/checklists/my-completions/), not a pre-formatted
+// label like the Wall of Honour feed already includes.
+const TIER_LABELS_FE: Record<string, string> = {
+  broke_base: "Broke Base",
+  base_set: "Base Set",
+  special_set_base: "Special Set Base",
+  master_set: "Master Set",
+  complete_set: "Complete Set",
+};
 const ERA_ORDER: string[] = ["WotC Base","WotC Neo","WotC Legendary","WotC Other","EX Era","Diamond & Pearl","HG&SS","Black & White","XY Era","Sun & Moon","Sword & Shield","Scarlet & Violet","Mega Evolution","Special - Prize Pack","Special - Trick or Trade"];
 const RSYM: Record<string, string> = {"Common":"\u25cf","Uncommon":"\u25c6","Rare":"\u2605","Holo Rare":"\u2605H","Double Rare":"\u2605\u2605","Illustration Rare":"\u2605i","Ultra Rare":"\u25c7\u25c7","Special Illustration Rare":"\u2605\u25c7","Mega Hyper Rare":"\u25c8","Hyper Rare":"\u25c8","Shiny Holo Rare":"\u2726","Shiny Rare":"\u2726","Amazing Rare":"\u2605A","Radiant Rare":"\u2605R","Prism Rare":"\u2605P","Rainbow Rare":"\u2605RB","Classic Collection":"\u2605CC","Secret Rare":"\u2605SR","Rare BREAK":"\u2605BR","Rare Ace":"\u2605AC","Shiny Ultra Rare":"\u2726UR","ACE SPEC Rare":"A\u2660","Black White Rare":"\u2605BW","Promo":"P","Mega Attack Rare":"\u2605M"};
 
@@ -149,6 +160,20 @@ function Overview({ onOpen }: { onOpen: (code: string) => void }) {
       .catch(() => setWallEvents([]));
   }, []);
 
+  // This customer's own highest-completed tier per set (Michael, 2026-08-01:
+  // "highlight on Checklist page the same way if customer completes the
+  // set") -- one bulk call, {code: tier}, reusing the same SetCompletionEvent
+  // data the Wall of Honour already trusts rather than re-deriving tier
+  // completion from the giant SETS blob client-side.
+  const [myCompletions, setMyCompletions] = useState<Record<string, string>>({});
+  useEffect(() => {
+    if (typeof window === 'undefined' || !localStorage.getItem('access_token')) return;
+    authFetch('/api/checklists/my-completions/')
+      .then(r => (r.ok ? r.json() : {}))
+      .then(data => setMyCompletions(data || {}))
+      .catch(() => setMyCompletions({}));
+  }, []);
+
   useEffect(() => {
     fetch(`${API_BASE}/api/sets/`)
       .then(r => r.json())
@@ -196,22 +221,47 @@ function Overview({ onOpen }: { onOpen: (code: string) => void }) {
       }).map(s => {
         const prog = getProgress(s.code);
         const logoCode = s.code;
+        // Michael, 2026-08-01: "highlight on Checklist page the same way if
+        // customer completes the set" -- same tier colours as Wall of
+        // Honour, so a glance at the grid shows exactly which sets (and
+        // which tier) you've already conquered, not just which ones you've
+        // merely started.
+        const completedTier = myCompletions[s.code];
+        const tierColor = completedTier ? (TIER_COLORS[completedTier] || color) : null;
+        const tileColor = tierColor || color;
         return (
           <div key={s.code} onClick={() => onOpen(s.code)}
-            style={{ background: '#1e1e2a', border: `1px solid ${prog.owned > 0 ? color : '#2a2a3a'}`, borderRadius: '8px', padding: '10px 12px', cursor: 'pointer', position: 'relative', overflow: 'hidden' }}
+            style={{
+              background: '#1e1e2a',
+              border: `${tierColor ? 2 : 1}px solid ${tierColor || (prog.owned > 0 ? color : '#2a2a3a')}`,
+              boxShadow: tierColor ? `0 0 0 1px ${tierColor}40` : undefined,
+              borderRadius: '8px', padding: '10px 12px', cursor: 'pointer', position: 'relative', overflow: 'hidden',
+            }}
             onMouseEnter={e => (e.currentTarget.style.transform = 'translateY(-1px)')}
             onMouseLeave={e => (e.currentTarget.style.transform = '')}>
             {logos[logoCode]?.logo_url && (
               <img src={logos[logoCode].logo_url} alt="" style={{ position: 'absolute', right: '-8px', top: '50%', transform: 'translateY(-50%)', height: '52px', opacity: 0.12, pointerEvents: 'none', maxWidth: '110px', objectFit: 'contain' }} />
             )}
+            {tierColor && (
+              <div title={`${TIER_LABELS_FE[completedTier] || completedTier} complete`} style={{
+                position: 'absolute', top: '8px', right: '8px', fontSize: '13px', lineHeight: 1,
+              }}>🏆</div>
+            )}
             <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '3px' }}>
               {logos[logoCode]?.symbol_url && (
                 <img src={logos[logoCode].symbol_url} alt="" style={{ height: '14px', width: '14px', objectFit: 'contain', opacity: 0.8 }} />
               )}
-              <div style={{ fontSize: '9px', fontWeight: 700, letterSpacing: '1px', textTransform: 'uppercase', color: prog.owned > 0 ? color : '#555' }}>{s.code}</div>
+              <div style={{ fontSize: '9px', fontWeight: 700, letterSpacing: '1px', textTransform: 'uppercase', color: prog.owned > 0 ? tileColor : '#555' }}>{s.code}</div>
             </div>
             <div style={{ fontSize: '12px', fontWeight: 600, color: '#e0e0e0', lineHeight: 1.3, marginBottom: '4px' }}>{s.name}</div>
             <div style={{ fontSize: '10px', color: '#555', marginBottom: '3px' }}>{s.cards} cards · {fmt(s.set_zar)} full set</div>
+            {tierColor && (
+              <div style={{
+                display: 'inline-block', fontSize: '9px', fontWeight: 700, textTransform: 'uppercase',
+                letterSpacing: '0.03em', color: tierColor, background: `${tierColor}20`,
+                padding: '1px 6px', borderRadius: '4px', marginBottom: '3px',
+              }}>{TIER_LABELS_FE[completedTier] || completedTier} complete</div>
+            )}
             {prog.owned > 0 && (
               <>
                 <div style={{ height: '3px', background: '#12121a', borderRadius: '2px', marginTop: '6px', overflow: 'hidden' }}>
@@ -390,7 +440,7 @@ function Checklist({ code, onBack }: { code: string; onBack: () => void }) {
         { key: 'master_set', label: 'Master Set' },
       ];
   const [lbTier, setLbTier] = useState(tierTabs[0].key);
-  const [leaderboard, setLeaderboard] = useState<{ display_name: string; avatar: string | null; owned: number; required: number; pct: number; complete: boolean; completed_at: string | null }[]>([]);
+  const [leaderboard, setLeaderboard] = useState<{ display_name: string; avatar: string | null; owned: number; required: number; pct: number; complete: boolean; completed_at: string | null; tiers_complete: string[] }[]>([]);
   const [lbLoading, setLbLoading] = useState(false);
 
   useEffect(() => { setLbTier(tierTabs[0].key); }, [code]);
@@ -612,21 +662,54 @@ function Checklist({ code, onBack }: { code: string; onBack: () => void }) {
         ) : leaderboard.length === 0 ? (
           <div style={{ fontSize: '12px', color: '#555' }}>No one has completed this tier yet — be the first!</div>
         ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            {/* "First to complete" -- rows are sorted by owned desc, then
+                completed_at asc, so a complete row #1 is provably the
+                earliest completion, not just the current top of the
+                owned-count sort. Michael, 2026-08-01: "make it more
+                competition worthy". */}
             {leaderboard.map((row, i) => (
-              <div key={row.display_name + i} style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '13px' }}>
-                <span style={{ width: '18px', textAlign: 'center', color: i === 0 ? '#ffd700' : i === 1 ? '#c0c0c0' : i === 2 ? '#cd7f32' : '#555', fontWeight: 700 }}>{i + 1}</span>
-                {row.avatar ? (
-                  <img src={row.avatar} alt="" style={{ width: '20px', height: '20px', borderRadius: '50%', objectFit: 'cover' }} />
-                ) : (
-                  <span style={{ width: '20px', height: '20px', borderRadius: '50%', background: '#2a2a3a', display: 'inline-block' }} />
-                )}
-                <span style={{ color: '#e0e0e0', flex: 1 }}>{row.display_name}</span>
-                {row.complete ? (
-                  <span style={{ color: '#66cc66', fontSize: '11px' }}>✓ Complete{row.completed_at ? ' · ' + new Date(row.completed_at).toLocaleDateString('en-ZA') : ''}</span>
-                ) : (
-                  <span style={{ color: '#555', fontSize: '11px' }}>{row.owned}/{row.required} · {row.pct}%</span>
-                )}
+              <div key={row.display_name + i} style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '13px' }}>
+                  <span style={{ width: '18px', textAlign: 'center', color: i === 0 ? '#ffd700' : i === 1 ? '#c0c0c0' : i === 2 ? '#cd7f32' : '#555', fontWeight: 700 }}>{i + 1}</span>
+                  {row.avatar ? (
+                    <img src={row.avatar} alt="" style={{ width: '20px', height: '20px', borderRadius: '50%', objectFit: 'cover' }} />
+                  ) : (
+                    <span style={{ width: '20px', height: '20px', borderRadius: '50%', background: '#2a2a3a', display: 'inline-block' }} />
+                  )}
+                  <span style={{ color: '#e0e0e0', flex: 1, display: 'flex', alignItems: 'center', gap: '5px' }}>
+                    {row.display_name}
+                    {i === 0 && row.complete && <span title="First to complete">👑</span>}
+                  </span>
+                  {/* Cross-tier ladder: one dot per tier this set tracks, lit
+                      up in that tier's own colour once this person has hit
+                      it -- so you can see their whole set progress at a
+                      glance, not just the one tier currently selected. */}
+                  <span style={{ display: 'flex', gap: '3px' }}>
+                    {tierTabs.map(t => {
+                      const hit = row.tiers_complete.includes(t.key);
+                      const tc = TIER_COLORS[t.key] || eraColor;
+                      return (
+                        <span key={t.key} title={`${t.label}${hit ? ' -- complete' : ''}`} style={{
+                          width: '8px', height: '8px', borderRadius: '50%',
+                          background: hit ? tc : 'transparent',
+                          border: `1px solid ${hit ? tc : '#333'}`,
+                        }} />
+                      );
+                    })}
+                  </span>
+                  {row.complete ? (
+                    <span style={{ color: '#66cc66', fontSize: '11px', whiteSpace: 'nowrap' }}>✓ Complete{row.completed_at ? ' · ' + new Date(row.completed_at).toLocaleDateString('en-ZA') : ''}</span>
+                  ) : (
+                    <span style={{ color: '#555', fontSize: '11px', whiteSpace: 'nowrap' }}>{row.owned}/{row.required} · {row.pct}%</span>
+                  )}
+                </div>
+                {/* Mini visual progress bar per row (Michael: "maybe have
+                    progress bars for all sets") -- same idea as the Overview
+                    grid's tile bars, just scaled down for a leaderboard row. */}
+                <div style={{ height: '4px', background: '#12121a', borderRadius: '2px', overflow: 'hidden', marginLeft: '28px' }}>
+                  <div style={{ height: '100%', width: `${row.pct}%`, background: row.complete ? '#66cc66' : eraColor, borderRadius: '2px', transition: 'width .3s' }} />
+                </div>
               </div>
             ))}
           </div>
