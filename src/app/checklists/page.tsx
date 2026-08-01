@@ -1,6 +1,6 @@
 'use client';
-import { useState, useEffect, useCallback } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState, useEffect, useCallback, Suspense } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { authFetch, SessionExpiredError } from '@/lib/api';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'https://pokemart-api-production.up.railway.app';
@@ -762,13 +762,37 @@ function Checklist({ code, onBack }: { code: string; onBack: () => void }) {
   );
 }
 
-export default function ChecklistsPage() {
-  const [activeSet, setActiveSet] = useState<string | null>(null);
+// Split out from the default export so useSearchParams() (which needs a
+// Suspense boundary in the app router) doesn't force the whole page into
+// a loading state on first paint.
+//
+// FIX 2026-08-01 (Michael: "When you go back after selecting something,
+// the site takes you back to landing page, never back to where you
+// were"): opening a set used to just flip a local `activeSet` piece of
+// state -- the URL never changed, so the browser never recorded that step
+// in history. Hitting Back skipped straight past the checklist you were
+// looking at to whatever page you were on before you ever landed on
+// /checklists. Fixed by driving activeSet from a `?set=` query param via
+// the router instead of local state: opening/closing a set is now a real
+// navigation (router.push), so it gets its own history entry and Back
+// behaves the way you'd expect -- checklist -> overview -> wherever you
+// came from.
+function ChecklistsPageInner() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const requestedSet = searchParams.get('set');
+  // Guard against a stale/hand-edited ?set= that doesn't match a real set --
+  // fall back to the Overview instead of handing Checklist a code it can't
+  // resolve.
+  const activeSet = requestedSet && SETS[requestedSet] ? requestedSet : null;
   const [ready, setReady] = useState(checklistCacheReady);
 
   useEffect(() => {
     ensureChecklistData().then(() => setReady(true));
   }, []);
+
+  const openSet = (code: string) => router.push(`/checklists?set=${code}`);
+  const closeSet = () => router.push('/checklists');
 
   return (
     <div style={{ minHeight: '100vh', background: '#12121a', color: '#e0e0e0' }}>
@@ -780,11 +804,19 @@ export default function ChecklistsPage() {
         {!ready ? (
           <div style={{ padding: '60px 20px', textAlign: 'center', color: '#555', fontSize: '13px' }}>Loading your checklist progress...</div>
         ) : activeSet ? (
-          <Checklist code={activeSet} onBack={() => setActiveSet(null)} />
+          <Checklist code={activeSet} onBack={closeSet} />
         ) : (
-          <Overview onOpen={setActiveSet} />
+          <Overview onOpen={openSet} />
         )}
       </div>
     </div>
+  );
+}
+
+export default function ChecklistsPage() {
+  return (
+    <Suspense fallback={<div style={{ minHeight: '100vh', background: '#12121a' }} />}>
+      <ChecklistsPageInner />
+    </Suspense>
   );
 }
