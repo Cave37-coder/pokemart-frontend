@@ -442,6 +442,15 @@ function Checklist({ code, onBack }: { code: string; onBack: () => void }) {
   const [lbTier, setLbTier] = useState(tierTabs[0].key);
   const [leaderboard, setLeaderboard] = useState<{ display_name: string; avatar: string | null; owned: number; required: number; pct: number; complete: boolean; completed_at: string | null; tiers_complete: string[] }[]>([]);
   const [lbLoading, setLbLoading] = useState(false);
+  // Michael, 2026-08-01: "vague... i want to look at page and know it is
+  // done, not have to click to find which is done, also add % to each set
+  // type block". Pulls THIS user's own per-tier owned/required/pct/complete
+  // for the set being viewed (reuses the existing /checklists/progress/
+  // endpoint, same math as the leaderboard's "Complete" badge) so every tab
+  // can show its own colour + % + done-state up front, no tab-clicking
+  // required. null for logged-out visitors (endpoint requires auth) -- tabs
+  // fall back to a plain tier-coloured outline with no %/fill in that case.
+  const [myTierProgress, setMyTierProgress] = useState<Record<string, { owned: number; required: number; pct: number; complete: boolean }> | null>(null);
 
   useEffect(() => { setLbTier(tierTabs[0].key); }, [code]);
 
@@ -453,6 +462,15 @@ function Checklist({ code, onBack }: { code: string; onBack: () => void }) {
       .catch(() => setLeaderboard([]))
       .finally(() => setLbLoading(false));
   }, [code, lbTier]);
+
+  useEffect(() => {
+    setMyTierProgress(null);
+    if (typeof window === 'undefined' || !localStorage.getItem('access_token')) return;
+    authFetch(`/api/checklists/progress/?set=${code}`)
+      .then(r => (r.ok ? r.json() : null))
+      .then(data => setMyTierProgress(data?.tiers || null))
+      .catch(() => setMyTierProgress(null));
+  }, [code]);
 
   useEffect(() => {
     const fetchPage = (url: string, imgAcc: Record<number, string>, idAcc: Record<string, number>, stockAcc: Set<string>) => {
@@ -648,12 +666,34 @@ function Checklist({ code, onBack }: { code: string; onBack: () => void }) {
           <div style={{ fontSize: '11px', fontWeight: 700, letterSpacing: '1px', textTransform: 'uppercase', color: '#a0a0b0' }}>🏆 Leaderboard</div>
           {tierTabs.length > 1 && (
             <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-              {tierTabs.map(t => (
-                <button key={t.key} onClick={() => setLbTier(t.key)}
-                  style={{ padding: '4px 10px', fontSize: '11px', borderRadius: '5px', border: '1px solid', borderColor: lbTier === t.key ? eraColor : '#2a2a3a', background: lbTier === t.key ? eraColor : 'transparent', color: lbTier === t.key ? '#fff' : '#a0a0b0', cursor: 'pointer' }}>
-                  {t.label}
-                </button>
-              ))}
+              {/* Michael, 2026-08-01: each tab now carries its own tier
+                  colour, a ✓ + solid fill the moment MY progress hits that
+                  tier's 100%, and a live % otherwise -- so completion is
+                  readable at a glance without clicking through every tab.
+                  Selection (which tab the leaderboard below is scoped to)
+                  is shown as a ring, separate from the done/not-done fill. */}
+              {tierTabs.map(t => {
+                const tierColor = TIER_COLORS[t.key] || eraColor;
+                const tp = myTierProgress?.[t.key];
+                const isComplete = !!tp?.complete;
+                const selected = lbTier === t.key;
+                return (
+                  <button key={t.key} onClick={() => setLbTier(t.key)}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: '5px',
+                      padding: '4px 10px', fontSize: '11px', fontWeight: isComplete ? 700 : 500,
+                      borderRadius: '5px', border: `1.5px solid ${tierColor}`,
+                      background: isComplete ? tierColor : 'transparent',
+                      color: isComplete ? '#12121a' : tierColor,
+                      boxShadow: selected ? `0 0 0 2px ${tierColor}66` : 'none',
+                      cursor: 'pointer', transition: 'all .15s',
+                    }}>
+                    {isComplete && <span>✓</span>}
+                    <span>{t.label}</span>
+                    {tp && <span style={{ opacity: 0.85, fontWeight: 400 }}>· {tp.pct}%</span>}
+                  </button>
+                );
+              })}
             </div>
           )}
         </div>
