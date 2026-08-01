@@ -594,17 +594,31 @@ function Checklist({ code, onBack }: { code: string; onBack: () => void }) {
   };
 
   // Stats
-  let totalVariants = 0, ownedVariants = 0, ownedCards = 0;
+  let totalVariants = 0, ownedVariants = 0;
   let setTotalZar = 0, collectionZar = 0;
   set.cards.forEach(c => {
-    const allOwned = c.variants.every(v => checks[c.num + '_' + v.vc]);
-    if (allOwned) ownedCards++;
     c.variants.forEach(v => {
       totalVariants++; setTotalZar += v.zar;
       if (checks[c.num + '_' + v.vc]) { ownedVariants++; collectionZar += v.zar; }
     });
   });
-  const pct = totalVariants ? Math.round(ownedVariants / totalVariants * 100) : 0;
+  // Michael, 2026-08-02: the top stat bar used to compute owned/missing/%
+  // from raw local checkbox counts -- a THIRD method, different from the
+  // four tier badges below it (Broke Base / Base Set / Special Set Base /
+  // Master Set), which come from the server's authoritative
+  // compute_user_set_completion() via /api/checklists/progress/. The two
+  // could disagree on-screen (e.g. this bar said 82% while the Master Set
+  // tab said 79% for the exact same set) -- that's the same "why doesn't
+  // this ever hit 100%" bug that started the whole CRI investigation, just
+  // showing up here as a mismatch instead of a stuck number. Now the top
+  // bar mirrors the Master Set (or Complete Set, for simple sets) tier
+  // exactly -- one source of truth. Falls back to the local count only when
+  // logged out, since /progress/ requires auth.
+  const topTierKey = isSimpleSet ? 'complete_set' : 'master_set';
+  const topTier = myTierProgress?.[topTierKey];
+  const ownedDisplay = topTier ? topTier.owned : ownedVariants;
+  const totalDisplay = topTier ? topTier.required : totalVariants;
+  const pct = topTier ? topTier.pct : (totalDisplay ? Math.round(ownedDisplay / totalDisplay * 100) : 0);
   const eraColor = ERA_COLORS[set.era] || '#ff6b35';
   const sorted = [...set.cards].sort((a, b) => (parseInt(a.num) || 9999) - (parseInt(b.num) || 9999));
 
@@ -633,11 +647,11 @@ function Checklist({ code, onBack }: { code: string; onBack: () => void }) {
       {/* Stats bar */}
       <div style={{ background: '#1e1e2a', border: '1px solid #2a2a3a', borderRadius: '8px', padding: '12px 16px', marginBottom: '12px', display: 'flex', gap: '16px', alignItems: 'center', flexWrap: 'wrap' }}>
         <div style={{ textAlign: 'center' }}>
-          <div style={{ fontSize: '20px', fontWeight: 700, color: eraColor }}>{ownedCards}</div>
+          <div style={{ fontSize: '20px', fontWeight: 700, color: eraColor }}>{ownedDisplay}</div>
           <div style={{ fontSize: '9px', color: '#555', textTransform: 'uppercase' }}>Cards owned</div>
         </div>
         <div style={{ textAlign: 'center' }}>
-          <div style={{ fontSize: '20px', fontWeight: 700, color: '#a0a0b0' }}>{set.cards.length - ownedCards}</div>
+          <div style={{ fontSize: '20px', fontWeight: 700, color: '#a0a0b0' }}>{totalDisplay - ownedDisplay}</div>
           <div style={{ fontSize: '9px', color: '#555', textTransform: 'uppercase' }}>Missing</div>
         </div>
         <div style={{ width: '1px', height: '40px', background: '#2a2a3a' }} />
