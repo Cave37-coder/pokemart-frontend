@@ -830,7 +830,7 @@ function Checklist({ code, onBack }: { code: string; onBack: () => void }) {
                   {card.variants.map(v => {
                     const key = card.num + '_' + v.vc;
                     const vcColor: Record<string, string> = {
-                      N: '#a0a0b0', RH: '#ff6b35', H: '#ffd700',
+                      N: '#a0a0b0', RH: '#ff6b35', H: '#ffd700', ESH: '#1D9E75',
                       PB: '#e040fb', MB: '#7c4dff', LB: '#00bcd4',
                       FB: '#4caf50', QB: '#f44336', UB: '#2196f3',
                       DB: '#795548', TR: '#607d8b', SE: '#ff9800',
@@ -881,7 +881,7 @@ function Checklist({ code, onBack }: { code: string; onBack: () => void }) {
                     {card.variants.map(v => {
                       const key = card.num + '_' + v.vc;
                       const vcColor: Record<string, string> = {
-                        N: '#a0a0b0', RH: '#ff6b35', H: '#ffd700',
+                        N: '#a0a0b0', RH: '#ff6b35', H: '#ffd700', ESH: '#1D9E75',
                         PB: '#e040fb', MB: '#7c4dff', LB: '#00bcd4',
                         FB: '#4caf50', QB: '#f44336', UB: '#2196f3',
                         DB: '#795548', TR: '#607d8b', SE: '#ff9800',

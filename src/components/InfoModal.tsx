@@ -60,6 +60,7 @@ export default function InfoModal() {
               { badge: "N", label: "Normal", desc: "Standard non-foil card", bg: "#e8e8e8", fg: "#333" },
               { badge: "H", label: "Holo", desc: "Holographic foil on artwork", bg: "#ffd700", fg: "#333" },
               { badge: "RH", label: "Reverse Holo", desc: "Foil on card border, not artwork", bg: "#c084fc", fg: "#fff" },
+              { badge: "ESH", label: "Energy Symbol Holo", desc: "Reverse holo with an energy-symbol pattern", bg: "#1D9E75", fg: "#fff" },
               { badge: "PB", label: "Pokéball", desc: "Special Pokéball stamp variant", bg: "#ef4444", fg: "#fff" },
             ] as const).map(({ badge, label, desc, bg, fg }) => (
               <div key={badge} style={{ display: "flex", alignItems: "center", gap: "10px", background: "#12121a", borderRadius: "6px", padding: "8px 12px" }}>

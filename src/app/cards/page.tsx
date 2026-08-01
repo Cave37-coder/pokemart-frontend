@@ -165,7 +165,7 @@ const SORT_OPTIONS = [
     { value: "name", label: "Name A to Z" },
 ];
 
-type VariantKey = "N" | "H" | "RH" | "ERH" | "RH-PB" | "RH-MB" | "BRH-FB" | "BRH-LB" | "BRH-QB" | "BRH-DB" | "BRH-R" | "DR" | "AS" | "MH" | "1ST" | "IR" | "SIR" | "HR";
+type VariantKey = "N" | "H" | "RH" | "ESH" | "ERH" | "RH-PB" | "RH-MB" | "BRH-FB" | "BRH-LB" | "BRH-QB" | "BRH-DB" | "BRH-R" | "DR" | "AS" | "MH" | "1ST" | "IR" | "SIR" | "HR";
 
 function getVariantKey(card: { variant_override: string; rarity: string; price_first_edition: string | null; }): VariantKey {
     const v = (card.variant_override || "").trim();
@@ -173,6 +173,7 @@ function getVariantKey(card: { variant_override: string; rarity: string; price_f
     if (card.price_first_edition) return "1ST";
     if (v === "H") return "H";
     if (v === "RH" || v === "RH-H") return "RH";
+    if (v === "ESH") return "ESH";
     if (v === "ERH" || v === "SE") return "ERH";
     if (v === "RH-PB") return "RH-PB";
     if (v === "RH-MB") return "RH-MB";
@@ -209,6 +210,7 @@ const VARIANT_BORDER: Record<VariantKey, { color: string; width: string }> = {
     N: { color: "#2a2a3a", width: "1px" },
     H: { color: "#BA7517", width: "1px" },
     RH: { color: "#7F77DD", width: "1px" },
+    ESH: { color: "#1D9E75", width: "1px" },
     ERH: { color: "#0F6E56", width: "1px" },
     "RH-PB": { color: "#A32D2D", width: "1px" },
     "RH-MB": { color: "#534AB7", width: "1px" },
@@ -258,6 +260,7 @@ function VariantOverlay({ vk }: { vk: VariantKey }) {
     switch (vk) {
         case "H": return (<>{diag("rgba(186,117,23,0.12)")}{badge("HOLO", "#633806", "#FAC775")}<div style={{ position: "absolute", bottom: 0, left: 0, right: 0, height: 3, background: "#EF9F27", zIndex: 2 }} /></>);
         case "RH": return (<>{diag("rgba(127,119,221,0.15)")}{badge("RH", "#3C3489", "#CECBF6")}</>);
+        case "ESH": return (<>{diag("rgba(29,158,117,0.15)")}{badge("ESH", "#134E4A", "#8FE9D0")}</>);
         case "ERH": return (<>{diag("rgba(29,158,117,0.15)")}{badge("ERH", "#085041", "#9FE1CB")}<div style={{ position: "absolute", bottom: 5, right: 5, width: 16, height: 16, borderRadius: "50%", background: "#1D9E75", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 9, fontWeight: 600, color: "#E1F5EE", zIndex: 3 }}>E</div></>);
         case "RH-PB": return (<>{badge("PB", "#791F1F", "#F7C1C1")}{ball("#E24B4A", "#f5f5f5", "#333")}</>);
         case "RH-MB": return (<>{badge("MB", "#3C3489", "#CECBF6")}{ball("#7F77DD", "#f0f0f0", "#333", "#EEEDFE")}</>);
