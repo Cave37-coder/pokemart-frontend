@@ -109,6 +109,7 @@ export default function PokedexCardList({ cards }: { cards: Card[] }) {
                         <CardTile
                             key={card.pb_id || card.id}
                             card={card}
+                            forceColor
                             showPokedexToggle
                             isOwned={ownedProductIds.has(card.id)}
                             onToggleOwned={() => handleToggle(card.id)}
@@ -172,6 +173,7 @@ export default function PokedexCardList({ cards }: { cards: Card[] }) {
                             <CardTile
                                 key={card.pb_id || card.id}
                                 card={card}
+                                forceColor
                                 showPokedexToggle
                                 isOwned={ownedProductIds.has(card.id)}
                                 onToggleOwned={() => handleToggle(card.id)}

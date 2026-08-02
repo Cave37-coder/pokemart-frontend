@@ -15,7 +15,7 @@ function CardStrip({ title, cards }: { title: string; cards: any[] }) {
                 {title}
             </div>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 160px))", gap: "10px" }}>
-                {cards.map(card => <CardTile key={card.pb_id || card.id} card={card} />)}
+                {cards.map(card => <CardTile key={card.pb_id || card.id} card={card} forceColor />)}
             </div>
         </div>
     );

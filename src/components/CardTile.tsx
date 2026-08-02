@@ -156,10 +156,17 @@ export function PrizePackOverlay({ series, vk }: { series: string; vk: VariantKe
 // Checklists, per Michael's explicit "not tie in into Checklist" requirement.
 // Left undefined/false, /cards renders exactly as before.
 export default function CardTile({
-    card, isPlayed = false, showPokedexToggle = false, isOwned = false, onToggleOwned,
+    card, isPlayed = false, showPokedexToggle = false, isOwned = false, onToggleOwned, forceColor = false,
 }: {
     card: any; isPlayed?: boolean;
     showPokedexToggle?: boolean; isOwned?: boolean; onToggleOwned?: () => void;
+    // Michael, 2026-08-02: "all image to be colour on selection page and on
+    // the landing page" -- Pokedex collection views (owned-card checkbox
+    // list, Top Valued/Recently Added strips) show cards you already own,
+    // so the /cards "greyed out = out of stock" convention doesn't apply
+    // there; forceColor skips that dimming/greyscale regardless of current
+    // shop stock. /cards never passes this, so its behaviour is unchanged.
+    forceColor?: boolean;
 }) {
     const vk = getVariantKey(card) as VariantKey;
     const vb = VARIANT_BORDER[vk];
@@ -168,13 +175,14 @@ export default function CardTile({
     const eraCode = card.card_set?.era?.code || "";
     const symbolUrl = card.card_set?.symbol_url || "";
     const hasStock = card.stock > 0;
+    const showAsInStock = forceColor ? true : hasStock; // display-only; AddToPileButton still gets the real hasStock
     const condLabel = card.condition || 'NM';
     return (
         <div style={{
             background: isPlayed ? "#1a1510" : "#1a1a24",
             border: isPlayed ? "1px solid #b45309" : `${vb.width} solid ${vb.color}`,
             borderRadius: "8px", overflow: "hidden",
-            opacity: hasStock ? 1 : 0.6,
+            opacity: showAsInStock ? 1 : 0.6,
             position: "relative",
         }}>
             {showPokedexToggle && (
@@ -209,8 +217,8 @@ export default function CardTile({
                                 position: "absolute", inset: 0,
                                 width: "100%", height: "100%", objectFit: "cover", display: "block",
                                 filter: isPlayed
-                                    ? `grayscale(15%) sepia(40%) hue-rotate(5deg) brightness(0.85)${!hasStock ? " grayscale(100%)" : ""}`
-                                    : (hasStock ? "none" : "grayscale(100%)")
+                                    ? `grayscale(15%) sepia(40%) hue-rotate(5deg) brightness(0.85)${!showAsInStock ? " grayscale(100%)" : ""}`
+                                    : (showAsInStock ? "none" : "grayscale(100%)")
                             }} />
                     ) : (
                         <div style={{ position: "absolute", inset: 0, background: "#12121a", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "36px" }}>🃏</div>
