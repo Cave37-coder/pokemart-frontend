@@ -80,6 +80,7 @@ export default function NavBar() {
 
   const navLinks = [
     { href: "/cards", label: "Browse Cards" },
+    { href: "/pokedex", label: "Pokédex" },
     { href: "/bundles", label: "Bundles" },
     { href: "/checklists", label: "Checklists" },
     { href: "/decklist", label: "Deck Builder", beta: true },
