@@ -66,6 +66,40 @@ export default function OrderDetailPage() {
   const [order, setOrder] = useState<Order | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [payingNow, setPayingNow] = useState(false);
+  const [payError, setPayError] = useState("");
+
+  // Michael, 2026-08-02: this page only ever showed a payment-status banner
+  // driven by the one-time ?payment=... query param set right after
+  // checkout's PayFast redirect. If the customer left PayFast before
+  // finishing (closed the tab, hit back, PayFast's own page hiccuped --
+  // nothing to do with our signature/sandbox config, confirmed against
+  // Donovan Peach's order), the order sits at status "awaiting_payment"
+  // forever with literally no way to retry from here on any later visit --
+  // exactly what he reported: "no option to complete the payment". This
+  // calls the same /api/payments/initiate/ endpoint checkout already uses
+  // and redirects the same way, so it's a genuine retry, not a workaround.
+  const completePayment = async () => {
+    const token = localStorage.getItem("access_token");
+    if (!token) { window.location.href = "/auth/login"; return; }
+    if (!order) return;
+    setPayingNow(true);
+    setPayError("");
+    try {
+      const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://pokemart-api-production.up.railway.app";
+      const res = await fetch(`${API_URL}/api/payments/initiate/`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ order_id: order.id }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Could not start payment.");
+      window.location.href = data.redirect_url;
+    } catch (e: any) {
+      setPayError(e.message || "Something went wrong starting payment.");
+      setPayingNow(false);
+    }
+  };
 
   useEffect(() => {
     const token = localStorage.getItem("access_token");
@@ -154,9 +188,17 @@ export default function OrderDetailPage() {
         </div>
       )}
 
-      {paymentResult === "eft" && (
+      {/* Michael, 2026-08-02: was gated on paymentResult === "eft" alone, so
+          same gap as the PayFast one -- banking details only ever showed
+          right after checkout. Now also shows on any later visit while the
+          order is still sitting at "pending_eft", so a customer who lost
+          the details doesn't have to email in just to get the account
+          number again. */}
+      {(paymentResult === "eft" || order.status === "pending_eft") && (
         <div style={{ background:"#F59E0B22", border:"1px solid #F59E0B44", borderRadius:12, padding:"16px 20px", marginBottom:16 }}>
-          <div style={{ fontSize:16, fontWeight:700, color:"#F59E0B", marginBottom:12, textAlign:"center" }}>Order Placed — Awaiting EFT Payment</div>
+          <div style={{ fontSize:16, fontWeight:700, color:"#F59E0B", marginBottom:12, textAlign:"center" }}>
+            {paymentResult === "eft" ? "Order Placed — Awaiting EFT Payment" : "Awaiting EFT Payment"}
+          </div>
           <div style={{ color:"#a0a0b0", fontSize:13, marginBottom:14, textAlign:"center" }}>
             Please make your EFT payment using the details below. Use <strong style={{ color:"#fff" }}>Order #{order.id}</strong> as your reference.
           </div>
@@ -178,6 +220,27 @@ export default function OrderDetailPage() {
           <div style={{ marginTop:10, fontSize:12, color:"#a0a0b0", textAlign:"center" }}>
             Send proof of payment to <strong style={{ color:"#fff" }}>enquiries@pokebulk.co.za</strong>
           </div>
+        </div>
+      )}
+
+      {/* Persistent retry -- shows on every visit while payment hasn't gone
+          through, not just the moment right after checkout. status is only
+          ever "awaiting_payment" for PayFast orders (see CheckoutView), so
+          no extra payment_method check is needed here. */}
+      {order.status === "awaiting_payment" && (
+        <div style={{ background:"#F59E0B22", border:"1px solid #F59E0B44", borderRadius:12, padding:"16px 20px", marginBottom:16, textAlign:"center" }}>
+          <div style={{ fontSize:16, fontWeight:700, color:"#F59E0B", marginBottom:8 }}>Payment Not Completed</div>
+          <div style={{ color:"#a0a0b0", fontSize:13, marginBottom:14 }}>
+            Your order is on hold until payment is completed — nothing has been charged yet. Click below to finish paying via PayFast.
+          </div>
+          <button
+            onClick={completePayment}
+            disabled={payingNow}
+            style={{ background:"#ff6b35", color:"#fff", border:"none", borderRadius:8, padding:"10px 24px", fontSize:14, fontWeight:700, cursor: payingNow ? "default" : "pointer", opacity: payingNow ? 0.6 : 1 }}
+          >
+            {payingNow ? "Redirecting…" : "Complete Payment"}
+          </button>
+          {payError && <div style={{ color:"#EF4444", fontSize:12, marginTop:10 }}>{payError}</div>}
         </div>
       )}
 
