@@ -1,14 +1,29 @@
 "use client";
 import { useState } from "react";
 import Link from "next/link";
+import CardTile from "@/components/CardTile";
 import { usePokedexCollection } from "@/lib/usePokedexCollection";
 import { NATIONAL_DEX_TOTAL } from "@/lib/pokedex";
 
 interface PokedexEntry { id: number; name: string }
 
+function CardStrip({ title, cards }: { title: string; cards: any[] }) {
+    if (cards.length === 0) return null;
+    return (
+        <div style={{ flex: "1 1 340px", minWidth: "300px", marginBottom: "16px" }}>
+            <div style={{ fontSize: "12px", fontWeight: 700, color: "#a0a0b0", textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: "8px" }}>
+                {title}
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 160px))", gap: "10px" }}>
+                {cards.map(card => <CardTile key={card.pb_id || card.id} card={card} />)}
+            </div>
+        </div>
+    );
+}
+
 export default function PokedexGrid({ pokemon }: { pokemon: PokedexEntry[] }) {
     const [search, setSearch] = useState("");
-    const { loading, loggedIn, caughtNumbers, speciesCollected } = usePokedexCollection();
+    const { loading, loggedIn, caughtNumbers, speciesCollected, collectionValue, topValued, recentlyAdded } = usePokedexCollection();
 
     const filtered = search.trim()
         ? pokemon.filter(p =>
@@ -38,6 +53,9 @@ export default function PokedexGrid({ pokemon }: { pokemon: PokedexEntry[] }) {
                                     }} />
                                 </div>
                             </div>
+                            <div style={{ fontSize: "13px", fontWeight: 700, color: "#ff6b35", whiteSpace: "nowrap" }}>
+                                R {collectionValue.toLocaleString("en-ZA", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            </div>
                         </>
                     ) : (
                         <>
@@ -47,6 +65,13 @@ export default function PokedexGrid({ pokemon }: { pokemon: PokedexEntry[] }) {
                             </Link>
                         </>
                     )}
+                </div>
+            )}
+
+            {loggedIn && !loading && (topValued.length > 0 || recentlyAdded.length > 0) && (
+                <div style={{ display: "flex", flexWrap: "wrap", gap: "20px", marginBottom: "4px" }}>
+                    <CardStrip title="Top 3 Most Valued" cards={topValued} />
+                    <CardStrip title="3 Most Recently Added" cards={recentlyAdded} />
                 </div>
             )}
 

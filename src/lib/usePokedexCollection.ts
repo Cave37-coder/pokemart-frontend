@@ -1,6 +1,7 @@
 "use client";
 import { useState, useEffect, useCallback } from "react";
 import { authFetch } from "@/lib/api";
+import type { Card } from "@/lib/api";
 
 // Michael, 2026-08-02: "I want to be able to select the card or Variant of
 // Card, add to a separate PokeDex collection, not tie in into Checklist,
@@ -17,6 +18,9 @@ interface MyCollectionResponse {
     product_ids?: number[];
     caught_pokedex_numbers?: number[];
     species_collected?: number;
+    collection_value?: string;
+    top_valued?: Card[];
+    recently_added?: Card[];
 }
 
 export interface PokedexCollection {
@@ -25,6 +29,9 @@ export interface PokedexCollection {
     caughtNumbers: Set<number>;
     ownedProductIds: Set<number>;
     speciesCollected: number;
+    collectionValue: number;
+    topValued: Card[];
+    recentlyAdded: Card[];
     // Optimistically flips ownership locally, then confirms with the server;
     // reverts silently on failure. Returns false immediately (without
     // calling the API) if the customer isn't logged in, so callers know to
@@ -38,6 +45,9 @@ export function usePokedexCollection(): PokedexCollection {
     const [caughtNumbers, setCaughtNumbers] = useState<Set<number>>(new Set());
     const [ownedProductIds, setOwnedProductIds] = useState<Set<number>>(new Set());
     const [speciesCollected, setSpeciesCollected] = useState(0);
+    const [collectionValue, setCollectionValue] = useState(0);
+    const [topValued, setTopValued] = useState<Card[]>([]);
+    const [recentlyAdded, setRecentlyAdded] = useState<Card[]>([]);
 
     useEffect(() => {
         const token = typeof window !== "undefined" ? localStorage.getItem("access_token") : null;
@@ -54,6 +64,9 @@ export function usePokedexCollection(): PokedexCollection {
                 setOwnedProductIds(new Set(data.product_ids || []));
                 setCaughtNumbers(new Set(data.caught_pokedex_numbers || []));
                 setSpeciesCollected(data.species_collected || 0);
+                setCollectionValue(parseFloat(data.collection_value || "0") || 0);
+                setTopValued(data.top_valued || []);
+                setRecentlyAdded(data.recently_added || []);
             })
             .catch(() => {})
             .finally(() => setLoading(false));
@@ -89,5 +102,8 @@ export function usePokedexCollection(): PokedexCollection {
         return true;
     }, []);
 
-    return { loading, loggedIn, caughtNumbers, ownedProductIds, speciesCollected, toggleOwned };
+    return {
+        loading, loggedIn, caughtNumbers, ownedProductIds, speciesCollected,
+        collectionValue, topValued, recentlyAdded, toggleOwned,
+    };
 }
