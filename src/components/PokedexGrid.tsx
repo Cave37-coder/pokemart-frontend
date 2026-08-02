@@ -1,11 +1,14 @@
 "use client";
 import { useState } from "react";
 import Link from "next/link";
+import { usePokedexCollection } from "@/lib/usePokedexCollection";
+import { NATIONAL_DEX_TOTAL } from "@/lib/pokedex";
 
 interface PokedexEntry { id: number; name: string }
 
 export default function PokedexGrid({ pokemon }: { pokemon: PokedexEntry[] }) {
     const [search, setSearch] = useState("");
+    const { loading, loggedIn, caughtNumbers, speciesCollected } = usePokedexCollection();
 
     const filtered = search.trim()
         ? pokemon.filter(p =>
@@ -16,6 +19,37 @@ export default function PokedexGrid({ pokemon }: { pokemon: PokedexEntry[] }) {
 
     return (
         <div>
+            {!loading && (
+                <div style={{
+                    display: "flex", alignItems: "center", gap: "14px", marginBottom: "16px",
+                    background: "#1a1a24", border: "1px solid #2a2a3a", borderRadius: "8px", padding: "12px 16px",
+                    flexWrap: "wrap",
+                }}>
+                    {loggedIn ? (
+                        <>
+                            <div style={{ fontSize: "13px", fontWeight: 700, color: "#fff", whiteSpace: "nowrap" }}>
+                                {speciesCollected}/{NATIONAL_DEX_TOTAL} Collected
+                            </div>
+                            <div style={{ flex: 1, minWidth: "140px" }}>
+                                <div style={{ height: "6px", borderRadius: "3px", background: "#12121a", overflow: "hidden" }}>
+                                    <div style={{
+                                        height: "100%", width: `${Math.min(100, (speciesCollected / NATIONAL_DEX_TOTAL) * 100)}%`,
+                                        background: "#ff6b35", borderRadius: "3px", transition: "width 0.2s ease",
+                                    }} />
+                                </div>
+                            </div>
+                        </>
+                    ) : (
+                        <>
+                            <div style={{ fontSize: "13px", color: "#a0a0b0" }}>Track your own Pokédex collection, separate from your Checklist.</div>
+                            <Link href="/auth/login" style={{ fontSize: "12px", color: "#ff6b35", textDecoration: "none", fontWeight: 600, whiteSpace: "nowrap" }}>
+                                Log in to start →
+                            </Link>
+                        </>
+                    )}
+                </div>
+            )}
+
             <input
                 type="text"
                 placeholder="Search Pokémon..."
@@ -34,28 +68,39 @@ export default function PokedexGrid({ pokemon }: { pokemon: PokedexEntry[] }) {
                 </div>
             ) : (
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(120px, 1fr))", gap: "10px" }}>
-                    {filtered.map(p => (
-                        <Link
-                            key={p.id}
-                            href={`/pokedex/${p.id}`}
-                            style={{
-                                background: "#1a1a24", border: "1px solid #2a2a3a", borderRadius: "8px",
-                                padding: "14px 10px", textDecoration: "none", textAlign: "center",
-                                display: "flex", flexDirection: "column", alignItems: "center", gap: "6px",
-                            }}
-                            className="pb-pokedex-tile"
-                        >
-                            <img
-                                src={`https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/${p.id}.png`}
-                                alt={p.name}
-                                loading="lazy"
-                                style={{ width: "64px", height: "64px", objectFit: "contain", imageRendering: "auto" }}
-                                onError={(e) => { (e.currentTarget as HTMLImageElement).style.visibility = "hidden"; }}
-                            />
-                            <div style={{ fontSize: "13px", fontWeight: 600, color: "#fff" }}>{p.name}</div>
-                            <div style={{ fontSize: "11px", color: "#555" }}>#{String(p.id).padStart(3, "0")}</div>
-                        </Link>
-                    ))}
+                    {filtered.map(p => {
+                        const caught = caughtNumbers.has(p.id);
+                        return (
+                            <Link
+                                key={p.id}
+                                href={`/pokedex/${p.id}`}
+                                style={{
+                                    background: "#1a1a24", border: `1px solid ${caught ? "#ff6b35" : "#2a2a3a"}`, borderRadius: "8px",
+                                    padding: "14px 10px", textDecoration: "none", textAlign: "center",
+                                    display: "flex", flexDirection: "column", alignItems: "center", gap: "6px",
+                                    position: "relative",
+                                }}
+                                className="pb-pokedex-tile"
+                            >
+                                {caught && (
+                                    <div style={{
+                                        position: "absolute", top: 6, right: 6, width: 18, height: 18, borderRadius: "50%",
+                                        background: "#22c55e", color: "#fff", fontSize: 10, fontWeight: 700,
+                                        display: "flex", alignItems: "center", justifyContent: "center",
+                                    }}>✓</div>
+                                )}
+                                <img
+                                    src={`https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/${p.id}.png`}
+                                    alt={p.name}
+                                    loading="lazy"
+                                    style={{ width: "64px", height: "64px", objectFit: "contain", imageRendering: "auto" }}
+                                    onError={(e) => { (e.currentTarget as HTMLImageElement).style.visibility = "hidden"; }}
+                                />
+                                <div style={{ fontSize: "13px", fontWeight: 600, color: "#fff" }}>{p.name}</div>
+                                <div style={{ fontSize: "11px", color: "#555" }}>#{String(p.id).padStart(3, "0")}</div>
+                            </Link>
+                        );
+                    })}
                 </div>
             )}
 

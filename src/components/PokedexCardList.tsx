@@ -1,8 +1,26 @@
 "use client";
 import { useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import type { Card } from "@/lib/api";
 import CardTile, { getVariantKey, VariantKey } from "@/components/CardTile";
+import { usePokedexCollection } from "@/lib/usePokedexCollection";
+
+// Michael, 2026-08-02: "leveling (like pkmn.gg)" -- a rough tier ladder based
+// on % of this Pokemon's catalogued variants owned in the (separate) Pokedex
+// collection. Purely cosmetic, no backend concept of "level" -- computed
+// here from ownedProductIds vs. the cards list already on the page.
+const LEVEL_TIERS: { min: number; label: string; color: string }[] = [
+    { min: 100, label: "★ Complete", color: "#ff6b35" },
+    { min: 75, label: "Platinum", color: "#a0a0b0" },
+    { min: 50, label: "Gold", color: "#EF9F27" },
+    { min: 25, label: "Silver", color: "#8FE9D0" },
+    { min: 1, label: "Bronze", color: "#BA7517" },
+    { min: 0, label: "Not Caught", color: "#555" },
+];
+function levelForPercent(pct: number) {
+    return LEVEL_TIERS.find(t => pct >= t.min)!;
+}
 
 const VARIANT_LABEL: Record<string, string> = {
     N: "Normal", H: "Holo", RH: "Reverse Holo", ESH: "Energy Symbol Holo", ERH: "Energy Reverse Holo",
@@ -19,6 +37,18 @@ type ViewMode = "grid" | "table" | "binder";
 export default function PokedexCardList({ cards }: { cards: Card[] }) {
     const [viewMode, setViewMode] = useState<ViewMode>("grid");
     const [binderPage, setBinderPage] = useState(0);
+    const router = useRouter();
+    const { loading, loggedIn, ownedProductIds, toggleOwned } = usePokedexCollection();
+
+    const handleToggle = (productId: number) => {
+        if (!loggedIn) { router.push("/auth/login"); return; }
+        toggleOwned(productId);
+    };
+
+    const ownedCount = cards.filter(c => ownedProductIds.has(c.id)).length;
+    const totalCount = cards.length;
+    const pct = totalCount ? Math.round((ownedCount / totalCount) * 100) : 0;
+    const level = levelForPercent(pct);
 
     const binderPageCount = Math.max(1, Math.ceil(cards.length / BINDER_PAGE_SIZE));
     const binderSlice = cards.slice(binderPage * BINDER_PAGE_SIZE, binderPage * BINDER_PAGE_SIZE + BINDER_PAGE_SIZE);
@@ -39,6 +69,34 @@ export default function PokedexCardList({ cards }: { cards: Card[] }) {
 
     return (
         <div>
+            {!loading && (
+                <div style={{
+                    display: "flex", alignItems: "center", gap: "14px", marginBottom: "16px",
+                    background: "#1a1a24", border: "1px solid #2a2a3a", borderRadius: "8px", padding: "12px 16px",
+                    flexWrap: "wrap",
+                }}>
+                    <div style={{
+                        fontSize: "11px", fontWeight: 700, color: level.color, border: `1px solid ${level.color}`,
+                        padding: "3px 10px", borderRadius: "12px", letterSpacing: "0.03em", whiteSpace: "nowrap",
+                    }}>
+                        {level.label}
+                    </div>
+                    <div style={{ flex: 1, minWidth: "140px" }}>
+                        <div style={{ height: "6px", borderRadius: "3px", background: "#12121a", overflow: "hidden" }}>
+                            <div style={{ height: "100%", width: `${pct}%`, background: "#ff6b35", borderRadius: "3px", transition: "width 0.2s ease" }} />
+                        </div>
+                    </div>
+                    <div style={{ fontSize: "12px", color: "#a0a0b0", whiteSpace: "nowrap" }}>
+                        {ownedCount}/{totalCount} variants owned
+                    </div>
+                    {!loggedIn && (
+                        <Link href="/auth/login" style={{ fontSize: "11px", color: "#ff6b35", textDecoration: "none", whiteSpace: "nowrap" }}>
+                            Log in to track →
+                        </Link>
+                    )}
+                </div>
+            )}
+
             <div style={{ display: "flex", gap: "6px", marginBottom: "16px" }}>
                 {modeBtn("grid", "⊞ Grid")}
                 {modeBtn("table", "☰ Table")}
@@ -47,28 +105,51 @@ export default function PokedexCardList({ cards }: { cards: Card[] }) {
 
             {viewMode === "grid" && (
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(155px, 1fr))", gap: "10px" }}>
-                    {cards.map(card => <CardTile key={card.pb_id || card.id} card={card} />)}
+                    {cards.map(card => (
+                        <CardTile
+                            key={card.pb_id || card.id}
+                            card={card}
+                            showPokedexToggle
+                            isOwned={ownedProductIds.has(card.id)}
+                            onToggleOwned={() => handleToggle(card.id)}
+                        />
+                    ))}
                 </div>
             )}
 
             {viewMode === "table" && (
                 <div style={{ background: "#1a1a24", border: "1px solid #2a2a3a", borderRadius: "8px", overflow: "hidden" }}>
-                    <div style={{ display: "grid", gridTemplateColumns: "70px 1fr 90px 150px 90px 90px", gap: "8px", padding: "10px 14px", fontSize: "11px", color: "#555", textTransform: "uppercase", letterSpacing: "0.04em", borderBottom: "1px solid #2a2a3a" }}>
-                        <div>Set</div><div>Name</div><div>Number</div><div>Variant</div><div>Rarity</div><div>Price</div>
+                    <div style={{ display: "grid", gridTemplateColumns: "30px 70px 1fr 90px 150px 90px 90px", gap: "8px", padding: "10px 14px", fontSize: "11px", color: "#555", textTransform: "uppercase", letterSpacing: "0.04em", borderBottom: "1px solid #2a2a3a" }}>
+                        <div></div><div>Set</div><div>Name</div><div>Number</div><div>Variant</div><div>Rarity</div><div>Price</div>
                     </div>
                     {cards.map(card => {
                         const vk = getVariantKey(card) as VariantKey;
                         const hasStock = card.stock > 0;
+                        const owned = ownedProductIds.has(card.id);
                         return (
                             <Link
                                 key={card.pb_id || card.id}
                                 href={`/cards/${card.id}`}
                                 style={{
-                                    display: "grid", gridTemplateColumns: "70px 1fr 90px 150px 90px 90px", gap: "8px",
+                                    display: "grid", gridTemplateColumns: "30px 70px 1fr 90px 150px 90px 90px", gap: "8px",
                                     padding: "9px 14px", fontSize: "13px", color: hasStock ? "#ddd" : "#666",
                                     textDecoration: "none", borderBottom: "1px solid #12121a", alignItems: "center",
                                 }}
                             >
+                                <button
+                                    onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleToggle(card.id); }}
+                                    title={owned ? "Remove from Pokédex collection" : "Add to Pokédex collection"}
+                                    style={{
+                                        width: 18, height: 18, borderRadius: "4px",
+                                        background: owned ? "#22c55e" : "transparent",
+                                        border: `1.5px solid ${owned ? "#22c55e" : "#555"}`,
+                                        color: "#fff", fontSize: 11, fontWeight: 700, lineHeight: 1,
+                                        display: "flex", alignItems: "center", justifyContent: "center",
+                                        cursor: "pointer", padding: 0,
+                                    }}
+                                >
+                                    {owned ? "✓" : ""}
+                                </button>
                                 <div style={{ fontSize: "11px", color: "#a0a0b0" }}>{card.card_set?.code}</div>
                                 <div style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{card.name}</div>
                                 <div style={{ fontSize: "11px", color: "#a0a0b0" }}>{card.number || card.card_number}</div>
@@ -87,7 +168,15 @@ export default function PokedexCardList({ cards }: { cards: Card[] }) {
                         display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "14px",
                         background: "#12121a", border: "1px solid #2a2a3a", borderRadius: "10px", padding: "20px",
                     }}>
-                        {binderSlice.map(card => <CardTile key={card.pb_id || card.id} card={card} />)}
+                        {binderSlice.map(card => (
+                            <CardTile
+                                key={card.pb_id || card.id}
+                                card={card}
+                                showPokedexToggle
+                                isOwned={ownedProductIds.has(card.id)}
+                                onToggleOwned={() => handleToggle(card.id)}
+                            />
+                        ))}
                         {/* pad out the page with empty slots so a partial last page still reads as a binder page */}
                         {Array.from({ length: Math.max(0, BINDER_PAGE_SIZE - binderSlice.length) }).map((_, i) => (
                             <div key={`empty-${i}`} style={{ border: "1px dashed #2a2a3a", borderRadius: "8px", aspectRatio: "3/4" }} />

@@ -150,7 +150,17 @@ export function PrizePackOverlay({ series, vk }: { series: string; vk: VariantKe
 // treatment used on /cards (a second, lower-condition copy of the same
 // product_id shown right after its NM copy). Defaults to false for callers
 // (like the Pokedex page) that don't have that pairing concept.
-export default function CardTile({ card, isPlayed = false }: { card: any; isPlayed?: boolean }) {
+//
+// `showPokedexToggle`/`isOwned`/`onToggleOwned` are opt-in, only used by the
+// Pokedex collection ( /pokedex/[id] ) -- a completely separate feature from
+// Checklists, per Michael's explicit "not tie in into Checklist" requirement.
+// Left undefined/false, /cards renders exactly as before.
+export default function CardTile({
+    card, isPlayed = false, showPokedexToggle = false, isOwned = false, onToggleOwned,
+}: {
+    card: any; isPlayed?: boolean;
+    showPokedexToggle?: boolean; isOwned?: boolean; onToggleOwned?: () => void;
+}) {
     const vk = getVariantKey(card) as VariantKey;
     const vb = VARIANT_BORDER[vk];
     const cardNum = card.number || (card.card_number != null ? String(card.card_number).padStart(3, "0") : "???");
@@ -167,6 +177,23 @@ export default function CardTile({ card, isPlayed = false }: { card: any; isPlay
             opacity: hasStock ? 1 : 0.6,
             position: "relative",
         }}>
+            {showPokedexToggle && (
+                <button
+                    onClick={(e) => { e.preventDefault(); e.stopPropagation(); onToggleOwned?.(); }}
+                    title={isOwned ? "Remove from Pokédex collection" : "Add to Pokédex collection"}
+                    style={{
+                        position: "absolute", top: 6, left: 6, zIndex: 10,
+                        width: 22, height: 22, borderRadius: "50%",
+                        background: isOwned ? "#22c55e" : "rgba(18,18,26,0.85)",
+                        border: `1.5px solid ${isOwned ? "#22c55e" : "#666"}`,
+                        color: "#fff", fontSize: 12, fontWeight: 700, lineHeight: 1,
+                        display: "flex", alignItems: "center", justifyContent: "center",
+                        cursor: "pointer", padding: 0,
+                    }}
+                >
+                    {isOwned ? "✓" : ""}
+                </button>
+            )}
             {isPlayed && (
                 <div style={{
                     position: "absolute", top: 0, left: 0, right: 0, bottom: 0,

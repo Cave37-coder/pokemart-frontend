@@ -1,5 +1,7 @@
 // Shared between /pokedex (grid) and /pokedex/[id] (per-Pokemon card list).
 
+export const NATIONAL_DEX_TOTAL = 1025;
+
 export const GENERATIONS = [
     { code: "1", label: "Gen I", start: 1, end: 151 },
     { code: "2", label: "Gen II", start: 152, end: 251 },
