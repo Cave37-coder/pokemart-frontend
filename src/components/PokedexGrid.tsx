@@ -23,7 +23,7 @@ function CardStrip({ title, cards }: { title: string; cards: any[] }) {
 
 export default function PokedexGrid({ pokemon }: { pokemon: PokedexEntry[] }) {
     const [search, setSearch] = useState("");
-    const { loading, loggedIn, caughtNumbers, speciesCollected, collectionValue, topValued, recentlyAdded } = usePokedexCollection();
+    const { loading, loggedIn, caughtNumbers, caughtCardImages, speciesCollected, collectionValue, topValued, recentlyAdded } = usePokedexCollection();
 
     const filtered = search.trim()
         ? pokemon.filter(p =>
@@ -95,15 +95,16 @@ export default function PokedexGrid({ pokemon }: { pokemon: PokedexEntry[] }) {
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(120px, 1fr))", gap: "10px" }}>
                     {filtered.map(p => {
                         const caught = caughtNumbers.has(p.id);
+                        const cardImg = caughtCardImages[p.id];
                         return (
                             <Link
                                 key={p.id}
                                 href={`/pokedex/${p.id}`}
                                 style={{
                                     background: "#1a1a24", border: `1px solid ${caught ? "#ff6b35" : "#2a2a3a"}`, borderRadius: "8px",
-                                    padding: "14px 10px", textDecoration: "none", textAlign: "center",
+                                    padding: cardImg ? "0 0 10px" : "14px 10px", textDecoration: "none", textAlign: "center",
                                     display: "flex", flexDirection: "column", alignItems: "center", gap: "6px",
-                                    position: "relative",
+                                    position: "relative", overflow: "hidden",
                                 }}
                                 className="pb-pokedex-tile"
                             >
@@ -111,17 +112,28 @@ export default function PokedexGrid({ pokemon }: { pokemon: PokedexEntry[] }) {
                                     <div style={{
                                         position: "absolute", top: 6, right: 6, width: 18, height: 18, borderRadius: "50%",
                                         background: "#22c55e", color: "#fff", fontSize: 10, fontWeight: 700,
-                                        display: "flex", alignItems: "center", justifyContent: "center",
+                                        display: "flex", alignItems: "center", justifyContent: "center", zIndex: 2,
                                     }}>✓</div>
                                 )}
-                                <img
-                                    src={`https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/${p.id}.png`}
-                                    alt={p.name}
-                                    loading="lazy"
-                                    style={{ width: "64px", height: "64px", objectFit: "contain", imageRendering: "auto" }}
-                                    onError={(e) => { (e.currentTarget as HTMLImageElement).style.visibility = "hidden"; }}
-                                />
-                                <div style={{ fontSize: "13px", fontWeight: 600, color: "#fff" }}>{p.name}</div>
+                                {cardImg ? (
+                                    // Own at least one print of this species -- show the actual card
+                                    // art (in colour) instead of the generic silhouette-y sprite.
+                                    <img
+                                        src={cardImg}
+                                        alt={p.name}
+                                        loading="lazy"
+                                        style={{ width: "100%", aspectRatio: "5/7", objectFit: "cover", display: "block" }}
+                                    />
+                                ) : (
+                                    <img
+                                        src={`https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/${p.id}.png`}
+                                        alt={p.name}
+                                        loading="lazy"
+                                        style={{ width: "64px", height: "64px", objectFit: "contain", imageRendering: "auto" }}
+                                        onError={(e) => { (e.currentTarget as HTMLImageElement).style.visibility = "hidden"; }}
+                                    />
+                                )}
+                                <div style={{ fontSize: "13px", fontWeight: 600, color: "#fff", marginTop: cardImg ? "4px" : 0 }}>{p.name}</div>
                                 <div style={{ fontSize: "11px", color: "#555" }}>#{String(p.id).padStart(3, "0")}</div>
                             </Link>
                         );

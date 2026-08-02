@@ -18,6 +18,7 @@ interface MyCollectionResponse {
     product_ids?: number[];
     caught_pokedex_numbers?: number[];
     species_collected?: number;
+    caught_card_images?: Record<string, string>;
     collection_value?: string;
     top_valued?: Card[];
     recently_added?: Card[];
@@ -29,6 +30,10 @@ export interface PokedexCollection {
     caughtNumbers: Set<number>;
     ownedProductIds: Set<number>;
     speciesCollected: number;
+    // pokedex number -> image_url of the highest-value card owned for that
+    // species, so the grid can show real card art (in colour) instead of the
+    // generic sprite for anything you actually own.
+    caughtCardImages: Record<number, string>;
     collectionValue: number;
     topValued: Card[];
     recentlyAdded: Card[];
@@ -45,6 +50,7 @@ export function usePokedexCollection(): PokedexCollection {
     const [caughtNumbers, setCaughtNumbers] = useState<Set<number>>(new Set());
     const [ownedProductIds, setOwnedProductIds] = useState<Set<number>>(new Set());
     const [speciesCollected, setSpeciesCollected] = useState(0);
+    const [caughtCardImages, setCaughtCardImages] = useState<Record<number, string>>({});
     const [collectionValue, setCollectionValue] = useState(0);
     const [topValued, setTopValued] = useState<Card[]>([]);
     const [recentlyAdded, setRecentlyAdded] = useState<Card[]>([]);
@@ -64,6 +70,9 @@ export function usePokedexCollection(): PokedexCollection {
                 setOwnedProductIds(new Set(data.product_ids || []));
                 setCaughtNumbers(new Set(data.caught_pokedex_numbers || []));
                 setSpeciesCollected(data.species_collected || 0);
+                const images: Record<number, string> = {};
+                Object.entries(data.caught_card_images || {}).forEach(([pn, url]) => { images[Number(pn)] = url; });
+                setCaughtCardImages(images);
                 setCollectionValue(parseFloat(data.collection_value || "0") || 0);
                 setTopValued(data.top_valued || []);
                 setRecentlyAdded(data.recently_added || []);
@@ -103,7 +112,7 @@ export function usePokedexCollection(): PokedexCollection {
     }, []);
 
     return {
-        loading, loggedIn, caughtNumbers, ownedProductIds, speciesCollected,
+        loading, loggedIn, caughtNumbers, ownedProductIds, speciesCollected, caughtCardImages,
         collectionValue, topValued, recentlyAdded, toggleOwned,
     };
 }
