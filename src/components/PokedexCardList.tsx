@@ -3,7 +3,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { Card } from "@/lib/api";
-import CardTile, { getVariantKey, VariantKey } from "@/components/CardTile";
+import CardTile, { getVariantKey, VariantKey, PokeballIcon } from "@/components/CardTile";
 import { usePokedexCollection } from "@/lib/usePokedexCollection";
 
 // Michael, 2026-08-02: "leveling (like pkmn.gg)" -- a rough tier ladder based
@@ -139,17 +139,18 @@ export default function PokedexCardList({ cards }: { cards: Card[] }) {
                             >
                                 <button
                                     onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleToggle(card.id); }}
-                                    title={owned ? "Remove from Pokédex collection" : "Add to Pokédex collection"}
+                                    title={owned ? "Caught! Click to remove from your Pokédex collection" : "Click to mark this card caught"}
                                     style={{
-                                        width: 18, height: 18, borderRadius: "4px",
-                                        background: owned ? "#22c55e" : "transparent",
+                                        width: 20, height: 20, borderRadius: "50%",
+                                        background: owned ? "#16a34a" : "transparent",
                                         border: `1.5px solid ${owned ? "#22c55e" : "#555"}`,
-                                        color: "#fff", fontSize: 11, fontWeight: 700, lineHeight: 1,
                                         display: "flex", alignItems: "center", justifyContent: "center",
                                         cursor: "pointer", padding: 0,
+                                        transition: "transform 0.15s ease",
+                                        transform: owned ? "scale(1.05)" : "scale(1)",
                                     }}
                                 >
-                                    {owned ? "✓" : ""}
+                                    <PokeballIcon size={12} dim={!owned} />
                                 </button>
                                 <div style={{ fontSize: "11px", color: "#a0a0b0" }}>{card.card_set?.code}</div>
                                 <div style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{card.name}</div>

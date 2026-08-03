@@ -122,6 +122,21 @@ export function VariantOverlay({ vk }: { vk: VariantKey }) {
     }
 }
 
+// Small inline Poke Ball icon -- used on the "Catch"/"Caught!" button so
+// marking a card owned feels like actually catching it, not just ticking a
+// checkbox. `dim` renders the greyed-out "not caught yet" version.
+export function PokeballIcon({ size = 14, dim = false }: { size?: number; dim?: boolean }) {
+    return (
+        <svg width={size} height={size} viewBox="0 0 20 20" style={{ display: "block", flexShrink: 0 }}>
+            <circle cx="10" cy="10" r="9" fill={dim ? "#3a3a4a" : "#E24B4A"} stroke={dim ? "#5a5a6a" : "#7a1f1f"} strokeWidth="1" />
+            <path d="M1 10a9 9 0 0 0 18 0Z" fill={dim ? "#2a2a3a" : "#f5f5f5"} />
+            <rect x="1" y="9.3" width="18" height="1.4" fill={dim ? "#5a5a6a" : "#222"} />
+            <circle cx="10" cy="10" r="3" fill={dim ? "#2a2a3a" : "#f5f5f5"} stroke={dim ? "#5a5a6a" : "#222"} strokeWidth="1.2" />
+            <circle cx="10" cy="10" r="1.3" fill={dim ? "#5a5a6a" : "#222"} />
+        </svg>
+    );
+}
+
 export function PrizePackOverlay({ series, vk }: { series: string; vk: VariantKey }) {
     if (!series) return null;
     // Per the official Play! Pokémon rules: Prize Pack foils use Cosmos Holofoil,
@@ -188,18 +203,22 @@ export default function CardTile({
             {showPokedexToggle && (
                 <button
                     onClick={(e) => { e.preventDefault(); e.stopPropagation(); onToggleOwned?.(); }}
-                    title={isOwned ? "Remove from Pokédex collection" : "Add to Pokédex collection"}
+                    title={isOwned ? "Caught! Click to remove from your Pokédex collection" : "Click to mark this card caught"}
                     style={{
                         position: "absolute", top: 6, left: 6, zIndex: 10,
-                        width: 22, height: 22, borderRadius: "50%",
-                        background: isOwned ? "#22c55e" : "rgba(18,18,26,0.85)",
+                        display: "flex", alignItems: "center", gap: 4,
+                        padding: "3px 9px 3px 5px", borderRadius: 12,
+                        background: isOwned ? "#16a34a" : "rgba(18,18,26,0.85)",
                         border: `1.5px solid ${isOwned ? "#22c55e" : "#666"}`,
-                        color: "#fff", fontSize: 12, fontWeight: 700, lineHeight: 1,
-                        display: "flex", alignItems: "center", justifyContent: "center",
-                        cursor: "pointer", padding: 0,
+                        color: isOwned ? "#eafff1" : "#ccc",
+                        fontSize: 10, fontWeight: 700, lineHeight: 1, letterSpacing: "0.2px",
+                        cursor: "pointer",
+                        transition: "transform 0.15s ease, background 0.15s ease",
+                        transform: isOwned ? "scale(1.04)" : "scale(1)",
                     }}
                 >
-                    {isOwned ? "✓" : ""}
+                    <PokeballIcon size={13} dim={!isOwned} />
+                    {isOwned ? "Caught!" : "Catch"}
                 </button>
             )}
             {isPlayed && (
