@@ -1,7 +1,7 @@
-import Link from "next/link";
 import type { Card } from "@/lib/api";
 import { getSpeciesName, pokemonArtworkUrl } from "@/lib/pokedex";
 import PokedexCardList from "@/components/PokedexCardList";
+import BackButton from "@/components/BackButton";
 
 const API_URL = process.env.API_URL || process.env.NEXT_PUBLIC_API_URL || "https://pokemart-api-production.up.railway.app";
 
@@ -33,7 +33,7 @@ export default async function PokedexEntryPage({ params }: { params: Promise<{ i
         return (
             <div style={{ maxWidth: "680px", margin: "60px auto", padding: "0 1.5rem", textAlign: "center" }}>
                 <div style={{ color: "#EF4444", marginBottom: 16 }}>Invalid Pokédex number.</div>
-                <Link href="/pokedex" style={{ color: "#ff6b35" }}>Back to Pokédex</Link>
+                <BackButton fallbackHref="/pokedex" style={{ color: "#ff6b35" }}>Back to Pokédex</BackButton>
             </div>
         );
     }
@@ -47,16 +47,16 @@ export default async function PokedexEntryPage({ params }: { params: Promise<{ i
         return (
             <div style={{ maxWidth: "680px", margin: "60px auto", padding: "0 1.5rem", textAlign: "center" }}>
                 <div style={{ color: "#EF4444", marginBottom: 16 }}>Pokémon not found.</div>
-                <Link href="/pokedex" style={{ color: "#ff6b35" }}>Back to Pokédex</Link>
+                <BackButton fallbackHref="/pokedex" style={{ color: "#ff6b35" }}>Back to Pokédex</BackButton>
             </div>
         );
     }
 
     return (
         <div style={{ maxWidth: "1400px", margin: "0 auto", padding: "20px 1.5rem" }}>
-            <Link href="/pokedex" style={{ fontSize: "13px", color: "#a0a0b0", textDecoration: "none", display: "inline-block", marginBottom: "16px" }}>
+            <BackButton fallbackHref="/pokedex" style={{ fontSize: "13px", color: "#a0a0b0", display: "inline-block", marginBottom: "16px" }}>
                 ← Back to Pokédex
-            </Link>
+            </BackButton>
 
             <div style={{ display: "flex", alignItems: "center", gap: "18px", marginBottom: "24px", flexWrap: "wrap" }}>
                 <img
@@ -80,7 +80,7 @@ export default async function PokedexEntryPage({ params }: { params: Promise<{ i
                     We don&apos;t have any {name} cards catalogued yet.
                 </div>
             ) : (
-                <PokedexCardList cards={cards} />
+                <PokedexCardList cards={cards} speciesId={dexId} />
             )}
 
             <div style={{ marginTop: "32px", padding: "16px 20px", background: "#1a1a24", borderRadius: "8px", border: "1px solid #2a2a3a", fontSize: "13px", color: "#a0a0b0" }}>

@@ -10,12 +10,26 @@ import type { Card } from "@/lib/api";
 // /api/pokedex/toggle/ and /api/pokedex/my-collection/, never touches
 // anything Checklist-related. Used independently by both /pokedex (grid,
 // needs caughtNumbers + speciesCollected for the progress bar) and
-// /pokedex/[id] (card list, needs ownedProductIds + toggleOwned for the
-// per-card "owned" checkbox) -- each page mounts its own copy, no shared
-// global state needed since they're never on screen at the same time.
+// /pokedex/[id] (card list, needs isOwned + toggleOwned for the per-card
+// "owned" checkbox) -- each page mounts its own copy, no shared global
+// state needed since they're never on screen at the same time.
+//
+// Michael, 2026-08-04, FINAL model (supersedes the brief "owning a
+// tag-team card credits both species" version from earlier the same day):
+// "if you select a card on a page for a pokemon, that selection must be
+// for that pokemon only, not bleed into the other pokemon on the tag team
+// card." A tag-team card's ownership is therefore tracked per (product,
+// species) PAIR, not per product alone -- the same physical card can be
+// "caught" for Pheromosa without being caught for Buzzwole, and vice versa.
+// That's why ownership below is a Set of "productId:pokedexNumber" keys
+// instead of a flat Set<productId>.
+
+function pairKey(productId: number, pokedexNumber: number) {
+    return `${productId}:${pokedexNumber}`;
+}
 
 interface MyCollectionResponse {
-    product_ids?: number[];
+    owned_pairs?: [number, number][];
     caught_pokedex_numbers?: number[];
     species_collected?: number;
     caught_card_images?: Record<string, string>;
@@ -28,7 +42,6 @@ export interface PokedexCollection {
     loading: boolean;
     loggedIn: boolean;
     caughtNumbers: Set<number>;
-    ownedProductIds: Set<number>;
     speciesCollected: number;
     // pokedex number -> image_url of the highest-value card owned for that
     // species, so the grid can show real card art (in colour) instead of the
@@ -37,18 +50,23 @@ export interface PokedexCollection {
     collectionValue: number;
     topValued: Card[];
     recentlyAdded: Card[];
-    // Optimistically flips ownership locally, then confirms with the server;
-    // reverts silently on failure. Returns false immediately (without
-    // calling the API) if the customer isn't logged in, so callers know to
-    // redirect to /auth/login instead.
-    toggleOwned: (productId: number) => boolean;
+    // Is this exact card owned FOR this exact species? Always pass the
+    // species number of the page you're viewing -- for a tag-team card
+    // that's the only thing that disambiguates which of its two possible
+    // "caught" states you're asking about.
+    isOwned: (productId: number, pokedexNumber: number) => boolean;
+    // Optimistically flips ownership locally (for this product+species pair
+    // only), then confirms with the server; reverts silently on failure.
+    // Returns false immediately (without calling the API) if the customer
+    // isn't logged in, so callers know to redirect to /auth/login instead.
+    toggleOwned: (productId: number, pokedexNumber: number) => boolean;
 }
 
 export function usePokedexCollection(): PokedexCollection {
     const [loading, setLoading] = useState(true);
     const [loggedIn, setLoggedIn] = useState(false);
     const [caughtNumbers, setCaughtNumbers] = useState<Set<number>>(new Set());
-    const [ownedProductIds, setOwnedProductIds] = useState<Set<number>>(new Set());
+    const [ownedPairs, setOwnedPairs] = useState<Set<string>>(new Set());
     const [speciesCollected, setSpeciesCollected] = useState(0);
     const [caughtCardImages, setCaughtCardImages] = useState<Record<number, string>>({});
     const [collectionValue, setCollectionValue] = useState(0);
@@ -79,7 +97,7 @@ export function usePokedexCollection(): PokedexCollection {
                 .then(res => (res.ok ? (res.json() as Promise<MyCollectionResponse>) : null))
                 .then(data => {
                     if (!data) return;
-                    setOwnedProductIds(new Set(data.product_ids || []));
+                    setOwnedPairs(new Set((data.owned_pairs || []).map(([pid, pn]) => pairKey(pid, pn))));
                     setCaughtNumbers(new Set(data.caught_pokedex_numbers || []));
                     setSpeciesCollected(data.species_collected || 0);
                     const images: Record<number, string> = {};
@@ -102,29 +120,34 @@ export function usePokedexCollection(): PokedexCollection {
         return () => window.removeEventListener("pageshow", onPageShow);
     }, []);
 
-    const toggleOwned = useCallback((productId: number): boolean => {
+    const isOwned = useCallback((productId: number, pokedexNumber: number): boolean => {
+        return ownedPairs.has(pairKey(productId, pokedexNumber));
+    }, [ownedPairs]);
+
+    const toggleOwned = useCallback((productId: number, pokedexNumber: number): boolean => {
         const token = typeof window !== "undefined" ? localStorage.getItem("access_token") : null;
         if (!token) return false;
 
+        const key = pairKey(productId, pokedexNumber);
         let wasOwned = false;
-        setOwnedProductIds(prev => {
-            wasOwned = prev.has(productId);
+        setOwnedPairs(prev => {
+            wasOwned = prev.has(key);
             const next = new Set(prev);
-            if (wasOwned) next.delete(productId); else next.add(productId);
+            if (wasOwned) next.delete(key); else next.add(key);
             return next;
         });
 
         authFetch("/api/pokedex/toggle/", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ product_id: productId }),
+            body: JSON.stringify({ product_id: productId, pokedex_number: pokedexNumber }),
         })
             .then(res => (res.ok ? res.json() : Promise.reject()))
             .catch(() => {
                 // Genuinely failed to save -- flip back to what's actually on the account.
-                setOwnedProductIds(prev => {
+                setOwnedPairs(prev => {
                     const next = new Set(prev);
-                    if (wasOwned) next.add(productId); else next.delete(productId);
+                    if (wasOwned) next.add(key); else next.delete(key);
                     return next;
                 });
             });
@@ -133,7 +156,7 @@ export function usePokedexCollection(): PokedexCollection {
     }, []);
 
     return {
-        loading, loggedIn, caughtNumbers, ownedProductIds, speciesCollected, caughtCardImages,
-        collectionValue, topValued, recentlyAdded, toggleOwned,
+        loading, loggedIn, caughtNumbers, speciesCollected, caughtCardImages,
+        collectionValue, topValued, recentlyAdded, isOwned, toggleOwned,
     };
 }

@@ -9,7 +9,7 @@ import { usePokedexCollection } from "@/lib/usePokedexCollection";
 // Michael, 2026-08-02: "leveling (like pkmn.gg)" -- a rough tier ladder based
 // on % of this Pokemon's catalogued variants owned in the (separate) Pokedex
 // collection. Purely cosmetic, no backend concept of "level" -- computed
-// here from ownedProductIds vs. the cards list already on the page.
+// here from isOwned(card, speciesId) vs. the cards list already on the page.
 const LEVEL_TIERS: { min: number; label: string; color: string }[] = [
     { min: 100, label: "★ Complete", color: "#ff6b35" },
     { min: 75, label: "Platinum", color: "#a0a0b0" },
@@ -34,18 +34,18 @@ const BINDER_PAGE_SIZE = 9;
 
 type ViewMode = "grid" | "table" | "binder";
 
-export default function PokedexCardList({ cards }: { cards: Card[] }) {
+export default function PokedexCardList({ cards, speciesId }: { cards: Card[]; speciesId: number }) {
     const [viewMode, setViewMode] = useState<ViewMode>("grid");
     const [binderPage, setBinderPage] = useState(0);
     const router = useRouter();
-    const { loading, loggedIn, ownedProductIds, toggleOwned } = usePokedexCollection();
+    const { loading, loggedIn, isOwned, toggleOwned } = usePokedexCollection();
 
     const handleToggle = (productId: number) => {
         if (!loggedIn) { router.push("/auth/login"); return; }
-        toggleOwned(productId);
+        toggleOwned(productId, speciesId);
     };
 
-    const ownedCount = cards.filter(c => ownedProductIds.has(c.id)).length;
+    const ownedCount = cards.filter(c => isOwned(c.id, speciesId)).length;
     const totalCount = cards.length;
     const pct = totalCount ? Math.round((ownedCount / totalCount) * 100) : 0;
     const level = levelForPercent(pct);
@@ -111,7 +111,7 @@ export default function PokedexCardList({ cards }: { cards: Card[] }) {
                             card={card}
                             forceColor
                             showPokedexToggle
-                            isOwned={ownedProductIds.has(card.id)}
+                            isOwned={isOwned(card.id, speciesId)}
                             onToggleOwned={() => handleToggle(card.id)}
                         />
                     ))}
@@ -126,7 +126,7 @@ export default function PokedexCardList({ cards }: { cards: Card[] }) {
                     {cards.map(card => {
                         const vk = getVariantKey(card) as VariantKey;
                         const hasStock = card.stock > 0;
-                        const owned = ownedProductIds.has(card.id);
+                        const owned = isOwned(card.id, speciesId);
                         return (
                             <Link
                                 key={card.pb_id || card.id}
@@ -176,7 +176,7 @@ export default function PokedexCardList({ cards }: { cards: Card[] }) {
                                 card={card}
                                 forceColor
                                 showPokedexToggle
-                                isOwned={ownedProductIds.has(card.id)}
+                                isOwned={isOwned(card.id, speciesId)}
                                 onToggleOwned={() => handleToggle(card.id)}
                             />
                         ))}
