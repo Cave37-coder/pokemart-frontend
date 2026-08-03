@@ -21,16 +21,23 @@ function CardStrip({ title, cards }: { title: string; cards: any[] }) {
     );
 }
 
-export default function PokedexGrid({ pokemon }: { pokemon: PokedexEntry[] }) {
+export default function PokedexGrid({ pokemon, allPokemon }: { pokemon: PokedexEntry[]; allPokemon?: PokedexEntry[] }) {
     const [search, setSearch] = useState("");
     const { loading, loggedIn, caughtNumbers, caughtCardImages, speciesCollected, collectionValue, topValued, recentlyAdded } = usePokedexCollection();
 
+    // Searching should span every generation, not just whichever gen tab is
+    // currently active -- otherwise typing "Zekrom" while on the Gen 1 tab
+    // silently returns nothing even though Zekrom exists in the data. So a
+    // non-empty query searches the full species list (allPokemon) instead of
+    // the gen-sliced one; the default (no query) browse view still respects
+    // the active tab.
+    const searchPool = search.trim() ? (allPokemon ?? pokemon) : pokemon;
     const filtered = search.trim()
-        ? pokemon.filter(p =>
+        ? searchPool.filter(p =>
             p.name.toLowerCase().includes(search.trim().toLowerCase()) ||
             String(p.id).includes(search.trim())
         )
-        : pokemon;
+        : searchPool;
 
     return (
         <div>
