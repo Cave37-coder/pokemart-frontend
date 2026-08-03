@@ -63,22 +63,43 @@ export function usePokedexCollection(): PokedexCollection {
             return;
         }
         setLoggedIn(true);
-        authFetch("/api/pokedex/my-collection/")
-            .then(res => (res.ok ? (res.json() as Promise<MyCollectionResponse>) : null))
-            .then(data => {
-                if (!data) return;
-                setOwnedProductIds(new Set(data.product_ids || []));
-                setCaughtNumbers(new Set(data.caught_pokedex_numbers || []));
-                setSpeciesCollected(data.species_collected || 0);
-                const images: Record<number, string> = {};
-                Object.entries(data.caught_card_images || {}).forEach(([pn, url]) => { images[Number(pn)] = url; });
-                setCaughtCardImages(images);
-                setCollectionValue(parseFloat(data.collection_value || "0") || 0);
-                setTopValued(data.top_valued || []);
-                setRecentlyAdded(data.recently_added || []);
-            })
-            .catch(() => {})
-            .finally(() => setLoading(false));
+
+        const load = () => {
+            // Michael, 2026-08-04: caught a real bug via a live reproduction --
+            // toggling a card owned on one page, then navigating (browser back
+            // or a plain link) to /pokedex, could show a STALE snapshot of who's
+            // "caught" because the browser's back/forward cache (bfcache)
+            // restores the page from memory without re-running this effect, and
+            // a normal fetch() can also be served from the HTTP cache. Both are
+            // killed here: cache: "no-store" stops the HTTP-level staleness, and
+            // the pageshow listener below re-fetches whenever a page is
+            // restored from bfcache (event.persisted === true) instead of
+            // silently showing whatever was in memory before the last toggle.
+            authFetch("/api/pokedex/my-collection/", { cache: "no-store" })
+                .then(res => (res.ok ? (res.json() as Promise<MyCollectionResponse>) : null))
+                .then(data => {
+                    if (!data) return;
+                    setOwnedProductIds(new Set(data.product_ids || []));
+                    setCaughtNumbers(new Set(data.caught_pokedex_numbers || []));
+                    setSpeciesCollected(data.species_collected || 0);
+                    const images: Record<number, string> = {};
+                    Object.entries(data.caught_card_images || {}).forEach(([pn, url]) => { images[Number(pn)] = url; });
+                    setCaughtCardImages(images);
+                    setCollectionValue(parseFloat(data.collection_value || "0") || 0);
+                    setTopValued(data.top_valued || []);
+                    setRecentlyAdded(data.recently_added || []);
+                })
+                .catch(() => {})
+                .finally(() => setLoading(false));
+        };
+
+        load();
+
+        const onPageShow = (e: PageTransitionEvent) => {
+            if (e.persisted) load();
+        };
+        window.addEventListener("pageshow", onPageShow);
+        return () => window.removeEventListener("pageshow", onPageShow);
     }, []);
 
     const toggleOwned = useCallback((productId: number): boolean => {
