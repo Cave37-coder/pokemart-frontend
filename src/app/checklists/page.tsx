@@ -116,6 +116,26 @@ function Overview({ onOpen }: { onOpen: (code: string) => void }) {
   const [, forceUpdate] = useState(0);
   const [logos, setLogos] = useState<Record<string, { logo_url: string; symbol_url: string; release_date?: string }>>({});
 
+  // Michael, 2026-08-08: "replace the simple Era labels with the actual Era
+  // Logo" -- keyed by era NAME (not code) since that's what ERA_ORDER/the
+  // static SETS data already use as the era key everywhere in this file.
+  // Blank/missing logo_url (Michael hasn't pasted one in for that era yet)
+  // just falls back to the existing coloured text pill, so this is safe to
+  // ship before every era has a logo filled in via admin.
+  const [eraLogos, setEraLogos] = useState<Record<string, string>>({});
+  useEffect(() => {
+    fetch(`${API_BASE}/api/eras/`)
+      .then(r => r.json())
+      .then(data => {
+        const map: Record<string, string> = {};
+        (data.results || []).forEach((e: { name: string; logo_url: string }) => {
+          if (e.logo_url) map[e.name] = e.logo_url;
+        });
+        setEraLogos(map);
+      })
+      .catch(() => {});
+  }, []);
+
   // Wall of Honour -- site-wide feed of completion events (Checklist Phase 1).
   // Public endpoint, no set filter -- last 100 events, we only show the most
   // recent handful as a compact widget on the landing page.
@@ -252,10 +272,23 @@ function Overview({ onOpen }: { onOpen: (code: string) => void }) {
   // "find" a set whose section is still visually collapsed.
   const isOpen = (era: string) => !!query || !!eraFilter || expandedEras.has(era);
 
+  // Renders the era's actual logo when one's been set via admin, otherwise
+  // falls back to the original coloured text pill -- same visual slot
+  // either way so nothing else about the layout needs to change per-era.
+  const eraBadge = (label: string, color: string) => {
+    const logoUrl = eraLogos[label];
+    if (logoUrl) {
+      return <img src={logoUrl} alt={label} title={label} style={{ height: '20px', maxWidth: '120px', objectFit: 'contain' }} />;
+    }
+    return (
+      <div style={{ background: color, color: '#fff', fontSize: '10px', fontWeight: 700, letterSpacing: '1px', textTransform: 'uppercase', padding: '3px 10px', borderRadius: '4px' }}>{label}</div>
+    );
+  };
+
   const sectionHeader = (label: string, color: string, count: number, era: string, style: Record<string, string | number> = {}) => (
     <div onClick={() => toggleEra(era)}
       style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', userSelect: 'none', marginBottom: isOpen(era) ? '8px' : '0px', ...style }}>
-      <div style={{ background: color, color: '#fff', fontSize: '10px', fontWeight: 700, letterSpacing: '1px', textTransform: 'uppercase', padding: '3px 10px', borderRadius: '4px' }}>{label}</div>
+      {eraBadge(label, color)}
       <span style={{ fontSize: '11px', color: '#555' }}>{count} set{count === 1 ? '' : 's'}</span>
       <span style={{ fontSize: '10px', color: '#555', transform: isOpen(era) ? 'rotate(90deg)' : 'none', transition: 'transform 0.15s' }}>▶</span>
     </div>
@@ -334,7 +367,7 @@ function Overview({ onOpen }: { onOpen: (code: string) => void }) {
         const color = ERA_COLORS[era] || '#555';
         return (
           <div key={era} style={{ marginBottom: '20px' }}>
-            <div style={{ display: 'inline-block', background: color, color: '#fff', fontSize: '10px', fontWeight: 700, letterSpacing: '1px', textTransform: 'uppercase', padding: '3px 10px', borderRadius: '4px', marginBottom: '8px' }}>{era}</div>
+            <div style={{ marginBottom: '8px' }}>{eraBadge(era, color)}</div>
             {renderGrid(sets, color)}
           </div>
         );
