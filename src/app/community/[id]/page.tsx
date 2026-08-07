@@ -4,6 +4,7 @@ import { useParams, useRouter } from "next/navigation";
 import { authFetch } from "@/lib/api";
 import PokedexGrid from "@/components/PokedexGrid";
 import WishlistHeartButton from "@/components/WishlistHeartButton";
+import FriendChecklistSection from "@/components/FriendChecklistSection";
 import { GENERATIONS, getAllSpecies } from "@/lib/pokedex";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://pokemart-api-production.up.railway.app";
@@ -41,6 +42,7 @@ interface PublicProfile {
   is_friend: boolean;
   checklist_completions: ChecklistCompletion[];
   full_pokedex?: { caught_pokedex_numbers: number[]; caught_card_images: Record<string, string> };
+  full_checklist?: { entries: Record<string, string[]> };
 }
 
 const sectionStyle = {
@@ -326,6 +328,13 @@ export default function PublicProfilePage() {
                 ))}
               </div>
             </div>
+          )}
+
+          {profile.is_friend && profile.full_checklist && (
+            <FriendChecklistSection
+              entries={profile.full_checklist.entries}
+              ownerLabel={profile.display_name}
+            />
           )}
 
           {profile.wishlist.length > 0 && (
