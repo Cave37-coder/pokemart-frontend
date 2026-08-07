@@ -62,8 +62,8 @@ export interface PokedexCollection {
     toggleOwned: (productId: number, pokedexNumber: number) => boolean;
 }
 
-export function usePokedexCollection(): PokedexCollection {
-    const [loading, setLoading] = useState(true);
+export function usePokedexCollection(enabled: boolean = true): PokedexCollection {
+    const [loading, setLoading] = useState(enabled);
     const [loggedIn, setLoggedIn] = useState(false);
     const [caughtNumbers, setCaughtNumbers] = useState<Set<number>>(new Set());
     const [ownedPairs, setOwnedPairs] = useState<Set<string>>(new Set());
@@ -74,6 +74,17 @@ export function usePokedexCollection(): PokedexCollection {
     const [recentlyAdded, setRecentlyAdded] = useState<Card[]>([]);
 
     useEffect(() => {
+        // Callers viewing someone ELSE's collection (e.g. a friend's public
+        // profile via PokedexGrid's `external` prop) pass enabled=false so
+        // this hook never fires its own /api/pokedex/my-collection/ fetch --
+        // that endpoint only ever returns the LOGGED-IN user's own data, so
+        // calling it while rendering another person's grid would be both
+        // wasted and wrong. Still called unconditionally (rules of hooks),
+        // just a no-op when disabled.
+        if (!enabled) {
+            setLoading(false);
+            return;
+        }
         const token = typeof window !== "undefined" ? localStorage.getItem("access_token") : null;
         if (!token) {
             setLoading(false);
@@ -118,7 +129,7 @@ export function usePokedexCollection(): PokedexCollection {
         };
         window.addEventListener("pageshow", onPageShow);
         return () => window.removeEventListener("pageshow", onPageShow);
-    }, []);
+    }, [enabled]);
 
     const isOwned = useCallback((productId: number, pokedexNumber: number): boolean => {
         return ownedPairs.has(pairKey(productId, pokedexNumber));

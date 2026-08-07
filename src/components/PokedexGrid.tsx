@@ -21,9 +21,38 @@ function CardStrip({ title, cards }: { title: string; cards: any[] }) {
     );
 }
 
-export default function PokedexGrid({ pokemon, allPokemon }: { pokemon: PokedexEntry[]; allPokemon?: PokedexEntry[] }) {
+// Lets this same grid render someone ELSE's collection (a friend's public
+// profile, 2026-08-07) instead of always the logged-in user's own. Only
+// the fields actually available from the community profile endpoint --
+// caughtNumbers/caughtCardImages/speciesCollected -- collection VALUE and
+// the Top Valued/Recently Added strips are deliberately never sent for
+// another person's collection (see community/views.py), so those render as
+// hidden rather than showing a fake R0.00.
+export interface ExternalPokedexData {
+    caughtNumbers: Set<number>;
+    caughtCardImages: Record<number, string>;
+    speciesCollected: number;
+}
+
+export default function PokedexGrid({ pokemon, allPokemon, external, ownerLabel }: {
+    pokemon: PokedexEntry[];
+    allPokemon?: PokedexEntry[];
+    external?: ExternalPokedexData;
+    ownerLabel?: string; // e.g. "TrainerMike's" -- shown instead of "your own"
+}) {
     const [search, setSearch] = useState("");
-    const { loading, loggedIn, caughtNumbers, caughtCardImages, speciesCollected, collectionValue, topValued, recentlyAdded } = usePokedexCollection();
+    // usePokedexCollection is still called unconditionally either way (rules
+    // of hooks) but does nothing/fetches nothing when `external` is set --
+    // see the `enabled` param on the hook itself.
+    const own = usePokedexCollection(!external);
+    const loading = external ? false : own.loading;
+    const loggedIn = external ? true : own.loggedIn;
+    const caughtNumbers = external ? external.caughtNumbers : own.caughtNumbers;
+    const caughtCardImages = external ? external.caughtCardImages : own.caughtCardImages;
+    const speciesCollected = external ? external.speciesCollected : own.speciesCollected;
+    const collectionValue = own.collectionValue;
+    const topValued = own.topValued;
+    const recentlyAdded = own.recentlyAdded;
 
     // Searching should span every generation, not just whichever gen tab is
     // currently active -- otherwise typing "Zekrom" while on the Gen 1 tab
@@ -50,7 +79,7 @@ export default function PokedexGrid({ pokemon, allPokemon }: { pokemon: PokedexE
                     {loggedIn ? (
                         <>
                             <div style={{ fontSize: "13px", fontWeight: 700, color: "#fff", whiteSpace: "nowrap" }}>
-                                {speciesCollected}/{NATIONAL_DEX_TOTAL} Collected
+                                {external ? `${ownerLabel || "Their"} ` : ""}{speciesCollected}/{NATIONAL_DEX_TOTAL} Collected
                             </div>
                             <div style={{ flex: 1, minWidth: "140px" }}>
                                 <div style={{ height: "6px", borderRadius: "3px", background: "#12121a", overflow: "hidden" }}>
@@ -60,9 +89,11 @@ export default function PokedexGrid({ pokemon, allPokemon }: { pokemon: PokedexE
                                     }} />
                                 </div>
                             </div>
-                            <div style={{ fontSize: "13px", fontWeight: 700, color: "#ff6b35", whiteSpace: "nowrap" }}>
-                                R {collectionValue.toLocaleString("en-ZA", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                            </div>
+                            {!external && (
+                                <div style={{ fontSize: "13px", fontWeight: 700, color: "#ff6b35", whiteSpace: "nowrap" }}>
+                                    R {collectionValue.toLocaleString("en-ZA", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                </div>
+                            )}
                         </>
                     ) : (
                         <>
