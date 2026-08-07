@@ -102,6 +102,20 @@ export default function ProfilePage() {
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState("");
 
+  // Michael, 2026-08-07: "add to Profile that you can change password" --
+  // kept as its own mini-form with its own save button/feedback rather than
+  // folded into the big PATCH /api/auth/profile/ save above, since it hits a
+  // different endpoint (change-password/, current-password verified
+  // server-side) and clearing the fields after a successful change matters
+  // (you don't want a typed password sitting in the DOM/state longer than
+  // it has to).
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [pwSaving, setPwSaving] = useState(false);
+  const [pwSuccess, setPwSuccess] = useState(false);
+  const [pwError, setPwError] = useState("");
+
   useEffect(() => {
     const token = localStorage.getItem("access_token");
     if (!token) { router.push("/auth/login"); return; }
@@ -178,6 +192,40 @@ export default function ProfilePage() {
     }
   };
 
+  const handleChangePassword = async () => {
+    setPwError("");
+    setPwSuccess(false);
+    if (!currentPassword || !newPassword) { setPwError("Fill in both password fields."); return; }
+    if (newPassword.length < 8) { setPwError("New password must be at least 8 characters."); return; }
+    if (newPassword !== confirmPassword) { setPwError("New passwords do not match."); return; }
+
+    setPwSaving(true);
+    const token = localStorage.getItem("access_token");
+    try {
+      const res = await fetch(`${API_URL}/api/auth/change-password/`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ current_password: currentPassword, new_password: newPassword }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data.error || Object.values(data).flat().join(" ") || "Failed to change password.");
+      }
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirmPassword("");
+      setPwSuccess(true);
+      setTimeout(() => setPwSuccess(false), 3000);
+    } catch (e: any) {
+      setPwError(e.message || "Failed to change password.");
+    } finally {
+      setPwSaving(false);
+    }
+  };
+
   if (loading) return (
     <div style={{ minHeight: "100vh", background: "#0e0e16", display: "flex", alignItems: "center", justifyContent: "center" }}>
       <span style={{ color: "#a0a0b0", fontSize: "14px" }}>Loading profile…</span>
@@ -220,6 +268,74 @@ export default function ProfilePage() {
               ⚠ Username is permanent and cannot be changed after registration.
             </p>
           </div>
+        </div>
+
+        {/* Change Password */}
+        <div style={sectionStyle}>
+          <p style={{ color: "#a0a0b0", fontSize: "11px", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", margin: "0 0 16px 0" }}>
+            Change Password
+          </p>
+
+          <div style={{ marginBottom: "16px" }}>
+            <label style={labelStyle}>Current Password</label>
+            <input
+              style={inputStyle}
+              type="password"
+              value={currentPassword}
+              onChange={(e) => setCurrentPassword(e.target.value)}
+              placeholder="••••••••"
+              autoComplete="current-password"
+            />
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px", marginBottom: "16px" }}>
+            <div>
+              <label style={labelStyle}>New Password</label>
+              <input
+                style={inputStyle}
+                type="password"
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                placeholder="Min 8 characters"
+                autoComplete="new-password"
+              />
+            </div>
+            <div>
+              <label style={labelStyle}>Confirm New Password</label>
+              <input
+                style={inputStyle}
+                type="password"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                placeholder="••••••••"
+                autoComplete="new-password"
+              />
+            </div>
+          </div>
+
+          {pwError && (
+            <div style={{ background: "#2a1a1a", border: "1px solid #ff4444", borderRadius: "8px", padding: "10px 14px", marginBottom: "14px", color: "#ff6b6b", fontSize: "13px" }}>
+              {pwError}
+            </div>
+          )}
+          {pwSuccess && (
+            <div style={{ background: "#1a2a1a", border: "1px solid #44aa44", borderRadius: "8px", padding: "10px 14px", marginBottom: "14px", color: "#66cc66", fontSize: "13px" }}>
+              ✓ Password updated
+            </div>
+          )}
+
+          <button
+            onClick={handleChangePassword}
+            disabled={pwSaving}
+            style={{
+              background: pwSaving ? "#333" : "transparent",
+              color: pwSaving ? "#a0a0b0" : "#ff6b35",
+              border: `1px solid ${pwSaving ? "#333" : "#ff6b35"}`,
+              borderRadius: "8px", padding: "10px 18px", fontSize: "13px", fontWeight: 700,
+              cursor: pwSaving ? "not-allowed" : "pointer",
+            }}
+          >
+            {pwSaving ? "Updating…" : "Update Password"}
+          </button>
         </div>
 
         {/* Editable — Contact */}
