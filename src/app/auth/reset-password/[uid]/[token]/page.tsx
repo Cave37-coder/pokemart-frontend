@@ -1,12 +1,22 @@
 "use client";
 import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import BackButton from "@/components/BackButton";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://pokemart-api-production.up.railway.app";
 
-export default function ResetPasswordPage({ params }: { params: { uid: string; token: string } }) {
+// Michael, 2026-08-08: THIS was the real "reset password failing" bug --
+// nothing to do with token invalidation. Next.js 16's `params` page prop is
+// a Promise now, even for Client Components; this page was destructuring
+// `uid`/`token` straight off it as if it were a plain object, so both came
+// back `undefined`, silently dropped out of the JSON.stringify'd request
+// body, and the backend correctly rejected it as missing required fields --
+// exactly the doubled "This field is required." error reported. useParams()
+// (already used elsewhere in this app, e.g. community/[id]/page.tsx) reads
+// the resolved route params directly without needing to unwrap a Promise.
+export default function ResetPasswordPage() {
   const router = useRouter();
+  const params = useParams<{ uid: string; token: string }>();
   const { uid, token } = params;
   const [password, setPassword] = useState("");
   const [password2, setPassword2] = useState("");
