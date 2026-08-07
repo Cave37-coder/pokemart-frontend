@@ -19,7 +19,14 @@ export default function LoginPage() {
         body: JSON.stringify({ username, password }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.detail || data.non_field_errors?.[0] || "Login failed");
+      // Michael, 2026-08-08: "change password, then log in, blocks you" turned
+      // out to be a red herring in the error MESSAGE, not the password save --
+      // the backend's login rate limit (10 attempts/10 min per IP, easy to
+      // trip while testing back and forth) returns {"error": "..."}, but this
+      // only ever checked detail/non_field_errors, so a 429 silently fell
+      // through to the generic "Login failed" -- indistinguishable from a
+      // genuinely wrong password. data.error is now checked first.
+      if (!res.ok) throw new Error(data.error || data.detail || data.non_field_errors?.[0] || "Login failed");
       localStorage.setItem("access_token", data.access);
       localStorage.setItem("refresh_token", data.refresh);
       localStorage.setItem("user", JSON.stringify(data.user));
