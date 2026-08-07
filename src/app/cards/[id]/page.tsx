@@ -4,6 +4,7 @@ import { getCard } from "@/lib/api";
 import AddToPileButton from "./AddToPileButton";
 import ViewItemTracker from "./ViewItemTracker";
 import BackButton from "./BackButton";
+import WishlistHeartButton from "@/components/WishlistHeartButton";
 
 const TYPE_COLORS: Record<string, string> = {
   Fire: "#fb923c", Water: "#60a5fa", Grass: "#4ade80",
@@ -100,8 +101,9 @@ export default async function CardPage({ params }: { params: Promise<{ id: strin
           </div>
 
           <AddToPileButton card={card} />
+          <WishlistHeartButton productId={card.id} variant="inline" />
 
-          <div style={{ background: "#1a1a24", border: "1px solid #2a2a3a", borderRadius: "12px", padding: "16px", marginBottom: "16px" }}>
+          <div style={{ background: "#1a1a24", border: "1px solid #2a2a3a", borderRadius: "12px", padding: "16px", marginBottom: "16px", marginTop: "16px" }}>
             <h3 style={{ fontSize: "14px", fontWeight: 700, marginBottom: "12px", color: "#a0a0b0", letterSpacing: "1px" }}>CARD INFO</h3>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px", fontSize: "13px" }}>
               <div><span style={{ color: "#a0a0b0" }}>HP: </span><span style={{ fontWeight: 600 }}>{card.hp || "-"}</span></div>

@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { authFetch } from "@/lib/api";
 import PokedexGrid from "@/components/PokedexGrid";
+import WishlistHeartButton from "@/components/WishlistHeartButton";
 import { GENERATIONS, getAllSpecies } from "@/lib/pokedex";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://pokemart-api-production.up.railway.app";
@@ -68,7 +69,10 @@ function MiniCard({ c, action }: { c: ProductMini; action?: React.ReactNode }) {
         </div>
         <div style={{ color: "#a0a0b0", fontSize: "11px" }}>{c.card_set?.name}</div>
       </div>
-      {action}
+      <div style={{ display: "flex", alignItems: "center", gap: "8px", flexShrink: 0 }}>
+        <WishlistHeartButton productId={c.id} variant="tile" />
+        {action}
+      </div>
     </div>
   );
 }

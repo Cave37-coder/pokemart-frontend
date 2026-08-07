@@ -2,6 +2,7 @@
 import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 import { authFetch } from "@/lib/api";
+import WishlistHeartButton from "@/components/WishlistHeartButton";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://pokemart-api-production.up.railway.app";
 
@@ -330,6 +331,7 @@ export default function CommunityPage() {
                 <div style={{ color: "#ff6b35", fontSize: "13px", fontWeight: 700, whiteSpace: "nowrap" }}>
                   💛 {c.wanted_by} want this
                 </div>
+                <WishlistHeartButton productId={c.id} variant="tile" />
               </div>
             ))}
           </div>
