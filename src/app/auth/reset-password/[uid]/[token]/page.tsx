@@ -62,7 +62,20 @@ export default function ResetPasswordPage({ params }: { params: { uid: string; t
         <div style={{ background: "#1a1a24", border: "1px solid #2a2a3a", borderRadius: 12, padding: "24px 22px" }}>
           {error && (
             <div style={{ background: "#EF444420", border: "1px solid #EF444444", borderRadius: 8, padding: "10px 14px", marginBottom: 16, color: "#EF4444", fontSize: 13 }}>
-              {error}
+              <div style={{ marginBottom: 6 }}>{error}</div>
+              {/* Michael, 2026-08-07: "Reset Password is failing again" turned
+                  out to be working-as-designed -- Django invalidates every
+                  outstanding reset token the moment the account logs in again
+                  (even a failed attempt), or if an older email link gets
+                  clicked instead of the newest one. That's not obvious from a
+                  bare "invalid or expired" message, so spell it out here and
+                  give a direct way out instead of a dead end. */}
+              {error.toLowerCase().includes("invalid") || error.toLowerCase().includes("expired") ? (
+                <div style={{ color: "#f2a0a0", fontSize: 12, lineHeight: 1.5 }}>
+                  This usually happens if you tried logging in again after requesting this link, or clicked an older reset email instead of the newest one.{" "}
+                  <a href="/auth/forgot-password" style={{ color: "#ff6b35", fontWeight: 600 }}>Request a new link</a>.
+                </div>
+              ) : null}
             </div>
           )}
 
