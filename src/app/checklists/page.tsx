@@ -10,6 +10,17 @@ import {
 } from '@/lib/checklistData';
 import type { Variant, Card, SetData, SetMeta } from '@/lib/checklistData';
 
+// Michael, 2026-08-08: the Era table (products/models.py) has legacy
+// duplicate rows per era and inconsistent naming -- some end in "Era"
+// ("Sword & Shield Era"), some don't ("HG&SS"), and this page's own labels
+// don't consistently match either convention. Normalizing both sides before
+// comparing (trim, lowercase, drop a trailing " era") means a saved logo_url
+// shows up regardless of which of the duplicate rows or naming style it was
+// set on, instead of requiring a byte-for-byte string match.
+function normalizeEraName(s: string): string {
+  return s.trim().toLowerCase().replace(/\s+era$/, '').replace(/\s+/g, ' ');
+}
+
 // Checklist progress now lives in the customer's account (ChecklistEntry
 // rows on the backend), not the browser -- localStorage['pb_cl_'+code] used
 // to be the only copy, which meant it vanished the moment a customer's
@@ -128,8 +139,15 @@ function Overview({ onOpen }: { onOpen: (code: string) => void }) {
       .then(r => r.json())
       .then(data => {
         const map: Record<string, string> = {};
+        // Michael, 2026-08-08: the Era table has legacy duplicate rows per
+        // era (multiple codes, same conceptual era) and inconsistent naming
+        // -- some end in "Era", some don't ("Sword & Shield Era" vs this
+        // page's own "Sword & Shield" label). An exact-string match silently
+        // failed for most of them even with a valid logo_url saved, so this
+        // normalizes both sides (trim, lowercase, drop a trailing " Era")
+        // before comparing instead of requiring a byte-for-byte match.
         (data.results || []).forEach((e: { name: string; logo_url: string }) => {
-          if (e.logo_url) map[e.name] = e.logo_url;
+          if (e.logo_url) map[normalizeEraName(e.name)] = e.logo_url;
         });
         setEraLogos(map);
       })
@@ -276,7 +294,7 @@ function Overview({ onOpen }: { onOpen: (code: string) => void }) {
   // falls back to the original coloured text pill -- same visual slot
   // either way so nothing else about the layout needs to change per-era.
   const eraBadge = (label: string, color: string) => {
-    const logoUrl = eraLogos[label];
+    const logoUrl = eraLogos[normalizeEraName(label)];
     if (logoUrl) {
       return <img src={logoUrl} alt={label} title={label} style={{ height: '20px', maxWidth: '120px', objectFit: 'contain' }} />;
     }
