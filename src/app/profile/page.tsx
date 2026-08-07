@@ -40,6 +40,9 @@ interface Profile {
   trainer_level: string;
   public_display_name: string;
   checklist_public: boolean;
+  community_profile_public: boolean;
+  community_bio: string;
+  messaging_enabled: boolean;
 }
 
 function splitPhone(phone: string): { dial: string; number: string } {
@@ -91,6 +94,9 @@ export default function ProfilePage() {
   const [pudoCode, setPudoCode] = useState("");
   const [publicDisplayName, setPublicDisplayName] = useState("");
   const [checklistPublic, setChecklistPublic] = useState(false);
+  const [communityProfilePublic, setCommunityProfilePublic] = useState(false);
+  const [communityBio, setCommunityBio] = useState("");
+  const [messagingEnabled, setMessagingEnabled] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [success, setSuccess] = useState(false);
@@ -122,6 +128,9 @@ export default function ProfilePage() {
         setPudoCode(data.pudo_locker_code || "");
         setPublicDisplayName(data.public_display_name || "");
         setChecklistPublic(!!data.checklist_public);
+        setCommunityProfilePublic(!!data.community_profile_public);
+        setCommunityBio(data.community_bio || "");
+        setMessagingEnabled(!!data.messaging_enabled);
       })
       .catch(() => setError("Failed to load profile."))
       .finally(() => setLoading(false));
@@ -154,6 +163,9 @@ export default function ProfilePage() {
           pudo_locker_code: pudoCode,
           public_display_name: publicDisplayName,
           checklist_public: checklistPublic,
+          community_profile_public: communityProfilePublic,
+          community_bio: communityBio,
+          messaging_enabled: messagingEnabled,
         }),
       });
       if (!res.ok) throw new Error("Save failed");
@@ -340,6 +352,67 @@ export default function ProfilePage() {
               Show my checklist progress on leaderboards and the Wall of Honour
             </span>
           </label>
+        </div>
+
+        {/* Editable — Community Profile */}
+        <div style={sectionStyle}>
+          <p style={{ color: "#a0a0b0", fontSize: "11px", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", margin: "0 0 4px 0" }}>
+            Community Profile
+          </p>
+          <p style={{ color: "#555", fontSize: "12px", margin: "0 0 16px 0" }}>
+            A separate opt-in from Checklist Privacy above — this one controls whether your Pokédex collection and wishlist are visible to other trainers on{" "}
+            <a href="/community" style={{ color: "#ff6b35" }}>the Community page</a>. Uses the same public display name as your checklist settings.
+          </p>
+
+          <div style={{ marginBottom: "16px" }}>
+            <label style={labelStyle}>Community Bio <span style={{ color: "#444", fontWeight: 400 }}>(optional)</span></label>
+            <input
+              style={inputStyle}
+              value={communityBio}
+              onChange={(e) => setCommunityBio(e.target.value.slice(0, 200))}
+              placeholder='e.g. "Looking for shiny Charizards!"'
+              maxLength={200}
+            />
+          </div>
+
+          <label style={{ display: "flex", alignItems: "center", gap: "10px", cursor: "pointer", marginBottom: "14px" }}>
+            <input
+              type="checkbox"
+              checked={communityProfilePublic}
+              onChange={(e) => setCommunityProfilePublic(e.target.checked)}
+              style={{ width: "18px", height: "18px", cursor: "pointer" }}
+            />
+            <span style={{ color: "#e0e0e0", fontSize: "13px" }}>
+              Show my Pokédex collection and wishlist on a public community profile
+            </span>
+          </label>
+
+          <label style={{ display: "flex", alignItems: "center", gap: "10px", cursor: "pointer" }}>
+            <input
+              type="checkbox"
+              checked={messagingEnabled}
+              onChange={(e) => setMessagingEnabled(e.target.checked)}
+              style={{ width: "18px", height: "18px", cursor: "pointer" }}
+            />
+            <span style={{ color: "#e0e0e0", fontSize: "13px" }}>
+              Allow other trainers to message me / send trade requests
+            </span>
+          </label>
+          <p style={{ color: "#555", fontSize: "11px", margin: "8px 0 0 28px" }}>
+            You can always reply within a conversation someone already started, even if this is off.
+          </p>
+
+          {publicDisplayName && (
+            <a
+              href="/wishlist"
+              style={{
+                display: "inline-block", marginTop: "18px", color: "#ff6b35",
+                fontSize: "13px", textDecoration: "none", fontWeight: 600,
+              }}
+            >
+              Manage my wishlist →
+            </a>
+          )}
         </div>
 
         {/* Feedback */}

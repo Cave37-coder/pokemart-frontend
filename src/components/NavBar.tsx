@@ -36,6 +36,7 @@ function NavGlow() {
 export default function NavBar() {
   const [user, setUser] = useState<string | null>(null);
   const [pileCount, setPileCount] = useState(0);
+  const [unreadCount, setUnreadCount] = useState(0);
   const [menuOpen, setMenuOpen] = useState(false);
   const pathname = usePathname();
 
@@ -55,14 +56,38 @@ export default function NavBar() {
     }
   };
 
+  const fetchUnreadCount = async () => {
+    const token = localStorage.getItem("access_token");
+    if (!token) { setUnreadCount(0); return; }
+    try {
+      const res = await authFetch("/api/community/conversations/");
+      if (res.ok) {
+        const data = await res.json();
+        const total = (data.conversations || []).reduce((sum: number, c: { unread_count: number }) => sum + (c.unread_count || 0), 0);
+        setUnreadCount(total);
+      }
+    } catch {
+      setUnreadCount(0);
+    }
+  };
+
   useEffect(() => {
     const stored = localStorage.getItem("user");
     if (stored) {
       try { setUser(JSON.parse(stored)?.username || null); } catch {}
     }
     fetchPileCount();
+    fetchUnreadCount();
     window.addEventListener("pile-updated", fetchPileCount);
-    return () => window.removeEventListener("pile-updated", fetchPileCount);
+    window.addEventListener("messages-updated", fetchUnreadCount);
+    // Cheap polling so the badge doesn't only ever update on an explicit
+    // event -- a new DM someone else sent won't fire any local event.
+    const interval = setInterval(fetchUnreadCount, 60000);
+    return () => {
+      window.removeEventListener("pile-updated", fetchPileCount);
+      window.removeEventListener("messages-updated", fetchUnreadCount);
+      clearInterval(interval);
+    };
   }, []);
 
   // Close the mobile dropdown whenever the route changes -- otherwise it
@@ -83,6 +108,7 @@ export default function NavBar() {
     { href: "/pokedex", label: "Pokédex" },
     { href: "/bundles", label: "Bundles" },
     { href: "/checklists", label: "Checklists" },
+    { href: "/community", label: "Community" },
     { href: "/decklist", label: "Deck Builder", beta: true },
     { href: "/sell", label: "Sell Cards" },
     { href: "/about", label: "About" },
@@ -216,6 +242,19 @@ export default function NavBar() {
           <Link href="/orders" className="pb-nav-link" style={{ color: isActive("/orders") ? "#fff" : "#a0a0b0", textDecoration: "none", fontSize: "14px", position: "relative" }}>
             My Orders
             {isActive("/orders") && <span className="pb-nav-underline"><FoilUnderline /></span>}
+          </Link>
+        )}
+
+        {user && (
+          <Link href="/messages" className="pb-nav-link" style={{ display: "flex", alignItems: "center", gap: "6px", color: isActive("/messages") ? "#fff" : "#a0a0b0", textDecoration: "none", fontSize: "14px", position: "relative" }}>
+            Messages
+            {unreadCount > 0 && (
+              <span style={{
+                background: "#ff6b35", color: "#fff", fontSize: "10px", fontWeight: 700,
+                borderRadius: "10px", padding: "1px 6px", minWidth: "18px", textAlign: "center",
+              }}>{unreadCount}</span>
+            )}
+            {isActive("/messages") && <span className="pb-nav-underline"><FoilUnderline /></span>}
           </Link>
         )}
 
