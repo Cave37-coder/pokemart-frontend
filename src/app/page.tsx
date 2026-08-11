@@ -77,6 +77,27 @@ export default async function HomePage() {
 
       <FoilStripe />
 
+      {/* COMMUNITY CTA — Michael, 2026-08-11: banner announcing the 5%
+          community discount, placed right below the hero per his mockup. */}
+      <div style={{ background:"linear-gradient(90deg, #1a1a24 0%, #201a2e 100%)", borderBottom:"1px solid #2a2a3a", padding:"28px 2rem" }}>
+        <div style={{ maxWidth:"900px", margin:"0 auto", display:"flex", alignItems:"center", justifyContent:"center", gap:"20px", flexWrap:"wrap", textAlign:"center" }}>
+          <div style={{ fontSize:"36px", flexShrink:0 }}>🤝</div>
+          <div style={{ maxWidth:"560px" }}>
+            <div style={{ fontWeight:700, color:"#fff", fontSize:"16px", marginBottom:"4px" }}>
+              Join our online community
+            </div>
+            <div style={{ color:"#a0a0b0", fontSize:"13px", lineHeight:1.6 }}>
+              Share your sets and track your progress with fellow trainers — and get{" "}
+              <span style={{ color:"#ff6b35", fontWeight:700 }}>5% off every order</span>{" "}
+              for helping build the Pokémon TCG community here in SA.
+            </div>
+          </div>
+          <Link href="/community" className="pb-btn-primary" style={{ background:"#ff6b35", color:"#fff", padding:"11px 22px", borderRadius:"10px", textDecoration:"none", fontSize:"14px", fontWeight:700, display:"inline-block", flexShrink:0 }}>
+            Join the Community
+          </Link>
+        </div>
+      </div>
+
       {/* LIVE STATS */}
       <div style={{ background:"#12121a", borderBottom:"1px solid #2a2a3a", padding:"32px 2rem" }}>
         <div style={{ maxWidth:"900px", margin:"0 auto", display:"grid", gridTemplateColumns:"repeat(3, 1fr)", gap:"20px", textAlign:"center" }}>
