@@ -16,6 +16,7 @@ interface OrderItem {
 }
 interface Order {
   id: number; status: string; status_display: string; total_price: string;
+  shipping_cost: string; discount_percent: string; discount_amount: string;
   items: OrderItem[]; tracking: OrderTracking[];
   delivery_method: string; delivery_address_line1: string; delivery_address_line2: string;
   delivery_city: string; delivery_province: string; delivery_postal_code: string;
@@ -340,9 +341,23 @@ export default function OrderDetailPage() {
             <div style={{ fontSize:14, fontWeight:700, color:"#ff6b35", flexShrink:0 }}>R{parseFloat(item.subtotal).toFixed(2)}</div>
           </div>
         ))}
-        <div style={{ display:"flex", justifyContent:"space-between", marginTop:14, paddingTop:12, borderTop:"1px solid #2a2a3a" }}>
-          <span style={{ color:"#a0a0b0", fontSize:14 }}>Total</span>
-          <span style={{ fontWeight:700, color:"#ff6b35", fontSize:16 }}>R{parseFloat(order.total_price).toFixed(2)}</span>
+        <div style={{ marginTop:14, paddingTop:12, borderTop:"1px solid #2a2a3a", display:"flex", flexDirection:"column", gap:6 }}>
+          {parseFloat(order.discount_amount || "0") > 0 && (
+            <div style={{ display:"flex", justifyContent:"space-between" }}>
+              <span style={{ color:"#10B981", fontSize:13 }}>🤝 Community discount ({parseFloat(order.discount_percent || "0").toFixed(0)}%)</span>
+              <span style={{ color:"#10B981", fontSize:13, fontWeight:600 }}>-R{parseFloat(order.discount_amount).toFixed(2)}</span>
+            </div>
+          )}
+          {order.shipping_cost !== undefined && (
+            <div style={{ display:"flex", justifyContent:"space-between" }}>
+              <span style={{ color:"#a0a0b0", fontSize:13 }}>Shipping</span>
+              <span style={{ color:"#a0a0b0", fontSize:13 }}>R{parseFloat(order.shipping_cost || "0").toFixed(2)}</span>
+            </div>
+          )}
+          <div style={{ display:"flex", justifyContent:"space-between" }}>
+            <span style={{ color:"#a0a0b0", fontSize:14 }}>Total</span>
+            <span style={{ fontWeight:700, color:"#ff6b35", fontSize:16 }}>R{parseFloat(order.total_price).toFixed(2)}</span>
+          </div>
         </div>
       </div>
 

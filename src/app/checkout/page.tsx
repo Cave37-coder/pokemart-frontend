@@ -48,7 +48,14 @@ interface CartItem {
   product: { id: number; name: string; price: string; image_small_url: string; card_set: { code: string; name: string } } | null;
 }
 
-interface Cart { id: number; total: string; items: CartItem[]; }
+interface Cart {
+  id: number;
+  subtotal: string;
+  discount_percent: string;
+  discount_amount: string;
+  total: string;
+  items: CartItem[];
+}
 
 export default function CheckoutPage() {
   const router = useRouter();
@@ -100,9 +107,12 @@ export default function CheckoutPage() {
     if (!isCourier && !["coc","eft","payfast"].includes(payment)) setPayment("coc");
   }, [isCourier]);
 
-  const shippingCost = selectedDelivery?.price || 0;
-  const cartTotal    = parseFloat(cart?.total || "0");
-  const orderTotal   = cartTotal + shippingCost;
+  const shippingCost     = selectedDelivery?.price || 0;
+  const cartSubtotal     = parseFloat(cart?.subtotal || cart?.total || "0");
+  const discountPercent  = parseFloat(cart?.discount_percent || "0");
+  const discountAmount   = parseFloat(cart?.discount_amount || "0");
+  const cartTotal         = parseFloat(cart?.total || "0"); // post-discount
+  const orderTotal        = cartTotal + shippingCost;
   const items        = (cart?.items || []).filter(
     (item): item is CartItem & { product: NonNullable<CartItem["product"]> } => item.product !== null
   );
@@ -400,8 +410,13 @@ export default function CheckoutPage() {
 
             <div style={{ borderTop:"1px solid #2a2a3a", paddingTop:12, display:"flex", flexDirection:"column", gap:6 }}>
               <div style={{ display:"flex", justifyContent:"space-between", fontSize:13, color:"#a0a0b0" }}>
-                <span>Subtotal</span><span>R {cartTotal.toFixed(2)}</span>
+                <span>Subtotal</span><span>R {cartSubtotal.toFixed(2)}</span>
               </div>
+              {discountAmount > 0 && (
+                <div style={{ display:"flex", justifyContent:"space-between", fontSize:13, color:"#10B981" }}>
+                  <span>🤝 Community discount ({discountPercent.toFixed(0)}%)</span><span>-R {discountAmount.toFixed(2)}</span>
+                </div>
+              )}
               <div style={{ display:"flex", justifyContent:"space-between", fontSize:13, color:"#a0a0b0" }}>
                 <span>Shipping</span>
                 <span style={{ color:shippingCost===0?"#10B981":"#fff" }}>

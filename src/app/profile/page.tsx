@@ -480,6 +480,15 @@ export default function ProfilePage() {
             <a href="/community" style={{ color: "#ff6b35" }}>the Community page</a>. Uses the same public display name as your checklist settings.
           </p>
 
+          <div style={{
+            background: "#10B98115", border: "1px solid #10B98155", borderRadius: "8px",
+            padding: "10px 14px", marginBottom: "16px", fontSize: "12px", color: "#10B981", fontWeight: 600,
+          }}>
+            🤝 {communityProfilePublic
+              ? "You're getting 5% off every order, applied automatically at checkout."
+              : "Turning this on also unlocks 5% off all products, applied automatically at checkout."}
+          </div>
+
           <div style={{ marginBottom: "16px" }}>
             <label style={labelStyle}>Community Bio <span style={{ color: "#444", fontWeight: 400 }}>(optional)</span></label>
             <input

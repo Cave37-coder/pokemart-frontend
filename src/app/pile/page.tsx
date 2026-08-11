@@ -21,6 +21,9 @@ interface CartItem {
 
 interface Cart {
   id: number;
+  subtotal: string;
+  discount_percent: string;
+  discount_amount: string;
   total: string;
   items: CartItem[];
 }
@@ -94,6 +97,9 @@ export default function PilePage() {
   );
 
   const items = cart?.items || [];
+  const subtotal = parseFloat(cart?.subtotal || cart?.total || "0");
+  const discountPercent = parseFloat(cart?.discount_percent || "0");
+  const discountAmount = parseFloat(cart?.discount_amount || "0");
   const total = parseFloat(cart?.total || "0");
 
   return (
@@ -163,8 +169,14 @@ export default function PilePage() {
           <div style={{ background: "#1a1a24", border: "1px solid #2a2a3a", borderRadius: 12, padding: 20 }}>
             <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
               <span style={{ color: "#a0a0b0" }}>Subtotal ({items.length} cards)</span>
-              <span style={{ fontWeight: 700, color: "#fff", fontSize: 16 }}>R {total.toFixed(2)}</span>
+              <span style={{ fontWeight: 700, color: "#fff", fontSize: 16 }}>R {subtotal.toFixed(2)}</span>
             </div>
+            {discountAmount > 0 && (
+              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
+                <span style={{ color: "#10B981" }}>🤝 Community discount ({discountPercent.toFixed(0)}%)</span>
+                <span style={{ fontWeight: 700, color: "#10B981", fontSize: 14 }}>-R {discountAmount.toFixed(2)}</span>
+              </div>
+            )}
             <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 16, fontSize: 12, color: "#555" }}>
               <span>Shipping calculated at checkout</span>
             </div>

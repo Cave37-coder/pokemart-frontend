@@ -208,6 +208,21 @@ export default function CommunityPage() {
   const [q, setQ] = useState("");
   const [loading, setLoading] = useState(true);
 
+  // Community discount (2026-08-11): "5% discount on all products to anyone
+  // that is part of the community" -- personalizes the banner below based
+  // on whether this visitor already has a public community profile
+  // (the same opt-in that unlocks the discount at checkout).
+  const [isMember, setIsMember] = useState<boolean | null>(null); // null = logged out / unknown
+
+  useEffect(() => {
+    const token = localStorage.getItem("access_token");
+    if (!token) return;
+    authFetch("/api/auth/profile/")
+      .then((r) => r.json())
+      .then((data) => setIsMember(!!data.community_profile_public))
+      .catch(() => {});
+  }, []);
+
   useEffect(() => {
     if (tab === "friends") return;
     setLoading(true);
@@ -232,6 +247,26 @@ export default function CommunityPage() {
           <p style={{ color: "#555", fontSize: "13px", marginTop: "6px" }}>
             Browse other trainers&apos; public Pokédex collections and wishlists, see what the whole community is chasing, or connect with friends to share your full collection.
           </p>
+        </div>
+
+        {/* Community discount banner */}
+        <div style={{
+          background: isMember ? "#10B98115" : "#ff6b3515",
+          border: `1px solid ${isMember ? "#10B98155" : "#ff6b3555"}`,
+          borderRadius: "10px", padding: "14px 18px", marginBottom: "20px",
+          display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap",
+        }}>
+          <span style={{ fontSize: "20px" }}>🤝</span>
+          {isMember ? (
+            <span style={{ color: "#10B981", fontSize: "13px", fontWeight: 600 }}>
+              You&apos;re getting 5% off every order as a community member — it&apos;s applied automatically at checkout.
+            </span>
+          ) : (
+            <span style={{ color: "#ffb38a", fontSize: "13px", fontWeight: 600 }}>
+              Community members get 5% off all products, automatically at checkout.{" "}
+              <a href="/profile" style={{ color: "#ff6b35" }}>Make your profile public</a> to unlock it — free, takes a minute.
+            </span>
+          )}
         </div>
 
         <div style={{ display: "flex", gap: "10px", marginBottom: "20px" }}>
