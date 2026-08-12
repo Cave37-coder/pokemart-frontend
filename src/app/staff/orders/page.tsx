@@ -40,7 +40,7 @@ interface AdminOrder {
   id: number; status: string; status_display: string;
   customer_name: string; customer_email: string;
   payment_method: string; payment_method_display: string;
-  eft_confirmed: boolean; cash_confirmed: boolean; is_paid: boolean;
+  eft_confirmed: boolean; cash_confirmed: boolean; stripe_payment_intent: string; is_paid: boolean;
   total_price: string; discount_percent: string; discount_amount: string; shipping_cost: string;
   shipping_method: string; delivery_method: string;
   waybill_number: string; courier_name: string; courier_tracking_url: string;
@@ -94,6 +94,9 @@ function OrderManageRow({ order, onSaved }: { order: AdminOrder; onSaved: () => 
   const [courierName, setCourierName] = useState(order.courier_name);
   const [courierUrl, setCourierUrl] = useState(order.courier_tracking_url);
   const [note, setNote] = useState("");
+  const [eftConfirmed, setEftConfirmed] = useState(order.eft_confirmed);
+  const [cashConfirmed, setCashConfirmed] = useState(order.cash_confirmed);
+  const [paymentRef, setPaymentRef] = useState(order.stripe_payment_intent);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
@@ -104,7 +107,10 @@ function OrderManageRow({ order, onSaved }: { order: AdminOrder; onSaved: () => 
       const res = await authFetch(`/api/orders/${order.id}/status/`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status, note, waybill_number: waybill, courier_name: courierName, courier_tracking_url: courierUrl }),
+        body: JSON.stringify({
+          status, note, waybill_number: waybill, courier_name: courierName, courier_tracking_url: courierUrl,
+          eft_confirmed: eftConfirmed, cash_confirmed: cashConfirmed, stripe_payment_intent: paymentRef,
+        }),
       });
       if (!res.ok) throw new Error("Failed to update");
       onSaved();
@@ -114,31 +120,58 @@ function OrderManageRow({ order, onSaved }: { order: AdminOrder; onSaved: () => 
   };
 
   return (
-    <div style={{ background: "#12121a", border: "1px solid #2a2a3a", borderRadius: 8, padding: 14, marginTop: 6, display: "flex", flexWrap: "wrap", gap: 10, alignItems: "flex-end" }}>
-      <div>
-        <label style={{ fontSize: 10, color: "#888", display: "block", marginBottom: 3 }}>Status</label>
-        <select style={inp} value={status} onChange={(e) => setStatus(e.target.value)}>
-          {STATUS_CHOICES.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
-        </select>
+    <div style={{ background: "#12121a", border: "1px solid #2a2a3a", borderRadius: 8, padding: 14, marginTop: 6, display: "flex", flexDirection: "column", gap: 12 }}>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 10, alignItems: "flex-end" }}>
+        <div>
+          <label style={{ fontSize: 10, color: "#888", display: "block", marginBottom: 3 }}>Status</label>
+          <select style={inp} value={status} onChange={(e) => setStatus(e.target.value)}>
+            {STATUS_CHOICES.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
+          </select>
+        </div>
+        <div>
+          <label style={{ fontSize: 10, color: "#888", display: "block", marginBottom: 3 }}>Waybill / Tracking #</label>
+          <input style={inp} value={waybill} onChange={(e) => setWaybill(e.target.value)} placeholder="waybill number" />
+        </div>
+        <div>
+          <label style={{ fontSize: 10, color: "#888", display: "block", marginBottom: 3 }}>Courier</label>
+          <input style={inp} value={courierName} onChange={(e) => setCourierName(e.target.value)} placeholder="e.g. Pudo" />
+        </div>
+        <div>
+          <label style={{ fontSize: 10, color: "#888", display: "block", marginBottom: 3 }}>Tracking URL</label>
+          <input style={{ ...inp, width: 180 }} value={courierUrl} onChange={(e) => setCourierUrl(e.target.value)} placeholder="https://..." />
+        </div>
+        <div style={{ flex: 1, minWidth: 160 }}>
+          <label style={{ fontSize: 10, color: "#888", display: "block", marginBottom: 3 }}>Note (internal, optional)</label>
+          <input style={{ ...inp, width: "100%" }} value={note} onChange={(e) => setNote(e.target.value)} placeholder="visible in this order's tracking history" />
+        </div>
       </div>
-      <div>
-        <label style={{ fontSize: 10, color: "#888", display: "block", marginBottom: 3 }}>Waybill / Tracking #</label>
-        <input style={inp} value={waybill} onChange={(e) => setWaybill(e.target.value)} placeholder="waybill number" />
+
+      <div style={{ borderTop: "1px solid #2a2a3a", paddingTop: 12, display: "flex", flexWrap: "wrap", gap: 16, alignItems: "center" }}>
+        <span style={{ fontSize: 10, color: "#888", textTransform: "uppercase", letterSpacing: "0.05em" }}>Payment ({order.payment_method_display})</span>
+        {order.payment_method === "eft" && (
+          <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "#ddd", cursor: "pointer" }}>
+            <input type="checkbox" checked={eftConfirmed} onChange={(e) => setEftConfirmed(e.target.checked)} />
+            EFT payment received
+          </label>
+        )}
+        {order.payment_method === "coc" && (
+          <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "#ddd", cursor: "pointer" }}>
+            <input type="checkbox" checked={cashConfirmed} onChange={(e) => setCashConfirmed(e.target.checked)} />
+            Cash received
+          </label>
+        )}
+        {order.payment_method === "payfast" && (
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <span style={{ fontSize: 11, color: paymentRef ? "#4ade80" : "#dc2626" }}>{paymentRef ? "✅ Confirmed via PayFast webhook" : "❌ Awaiting PayFast confirmation"}</span>
+            <input style={{ ...inp, width: 200 }} value={paymentRef} onChange={(e) => setPaymentRef(e.target.value)} placeholder="PF payment ID (manual override)" />
+          </div>
+        )}
       </div>
-      <div>
-        <label style={{ fontSize: 10, color: "#888", display: "block", marginBottom: 3 }}>Courier</label>
-        <input style={inp} value={courierName} onChange={(e) => setCourierName(e.target.value)} placeholder="e.g. Pudo" />
+
+      <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+        <button style={btnPrimary} onClick={save} disabled={saving}>{saving ? "Saving…" : "Update Order"}</button>
+        {error && <span style={{ color: "#EF4444", fontSize: 11 }}>{error}</span>}
       </div>
-      <div>
-        <label style={{ fontSize: 10, color: "#888", display: "block", marginBottom: 3 }}>Tracking URL</label>
-        <input style={{ ...inp, width: 180 }} value={courierUrl} onChange={(e) => setCourierUrl(e.target.value)} placeholder="https://..." />
-      </div>
-      <div style={{ flex: 1, minWidth: 160 }}>
-        <label style={{ fontSize: 10, color: "#888", display: "block", marginBottom: 3 }}>Note (internal, optional)</label>
-        <input style={{ ...inp, width: "100%" }} value={note} onChange={(e) => setNote(e.target.value)} placeholder="visible in this order's tracking history" />
-      </div>
-      <button style={btnPrimary} onClick={save} disabled={saving}>{saving ? "Saving…" : "Update Order"}</button>
-      {error && <span style={{ color: "#EF4444", fontSize: 11 }}>{error}</span>}
     </div>
   );
 }
@@ -173,6 +206,25 @@ function OrdersTab() {
   const emailInvoice = (id: number) => {
     if (!window.confirm("Email this invoice to the customer? This sends a real email immediately.")) return;
     window.open(`${API_URL}/api/invoice/email/${id}/`, "_blank");
+  };
+
+  // One-click Paid toggle for EFT/Cash, right in the table row -- no need
+  // to open Manage just to tick "payment received". PayFast isn't
+  // clickable here since it's normally confirmed automatically by the
+  // webhook; manual override for that lives in Manage instead.
+  const [togglingId, setTogglingId] = useState<number | null>(null);
+  const togglePaid = async (o: AdminOrder) => {
+    if (o.payment_method === "payfast") return;
+    const field = o.payment_method === "eft" ? "eft_confirmed" : "cash_confirmed";
+    setTogglingId(o.id);
+    try {
+      const res = await authFetch(`/api/orders/${o.id}/status/`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ [field]: !o.is_paid }),
+      });
+      if (res.ok) load();
+    } finally { setTogglingId(null); }
   };
 
   return (
@@ -221,7 +273,23 @@ function OrdersTab() {
                     </td>
                     <td style={{ padding: "8px", fontSize: 12, color: "#ddd" }}>{o.customer_name}<div style={{ color: "#555", fontSize: 10 }}>{o.customer_email}</div></td>
                     <td style={{ padding: "8px" }}><StatusBadge status={o.status} label={o.status_display} /></td>
-                    <td style={{ padding: "8px", fontSize: 12 }}>{o.is_paid ? <span style={{ color: "#4ade80" }}>✅ {o.payment_method_display}</span> : <span style={{ color: "#dc2626" }}>❌ {o.payment_method_display}</span>}</td>
+                    <td style={{ padding: "8px", fontSize: 12 }}>
+                      {o.payment_method === "payfast" ? (
+                        o.is_paid ? <span style={{ color: "#4ade80" }}>✅ {o.payment_method_display}</span> : <span style={{ color: "#dc2626" }}>❌ {o.payment_method_display}</span>
+                      ) : (
+                        <button
+                          onClick={() => togglePaid(o)}
+                          disabled={togglingId === o.id}
+                          title="Click to toggle payment confirmation"
+                          style={{
+                            background: "transparent", border: "none", cursor: togglingId === o.id ? "wait" : "pointer",
+                            padding: 0, font: "inherit", color: o.is_paid ? "#4ade80" : "#dc2626",
+                          }}
+                        >
+                          {togglingId === o.id ? "…" : o.is_paid ? "✅" : "❌"} {o.payment_method_display}
+                        </button>
+                      )}
+                    </td>
                     <td style={{ padding: "8px", fontSize: 12, fontWeight: 700, color: "#fff" }}>{money(o.total_price)}</td>
                     <td style={{ padding: "8px", fontSize: 11, color: "#4ade80" }}>{parseFloat(o.discount_amount) > 0 ? `-${money(o.discount_amount)}` : "-"}</td>
                     <td style={{ padding: "8px", fontSize: 11, color: "#888" }}>{o.shipping_method}</td>
