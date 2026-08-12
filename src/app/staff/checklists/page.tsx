@@ -27,15 +27,38 @@ interface CustomerDetail {
   entries: Record<string, string[]>;
 }
 
+interface ActiveOrder {
+  id: number; status: string; status_display: string;
+  total_price: string; created_at: string;
+}
+
+interface SalesSummary {
+  active_orders: ActiveOrder[];
+  active_orders_total: string;
+  order_sales_total: string;
+  manual_invoice_total: string;
+  manual_invoice_count: number;
+  total_sales: string;
+}
+
 const card: React.CSSProperties = { background: "#1a1a24", border: "1px solid #2a2a3a", borderRadius: 12, padding: 16 };
 const btn: React.CSSProperties = { background: "#12121a", border: "1px solid #2a2a3a", color: "#a0a0b0", borderRadius: 6, padding: "8px 14px", fontSize: 12, cursor: "pointer" };
 const btnPrimary: React.CSSProperties = { ...btn, background: "#ff6b35", color: "#fff", border: "none", fontWeight: 600 };
 const inp: React.CSSProperties = { background: "#12121a", border: "1px solid #2a2a3a", borderRadius: 6, padding: "8px 12px", color: "#fff", fontSize: 13, flex: 1 };
 
+const STATUS_COLOR: Record<string, string> = {
+  awaiting_payment: "#c62828", pending_eft: "#e65100", pending: "#f9a825",
+  printed: "#1565c0", packed: "#6a1b9a", booked: "#00838f",
+  ready: "#00acc1", collected: "#43a047", invoiced: "#1b5e20", cancelled: "#757575",
+};
+
 function displayName(c: { first_name: string; last_name: string; username: string }) {
   const full = `${c.first_name} ${c.last_name}`.trim();
   return full || c.username;
 }
+
+function money(v: string | number) { return `R ${parseFloat(String(v || 0)).toFixed(2)}`; }
+function dateFmt(v: string) { return new Date(v).toLocaleDateString("en-ZA", { day: "2-digit", month: "short", year: "numeric" }); }
 
 function ChecklistsBody() {
   const router = useRouter();
@@ -44,6 +67,8 @@ function ChecklistsBody() {
   const [loading, setLoading] = useState(false);
   const [selected, setSelected] = useState<CustomerDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
+  const [sales, setSales] = useState<SalesSummary | null>(null);
+  const [salesLoading, setSalesLoading] = useState(false);
 
   const runSearch = useCallback(async (q: string) => {
     setLoading(true);
@@ -62,14 +87,21 @@ function ChecklistsBody() {
 
   const openCustomer = async (id: number) => {
     setDetailLoading(true);
+    setSalesLoading(true);
     setSelected(null);
+    setSales(null);
     try {
-      const res = await authFetch(`/api/checklists/admin/customer/${id}/`);
-      if (res.ok) setSelected(await res.json());
+      const [checklistRes, salesRes] = await Promise.all([
+        authFetch(`/api/checklists/admin/customer/${id}/`),
+        authFetch(`/api/orders/admin/customer-summary/${id}/`),
+      ]);
+      if (checklistRes.ok) setSelected(await checklistRes.json());
+      if (salesRes.ok) setSales(await salesRes.json());
     } catch (e) {
       if (e instanceof SessionExpiredError) router.push("/auth/login");
     } finally {
       setDetailLoading(false);
+      setSalesLoading(false);
     }
   };
 
@@ -139,6 +171,52 @@ function ChecklistsBody() {
                 {totalChecked(selected.entries)} cards checked across {Object.keys(selected.entries).length} set{Object.keys(selected.entries).length === 1 ? "" : "s"}
               </div>
             </div>
+
+            {/* Sales totals -- Michael: "Show active orders and their total
+                and then customers total sales, must include manual
+                invoices." */}
+            {salesLoading && <div style={{ color: "#555", fontSize: 12, marginBottom: 16 }}>Loading sales totals…</div>}
+            {!salesLoading && sales && (
+              <div style={{ ...card, marginBottom: 16 }}>
+                <div style={{ display: "flex", gap: 24, flexWrap: "wrap", marginBottom: sales.active_orders.length > 0 ? 14 : 0 }}>
+                  <div>
+                    <div style={{ color: "#555", fontSize: 10, textTransform: "uppercase", letterSpacing: "0.06em" }}>Total Sales</div>
+                    <div style={{ color: "#22c55e", fontSize: 20, fontWeight: 700 }}>{money(sales.total_sales)}</div>
+                    <div style={{ color: "#555", fontSize: 11, marginTop: 2 }}>
+                      {money(sales.order_sales_total)} orders + {money(sales.manual_invoice_total)} manual ({sales.manual_invoice_count})
+                    </div>
+                  </div>
+                  <div>
+                    <div style={{ color: "#555", fontSize: 10, textTransform: "uppercase", letterSpacing: "0.06em" }}>Active Orders</div>
+                    <div style={{ color: "#ff6b35", fontSize: 20, fontWeight: 700 }}>{money(sales.active_orders_total)}</div>
+                    <div style={{ color: "#555", fontSize: 11, marginTop: 2 }}>
+                      {sales.active_orders.length} order{sales.active_orders.length === 1 ? "" : "s"} in progress
+                    </div>
+                  </div>
+                </div>
+
+                {sales.active_orders.length > 0 && (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                    {sales.active_orders.map((o) => (
+                      <div key={o.id} style={{
+                        display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10,
+                        background: "#12121a", border: "1px solid #2a2a3a", borderRadius: 8, padding: "8px 12px",
+                      }}>
+                        <span style={{ color: "#fff", fontSize: 12, fontWeight: 600 }}>#{o.id}</span>
+                        <span style={{
+                          background: STATUS_COLOR[o.status] || "#333", color: "#fff", padding: "2px 8px",
+                          borderRadius: 10, fontSize: 10, fontWeight: 700, whiteSpace: "nowrap",
+                        }}>
+                          {o.status_display}
+                        </span>
+                        <span style={{ color: "#555", fontSize: 11 }}>{dateFmt(o.created_at)}</span>
+                        <span style={{ color: "#fff", fontSize: 12, fontWeight: 700, marginLeft: "auto" }}>{money(o.total_price)}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
 
             {totalChecked(selected.entries) === 0 ? (
               <div style={{ ...card, color: "#555", fontSize: 13, textAlign: "center", padding: 40 }}>
