@@ -36,6 +36,20 @@ const STATUS_COLOR: Record<string, string> = {
   ready: "#00acc1", collected: "#43a047", invoiced: "#1b5e20", cancelled: "#757575",
 };
 
+// Manual Invoice's own, shorter status set (2026-08-12) -- no courier/
+// booking stages of its own, see ManualInvoice.STATUS_CHOICES.
+const INVOICE_STATUS_CHOICES: [string, string][] = [
+  ["created", "Created"],
+  ["payment_confirmed", "Payment Confirmed"],
+  ["packed", "Packed"],
+  ["complete", "Complete"],
+  ["cancelled", "Cancelled"],
+];
+
+const INVOICE_STATUS_COLOR: Record<string, string> = {
+  created: "#546e7a", payment_confirmed: "#1565c0", packed: "#6a1b9a", complete: "#1b5e20", cancelled: "#757575",
+};
+
 interface AdminOrder {
   id: number; status: string; status_display: string;
   customer_name: string; customer_email: string;
@@ -48,7 +62,8 @@ interface AdminOrder {
 }
 
 interface ManualInvoice {
-  id: number; invoice_number: string; customer_name: string; customer_email: string; customer_phone: string;
+  id: number; invoice_number: string; status: string; status_display: string;
+  customer_name: string; customer_email: string; customer_phone: string;
   shipping_cost: string; discount_percent: string; discount_amount: string; subtotal: string; total: string;
   item_count: number; payment_received: boolean; payment_method: string; payment_method_display: string;
   created_at: string;
@@ -64,9 +79,9 @@ const inp: React.CSSProperties = { background: "#12121a", border: "1px solid #2a
 function money(v: string | number) { return `R ${parseFloat(String(v || 0)).toFixed(2)}`; }
 function dateFmt(v: string) { return new Date(v).toLocaleString("en-ZA", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" }); }
 
-function StatusBadge({ status, label }: { status: string; label: string }) {
+function StatusBadge({ status, label, colors = STATUS_COLOR }: { status: string; label: string; colors?: Record<string, string> }) {
   return (
-    <span style={{ background: STATUS_COLOR[status] || "#333", color: "#fff", padding: "2px 8px", borderRadius: 10, fontSize: 10, fontWeight: 700, whiteSpace: "nowrap" }}>
+    <span style={{ background: colors[status] || "#333", color: "#fff", padding: "2px 8px", borderRadius: 10, fontSize: 10, fontWeight: 700, whiteSpace: "nowrap" }}>
       {label}
     </span>
   );
@@ -330,14 +345,17 @@ function InvoicesTab() {
   const [data, setData] = useState<Paginated<ManualInvoice> | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [invStatus, setInvStatus] = useState("");
   const [paymentReceived, setPaymentReceived] = useState("");
   const [search, setSearch] = useState("");
   const [searchInput, setSearchInput] = useState("");
   const [page, setPage] = useState(1);
+  const [savingId, setSavingId] = useState<number | null>(null);
 
   const load = useCallback(() => {
     setLoading(true);
     const params = new URLSearchParams();
+    if (invStatus) params.set("status", invStatus);
     if (paymentReceived) params.set("payment_received", paymentReceived);
     if (search) params.set("search", search);
     params.set("page", String(page));
@@ -346,7 +364,7 @@ function InvoicesTab() {
       .then((d) => { setData(d); setError(""); })
       .catch((e) => { if (e instanceof SessionExpiredError) setError("Session expired — please log in again."); else setError("Failed to load manual invoices."); })
       .finally(() => setLoading(false));
-  }, [paymentReceived, search, page]);
+  }, [invStatus, paymentReceived, search, page]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -355,10 +373,26 @@ function InvoicesTab() {
     window.open(`${API_URL}/admin/orders/manualinvoice/${id}/manual-invoice-email/`, "_blank");
   };
 
+  const updateStatus = async (id: number, newStatus: string) => {
+    setSavingId(id);
+    try {
+      const res = await authFetch(`/api/orders/admin/manual-invoices/${id}/status/`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: newStatus }),
+      });
+      if (res.ok) load();
+    } finally { setSavingId(null); }
+  };
+
   return (
     <div>
       <div style={{ display: "flex", gap: 10, marginBottom: 16, flexWrap: "wrap", alignItems: "center" }}>
         <a style={btnPrimary} href={`${API_URL}/admin/orders/manualinvoice/pos/`} target="_blank" rel="noreferrer">+ New Manual Invoice</a>
+        <select style={inp} value={invStatus} onChange={(e) => { setInvStatus(e.target.value); setPage(1); }}>
+          <option value="">Any status</option>
+          {INVOICE_STATUS_CHOICES.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
+        </select>
         <select style={inp} value={paymentReceived} onChange={(e) => { setPaymentReceived(e.target.value); setPage(1); }}>
           <option value="">Any payment status</option>
           <option value="true">Payment received</option>
@@ -380,7 +414,7 @@ function InvoicesTab() {
           <table style={{ width: "100%", borderCollapse: "collapse" }}>
             <thead>
               <tr style={{ borderBottom: "2px solid #2a2a3a" }}>
-                {["Invoice", "Customer", "Items", "Discount", "Shipping", "Total", "Payment", "Date", ""].map((h) => (
+                {["Invoice", "Customer", "Status", "Items", "Discount", "Shipping", "Total", "Payment", "Date", ""].map((h) => (
                   <th key={h} style={{ textAlign: "left", padding: "6px 8px", fontSize: 10, color: "#888", textTransform: "uppercase" }}>{h}</th>
                 ))}
               </tr>
@@ -392,6 +426,19 @@ function InvoicesTab() {
                     <a href={`${API_URL}/admin/orders/manualinvoice/${inv.id}/change/`} target="_blank" rel="noreferrer" style={{ color: "#ff6b35", fontWeight: 700 }}>{inv.invoice_number}</a>
                   </td>
                   <td style={{ padding: "8px", fontSize: 12, color: "#ddd" }}>{inv.customer_name}<div style={{ color: "#555", fontSize: 10 }}>{inv.customer_email}</div></td>
+                  <td style={{ padding: "8px" }}>
+                    <select
+                      value={inv.status}
+                      disabled={savingId === inv.id}
+                      onChange={(e) => updateStatus(inv.id, e.target.value)}
+                      style={{
+                        background: INVOICE_STATUS_COLOR[inv.status] || "#333", color: "#fff", border: "none",
+                        borderRadius: 10, padding: "3px 6px", fontSize: 10, fontWeight: 700, cursor: savingId === inv.id ? "wait" : "pointer",
+                      }}
+                    >
+                      {INVOICE_STATUS_CHOICES.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
+                    </select>
+                  </td>
                   <td style={{ padding: "8px", fontSize: 12, color: "#888" }}>{inv.item_count}</td>
                   <td style={{ padding: "8px", fontSize: 11, color: "#4ade80" }}>{parseFloat(inv.discount_amount) > 0 ? `-${money(inv.discount_amount)} (${inv.discount_percent}%)` : "-"}</td>
                   <td style={{ padding: "8px", fontSize: 11, color: "#888" }}>{money(inv.shipping_cost)}</td>
