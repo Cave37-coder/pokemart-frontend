@@ -499,6 +499,7 @@ export default function StaffOrdersPage() {
             Print/PDF/Email actions open in a new tab and need you to be logged into{" "}
             <a href={`${API_URL}/admin/`} target="_blank" rel="noreferrer" style={{ color: "#ff6b35" }}>Django admin</a> in this browser.
             {" · "}<a href={`${API_URL}/admin/store-overview/`} target="_blank" rel="noreferrer" style={{ color: "#ff6b35" }}>Store Overview →</a>
+            {" · "}<Link href="/staff/checklists" style={{ color: "#ff6b35" }}>Customer Checklists →</Link>
           </p>
         </div>
 
