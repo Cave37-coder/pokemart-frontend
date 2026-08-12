@@ -28,8 +28,9 @@ interface CustomerDetail {
 }
 
 interface ActiveOrder {
-  id: number; status: string; status_display: string;
-  total_price: string; created_at: string;
+  type: "order" | "manual_invoice";
+  id: number; label: string; status: string; status_display: string;
+  total: string; created_at: string;
 }
 
 interface SalesSummary {
@@ -50,6 +51,13 @@ const STATUS_COLOR: Record<string, string> = {
   awaiting_payment: "#c62828", pending_eft: "#e65100", pending: "#f9a825",
   printed: "#1565c0", packed: "#6a1b9a", booked: "#00838f",
   ready: "#00acc1", collected: "#43a047", invoiced: "#1b5e20", cancelled: "#757575",
+};
+
+// Manual Invoice's own, shorter status set -- different color language than
+// Order's since the status codes overlap ('packed') but mean a different
+// stage (see ManualInvoice.STATUS_CHOICES).
+const INVOICE_STATUS_COLOR: Record<string, string> = {
+  created: "#546e7a", payment_confirmed: "#1565c0", packed: "#6a1b9a", complete: "#1b5e20", cancelled: "#757575",
 };
 
 function displayName(c: { first_name: string; last_name: string; username: string }) {
@@ -187,32 +195,42 @@ function ChecklistsBody() {
                     </div>
                   </div>
                   <div>
-                    <div style={{ color: "#555", fontSize: 10, textTransform: "uppercase", letterSpacing: "0.06em" }}>Active Orders</div>
+                    <div style={{ color: "#555", fontSize: 10, textTransform: "uppercase", letterSpacing: "0.06em" }}>Active (Orders + Manual)</div>
                     <div style={{ color: "#ff6b35", fontSize: 20, fontWeight: 700 }}>{money(sales.active_orders_total)}</div>
                     <div style={{ color: "#555", fontSize: 11, marginTop: 2 }}>
-                      {sales.active_orders.length} order{sales.active_orders.length === 1 ? "" : "s"} in progress
+                      {sales.active_orders.length} in progress
                     </div>
                   </div>
                 </div>
 
                 {sales.active_orders.length > 0 && (
                   <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                    {sales.active_orders.map((o) => (
-                      <div key={o.id} style={{
-                        display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10,
-                        background: "#12121a", border: "1px solid #2a2a3a", borderRadius: 8, padding: "8px 12px",
-                      }}>
-                        <span style={{ color: "#fff", fontSize: 12, fontWeight: 600 }}>#{o.id}</span>
-                        <span style={{
-                          background: STATUS_COLOR[o.status] || "#333", color: "#fff", padding: "2px 8px",
-                          borderRadius: 10, fontSize: 10, fontWeight: 700, whiteSpace: "nowrap",
+                    {sales.active_orders.map((o) => {
+                      const colors = o.type === "manual_invoice" ? INVOICE_STATUS_COLOR : STATUS_COLOR;
+                      return (
+                        <div key={`${o.type}-${o.id}`} style={{
+                          display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10,
+                          background: "#12121a", border: "1px solid #2a2a3a", borderRadius: 8, padding: "8px 12px",
                         }}>
-                          {o.status_display}
-                        </span>
-                        <span style={{ color: "#555", fontSize: 11 }}>{dateFmt(o.created_at)}</span>
-                        <span style={{ color: "#fff", fontSize: 12, fontWeight: 700, marginLeft: "auto" }}>{money(o.total_price)}</span>
-                      </div>
-                    ))}
+                          <span style={{ color: "#fff", fontSize: 12, fontWeight: 600 }}>{o.label}</span>
+                          <span style={{
+                            background: o.type === "manual_invoice" ? "#3a2a12" : "#12121a",
+                            color: o.type === "manual_invoice" ? "#ffb74d" : "#a0a0b0",
+                            border: "1px solid #2a2a3a", padding: "1px 6px", borderRadius: 6, fontSize: 9, fontWeight: 700,
+                          }}>
+                            {o.type === "manual_invoice" ? "MANUAL" : "ORDER"}
+                          </span>
+                          <span style={{
+                            background: colors[o.status] || "#333", color: "#fff", padding: "2px 8px",
+                            borderRadius: 10, fontSize: 10, fontWeight: 700, whiteSpace: "nowrap",
+                          }}>
+                            {o.status_display}
+                          </span>
+                          <span style={{ color: "#555", fontSize: 11 }}>{dateFmt(o.created_at)}</span>
+                          <span style={{ color: "#fff", fontSize: 12, fontWeight: 700, marginLeft: "auto" }}>{money(o.total)}</span>
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
               </div>
