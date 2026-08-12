@@ -64,6 +64,7 @@ interface AdminOrder {
 interface ManualInvoice {
   id: number; invoice_number: string; status: string; status_display: string;
   customer_name: string; customer_email: string; customer_phone: string;
+  user_id: number | null; user_username: string | null;
   shipping_cost: string; discount_percent: string; discount_amount: string; subtotal: string; total: string;
   item_count: number; payment_received: boolean; payment_method: string; payment_method_display: string;
   created_at: string;
@@ -425,7 +426,15 @@ function InvoicesTab() {
                   <td style={{ padding: "8px", fontSize: 12 }}>
                     <a href={`${API_URL}/admin/orders/manualinvoice/${inv.id}/change/`} target="_blank" rel="noreferrer" style={{ color: "#ff6b35", fontWeight: 700 }}>{inv.invoice_number}</a>
                   </td>
-                  <td style={{ padding: "8px", fontSize: 12, color: "#ddd" }}>{inv.customer_name}<div style={{ color: "#555", fontSize: 10 }}>{inv.customer_email}</div></td>
+                  <td style={{ padding: "8px", fontSize: 12, color: "#ddd" }}>
+                    {inv.customer_name}
+                    {inv.user_username && (
+                      <span style={{ background: "#17332444", border: "1px solid #2fbf71", color: "#4ade80", borderRadius: 4, padding: "1px 5px", fontSize: 9, fontWeight: 700, marginLeft: 6 }}>
+                        🔗 @{inv.user_username}
+                      </span>
+                    )}
+                    <div style={{ color: "#555", fontSize: 10 }}>{inv.customer_email}</div>
+                  </td>
                   <td style={{ padding: "8px" }}>
                     <select
                       value={inv.status}
