@@ -35,6 +35,7 @@ function NavGlow() {
 
 export default function NavBar() {
   const [user, setUser] = useState<string | null>(null);
+  const [isStaff, setIsStaff] = useState(false);
   const [pileCount, setPileCount] = useState(0);
   const [unreadCount, setUnreadCount] = useState(0);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -74,7 +75,11 @@ export default function NavBar() {
   useEffect(() => {
     const stored = localStorage.getItem("user");
     if (stored) {
-      try { setUser(JSON.parse(stored)?.username || null); } catch {}
+      try {
+        const parsed = JSON.parse(stored);
+        setUser(parsed?.username || null);
+        setIsStaff(!!(parsed?.is_staff || parsed?.is_superuser));
+      } catch {}
     }
     fetchPileCount();
     fetchUnreadCount();
@@ -99,6 +104,7 @@ export default function NavBar() {
     localStorage.removeItem("refresh_token");
     localStorage.removeItem("user");
     setUser(null);
+    setIsStaff(false);
     setPileCount(0);
     window.location.href = "/";
   };
@@ -243,6 +249,13 @@ export default function NavBar() {
           <Link href="/orders" className="pb-nav-link" style={{ color: isActive("/orders") ? "#fff" : "#a0a0b0", textDecoration: "none", fontSize: "14px", position: "relative" }}>
             My Orders
             {isActive("/orders") && <span className="pb-nav-underline"><FoilUnderline /></span>}
+          </Link>
+        )}
+
+        {isStaff && (
+          <Link href="/staff/orders" className="pb-nav-link" style={{ color: isActive("/staff/orders") ? "#fff" : "#a0a0b0", textDecoration: "none", fontSize: "14px", position: "relative" }}>
+            🛠 Staff
+            {isActive("/staff/orders") && <span className="pb-nav-underline"><FoilUnderline /></span>}
           </Link>
         )}
 
