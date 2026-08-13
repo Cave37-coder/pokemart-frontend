@@ -39,6 +39,15 @@ interface PendingFriend {
   created_at: string;
 }
 
+interface UserSearchResult {
+  id: number;
+  username: string;
+  display_name: string;
+  avatar: string | null;
+  trainer_level: string;
+  friendship_status: "self" | "friends" | "pending_sent" | "pending_received" | "none";
+}
+
 const sectionStyle = {
   background: "#16161f", border: "1px solid #2a2a3a",
   borderRadius: "12px", padding: "24px", marginBottom: "20px",
@@ -55,6 +64,44 @@ function FriendsTab() {
   const [loading, setLoading] = useState(true);
   const [loggedOut, setLoggedOut] = useState(false);
   const [busyId, setBusyId] = useState<number | null>(null);
+
+  // Find a Trainer (2026-08-12) -- Michael: "There is no way to search for
+  // users, to make friends?" The Trainers tab only ever surfaces customers
+  // who've opted into full public browsing, which is a much bigger ask than
+  // just wanting to add someone as a friend -- this is a separate, lighter
+  // search purely for finding someone by username to send a request.
+  const [searchQ, setSearchQ] = useState("");
+  const [searchResults, setSearchResults] = useState<UserSearchResult[] | null>(null);
+  const [searching, setSearching] = useState(false);
+  const [requestingId, setRequestingId] = useState<number | null>(null);
+
+  useEffect(() => {
+    const q = searchQ.trim();
+    if (q.length < 2) { setSearchResults(null); return; }
+    setSearching(true);
+    const t = setTimeout(() => {
+      authFetch(`/api/community/users/search/?q=${encodeURIComponent(q)}`)
+        .then((r) => r.json())
+        .then((data) => setSearchResults(data.results || []))
+        .catch(() => setSearchResults([]))
+        .finally(() => setSearching(false));
+    }, 300);
+    return () => clearTimeout(t);
+  }, [searchQ]);
+
+  const sendRequestTo = async (userId: number) => {
+    setRequestingId(userId);
+    try {
+      await authFetch("/api/community/friends/request/", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ to_user_id: userId }),
+      });
+      setSearchResults((prev) => prev && prev.map((u) => u.id === userId ? { ...u, friendship_status: "pending_sent" } : u));
+      load();
+    } finally {
+      setRequestingId(null);
+    }
+  };
 
   const load = useCallback(() => {
     if (!localStorage.getItem("access_token")) { setLoggedOut(true); setLoading(false); return; }
@@ -111,6 +158,58 @@ function FriendsTab() {
 
   return (
     <>
+      <p style={{ color: "#a0a0b0", fontSize: "11px", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "10px" }}>
+        🔎 Find a Trainer
+      </p>
+      <div style={{ ...sectionStyle, marginBottom: "24px" }}>
+        <input
+          value={searchQ}
+          onChange={(e) => setSearchQ(e.target.value)}
+          placeholder="Search by username…"
+          style={{
+            width: "100%", background: "#1a1a2e", border: "1px solid #2a2a3a",
+            borderRadius: "8px", padding: "10px 14px", color: "#fff", fontSize: "14px", boxSizing: "border-box",
+            marginBottom: searchQ.trim().length >= 2 ? "14px" : 0,
+          }}
+        />
+        {searchQ.trim().length >= 2 && (
+          searching ? (
+            <p style={{ color: "#555", fontSize: "13px", margin: 0 }}>Searching…</p>
+          ) : !searchResults || searchResults.length === 0 ? (
+            <p style={{ color: "#555", fontSize: "13px", margin: 0 }}>No trainers found with that username.</p>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+              {searchResults.map((u) => (
+                <div key={u.id} style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                  <img src={u.avatar || "/pokebulk-logo.png"} alt="" style={{ width: "32px", height: "32px", borderRadius: "50%", objectFit: "cover", background: "#1a1a24" }} />
+                  <span style={{ color: "#fff", fontSize: "13px", flex: 1 }}>
+                    {TRAINER_BADGE[u.trainer_level] || "🌱"} {u.display_name}
+                    {u.display_name.toLowerCase() !== u.username.toLowerCase() && (
+                      <span style={{ color: "#555", fontSize: "11px" }}> (@{u.username})</span>
+                    )}
+                  </span>
+                  {u.friendship_status === "friends" ? (
+                    <span style={{ color: "#4ade80", fontSize: "12px", fontWeight: 600 }}>✓ Friends</span>
+                  ) : u.friendship_status === "pending_sent" ? (
+                    <span style={{ color: "#a0a0b0", fontSize: "12px" }}>Requested</span>
+                  ) : u.friendship_status === "pending_received" ? (
+                    <span style={{ color: "#a0a0b0", fontSize: "12px" }}>Sent you a request ↑</span>
+                  ) : (
+                    <button
+                      disabled={requestingId === u.id}
+                      onClick={() => sendRequestTo(u.id)}
+                      style={{ background: "#ff6b35", color: "#fff", border: "none", borderRadius: "6px", padding: "6px 12px", fontSize: "12px", fontWeight: 600, cursor: "pointer" }}
+                    >
+                      {requestingId === u.id ? "Sending…" : "Add Friend"}
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+          )
+        )}
+      </div>
+
       {pendingReceived.length > 0 && (
         <>
           <p style={{ color: "#a0a0b0", fontSize: "11px", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "10px" }}>
