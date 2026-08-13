@@ -42,6 +42,7 @@ interface PendingFriend {
 interface UserSearchResult {
   id: number;
   username: string;
+  real_name: string;
   display_name: string;
   avatar: string | null;
   trainer_level: string;
@@ -165,7 +166,7 @@ function FriendsTab() {
         <input
           value={searchQ}
           onChange={(e) => setSearchQ(e.target.value)}
-          placeholder="Search by username…"
+          placeholder="Search by username or name…"
           style={{
             width: "100%", background: "#1a1a2e", border: "1px solid #2a2a3a",
             borderRadius: "8px", padding: "10px 14px", color: "#fff", fontSize: "14px", boxSizing: "border-box",
@@ -186,6 +187,9 @@ function FriendsTab() {
                     {TRAINER_BADGE[u.trainer_level] || "🌱"} {u.display_name}
                     {u.display_name.toLowerCase() !== u.username.toLowerCase() && (
                       <span style={{ color: "#555", fontSize: "11px" }}> (@{u.username})</span>
+                    )}
+                    {u.real_name && u.real_name.toLowerCase() !== u.display_name.toLowerCase() && (
+                      <span style={{ color: "#555", fontSize: "11px" }}> — {u.real_name}</span>
                     )}
                   </span>
                   {u.friendship_status === "friends" ? (
