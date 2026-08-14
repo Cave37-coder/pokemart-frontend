@@ -52,15 +52,18 @@ const INVOICE_STATUS_CHOICES: [string, string][] = [
 // type too, seperate dropdown" -- separate from status, so staff can record
 // HOW an invoice was paid (and mark it received) independently of the
 // fulfillment status, since Packed no longer auto-confirms payment.
+// 'trade' added 2026-08-12 (Michael: "Add additional payment method to all
+// 'Trade/Credit'") -- matches ManualInvoice.PAYMENT_METHOD_CHOICES.
 const PAYMENT_TYPE_CHOICES: [string, string][] = [
   ["", "Not received"],
   ["eft", "EFT"],
   ["cash", "Cash"],
   ["card", "Card"],
+  ["trade", "Trade/Credit"],
 ];
 
 const PAYMENT_TYPE_COLOR: Record<string, string> = {
-  "": "#7a2a2a", eft: "#1b5e20", cash: "#1b5e20", card: "#1b5e20",
+  "": "#7a2a2a", eft: "#1b5e20", cash: "#1b5e20", card: "#1b5e20", trade: "#6a1b9a",
 };
 
 const INVOICE_STATUS_COLOR: Record<string, string> = {
