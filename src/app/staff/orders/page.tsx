@@ -75,6 +75,7 @@ interface AdminOrder {
   customer_name: string; customer_email: string;
   payment_method: string; payment_method_display: string;
   eft_confirmed: boolean; cash_confirmed: boolean; stripe_payment_intent: string; is_paid: boolean;
+  paid_via: string | null;
   total_price: string; discount_percent: string; discount_amount: string; shipping_cost: string;
   shipping_method: string; delivery_method: string;
   waybill_number: string; courier_name: string; courier_tracking_url: string;
@@ -182,26 +183,33 @@ function OrderManageRow({ order, onSaved }: { order: AdminOrder; onSaved: () => 
         </div>
       </div>
 
-      <div style={{ borderTop: "1px solid #2a2a3a", paddingTop: 12, display: "flex", flexWrap: "wrap", gap: 16, alignItems: "center" }}>
-        <span style={{ fontSize: 10, color: "#888", textTransform: "uppercase", letterSpacing: "0.05em" }}>Payment ({order.payment_method_display})</span>
-        {order.payment_method === "eft" && (
+      <div style={{ borderTop: "1px solid #2a2a3a", paddingTop: 12, display: "flex", flexDirection: "column", gap: 10 }}>
+        {/* Actual payment method used often differs from what the customer
+            selected at checkout -- e.g. selected Cash on Collection but
+            actually paid EFT or PayFast on collection (2026-08-14, Michael:
+            "need to show customers option selected and then actual payment
+            method used"). So the checkout selection is shown as reference
+            only; all three confirmation controls are always available
+            regardless of it. PayFast stays the one fully-automatic method --
+            confirmed purely by a payment ID being present, no separate
+            checkbox needed. */}
+        <span style={{ fontSize: 10, color: "#888" }}>
+          Customer selected at checkout: <strong style={{ color: "#ccc" }}>{order.payment_method_display}</strong>
+        </span>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 16, alignItems: "center" }}>
           <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "#ddd", cursor: "pointer" }}>
             <input type="checkbox" checked={eftConfirmed} onChange={(e) => setEftConfirmed(e.target.checked)} />
-            EFT payment received
+            EFT received
           </label>
-        )}
-        {order.payment_method === "coc" && (
           <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "#ddd", cursor: "pointer" }}>
             <input type="checkbox" checked={cashConfirmed} onChange={(e) => setCashConfirmed(e.target.checked)} />
             Cash received
           </label>
-        )}
-        {order.payment_method === "payfast" && (
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <span style={{ fontSize: 11, color: paymentRef ? "#4ade80" : "#dc2626" }}>{paymentRef ? "✅ Confirmed via PayFast webhook" : "❌ Awaiting PayFast confirmation"}</span>
-            <input style={{ ...inp, width: 200 }} value={paymentRef} onChange={(e) => setPaymentRef(e.target.value)} placeholder="PF payment ID (manual override)" />
+            <span style={{ fontSize: 11, color: paymentRef ? "#4ade80" : "#888" }}>{paymentRef ? "✅ PayFast confirmed" : "PayFast (automatic)"}</span>
+            <input style={{ ...inp, width: 180 }} value={paymentRef} onChange={(e) => setPaymentRef(e.target.value)} placeholder="PF payment ID" />
           </div>
-        )}
+        </div>
       </div>
 
       <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
@@ -311,18 +319,18 @@ function OrdersTab() {
                     <td style={{ padding: "8px" }}><StatusBadge status={o.status} label={o.status_display} /></td>
                     <td style={{ padding: "8px", fontSize: 12 }}>
                       {o.payment_method === "payfast" ? (
-                        o.is_paid ? <span style={{ color: "#4ade80" }}>✅ {o.payment_method_display}</span> : <span style={{ color: "#dc2626" }}>❌ {o.payment_method_display}</span>
+                        o.is_paid ? <span style={{ color: "#4ade80" }}>✅ {o.paid_via || o.payment_method_display}</span> : <span style={{ color: "#dc2626" }}>❌ {o.payment_method_display}</span>
                       ) : (
                         <button
                           onClick={() => togglePaid(o)}
                           disabled={togglingId === o.id}
-                          title="Click to toggle payment confirmation"
+                          title={o.is_paid && o.paid_via && o.paid_via !== o.payment_method_display ? `Selected ${o.payment_method_display}, paid via ${o.paid_via} — click Manage for details` : "Click to toggle payment confirmation"}
                           style={{
                             background: "transparent", border: "none", cursor: togglingId === o.id ? "wait" : "pointer",
                             padding: 0, font: "inherit", color: o.is_paid ? "#4ade80" : "#dc2626",
                           }}
                         >
-                          {togglingId === o.id ? "…" : o.is_paid ? "✅" : "❌"} {o.payment_method_display}
+                          {togglingId === o.id ? "…" : o.is_paid ? "✅" : "❌"} {o.is_paid ? (o.paid_via || o.payment_method_display) : o.payment_method_display}
                         </button>
                       )}
                     </td>
