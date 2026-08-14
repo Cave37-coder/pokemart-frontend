@@ -868,10 +868,15 @@ function Checklist({ code, onBack }: { code: string; onBack: () => void }) {
                       DB: '#795548', TR: '#607d8b', SE: '#ff9800',
                     };
                     const col = vcColor[v.vc] || '#a0a0b0';
+                    // Buy button on Grid View (2026-08-12, Michael: "went
+                    // customer goes to 'Grid View' please add the buy
+                    // button for available stock!") -- same
+                    // inStock/buying/buyCard wiring List View already uses,
+                    // just laid out for the grid's smaller per-card footprint.
+                    const canBuy = !checks[key] && inStock.has(`${v.pid}_${v.vc}`);
                     return (
-                      <div key={v.vc} onClick={() => toggle(key, v.zar)}
-                        style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px', cursor: 'pointer' }}>
-                        <div style={{ position: 'relative' }}>
+                      <div key={v.vc} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px' }}>
+                        <div onClick={() => toggle(key, v.zar)} style={{ position: 'relative', cursor: 'pointer' }}>
                           <div style={{
                             background: checks[key] ? col : '#1a1a2e',
                             border: `1px solid ${col}`,
@@ -883,7 +888,16 @@ function Checklist({ code, onBack }: { code: string; onBack: () => void }) {
                             <span style={{ position: 'absolute', top: '-5px', right: '-5px', fontSize: '7px', color: '#CECBF6' }} title="Cosmos Holo">✦</span>
                           )}
                         </div>
-                        <span style={{ fontSize: '7px', color: '#444' }}>{v.zar > 0 ? 'R'+v.zar.toFixed(0) : ''}</span>
+                        {canBuy ? (
+                          <button
+                            onClick={() => buyCard(v.pid, v.vc, key, v.zar, card.name)}
+                            disabled={buying.has(key)}
+                            style={{ fontSize: '7px', color: '#ff6b35', background: 'transparent', border: '1px solid #ff6b35', borderRadius: '3px', padding: '0px 3px', fontWeight: 700, lineHeight: 1.4, cursor: buying.has(key) ? 'default' : 'pointer', opacity: buying.has(key) ? 0.5 : 1 }}>
+                            {buying.has(key) ? '…' : 'Buy'}
+                          </button>
+                        ) : (
+                          <span style={{ fontSize: '7px', color: '#444' }}>{v.zar > 0 ? 'R'+v.zar.toFixed(0) : ''}</span>
+                        )}
                       </div>
                     );
                   })}
