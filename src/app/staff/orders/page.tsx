@@ -37,11 +37,13 @@ const STATUS_COLOR: Record<string, string> = {
 };
 
 // Manual Invoice's own, shorter status set (2026-08-12) -- no courier/
-// booking stages of its own, see ManualInvoice.STATUS_CHOICES.
+// booking stages of its own, see ManualInvoice.STATUS_CHOICES. Packed comes
+// before Payment Confirmed (2026-08-12 follow-up, Michael: "most clients
+// make payment when collecting") -- matches the model's own choices order.
 const INVOICE_STATUS_CHOICES: [string, string][] = [
   ["created", "Created"],
-  ["payment_confirmed", "Payment Confirmed"],
   ["packed", "Packed"],
+  ["payment_confirmed", "Payment Confirmed"],
   ["complete", "Complete"],
   ["cancelled", "Cancelled"],
 ];
