@@ -48,6 +48,21 @@ const INVOICE_STATUS_CHOICES: [string, string][] = [
   ["cancelled", "Cancelled"],
 ];
 
+// Payment type dropdown (2026-08-12) -- Michael: "please add the payment
+// type too, seperate dropdown" -- separate from status, so staff can record
+// HOW an invoice was paid (and mark it received) independently of the
+// fulfillment status, since Packed no longer auto-confirms payment.
+const PAYMENT_TYPE_CHOICES: [string, string][] = [
+  ["", "Not received"],
+  ["eft", "EFT"],
+  ["cash", "Cash"],
+  ["card", "Card"],
+];
+
+const PAYMENT_TYPE_COLOR: Record<string, string> = {
+  "": "#7a2a2a", eft: "#1b5e20", cash: "#1b5e20", card: "#1b5e20",
+};
+
 const INVOICE_STATUS_COLOR: Record<string, string> = {
   created: "#546e7a", payment_confirmed: "#1565c0", packed: "#6a1b9a", complete: "#1b5e20", cancelled: "#757575",
 };
@@ -388,6 +403,21 @@ function InvoicesTab() {
     } finally { setSavingId(null); }
   };
 
+  const updatePaymentType = async (id: number, method: string) => {
+    setSavingId(id);
+    try {
+      const res = await authFetch(`/api/orders/admin/manual-invoices/${id}/status/`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        // Picking an actual method (EFT/Cash/Card) means it's been received;
+        // reverting to "Not received" un-ticks payment_received too, rather
+        // than leaving the two fields out of sync.
+        body: JSON.stringify({ payment_method: method, payment_received: !!method }),
+      });
+      if (res.ok) load();
+    } finally { setSavingId(null); }
+  };
+
   return (
     <div>
       <div style={{ display: "flex", gap: 10, marginBottom: 16, flexWrap: "wrap", alignItems: "center" }}>
@@ -454,7 +484,19 @@ function InvoicesTab() {
                   <td style={{ padding: "8px", fontSize: 11, color: "#4ade80" }}>{parseFloat(inv.discount_amount) > 0 ? `-${money(inv.discount_amount)} (${inv.discount_percent}%)` : "-"}</td>
                   <td style={{ padding: "8px", fontSize: 11, color: "#888" }}>{money(inv.shipping_cost)}</td>
                   <td style={{ padding: "8px", fontSize: 12, fontWeight: 700, color: "#fff" }}>{money(inv.total)}</td>
-                  <td style={{ padding: "8px", fontSize: 12 }}>{inv.payment_received ? <span style={{ color: "#4ade80" }}>✅ {inv.payment_method_display || "Paid"}</span> : <span style={{ color: "#dc2626" }}>❌ Pending</span>}</td>
+                  <td style={{ padding: "8px" }}>
+                    <select
+                      value={inv.payment_method}
+                      disabled={savingId === inv.id}
+                      onChange={(e) => updatePaymentType(inv.id, e.target.value)}
+                      style={{
+                        background: PAYMENT_TYPE_COLOR[inv.payment_method] || "#7a2a2a", color: "#fff", border: "none",
+                        borderRadius: 10, padding: "3px 6px", fontSize: 10, fontWeight: 700, cursor: savingId === inv.id ? "wait" : "pointer",
+                      }}
+                    >
+                      {PAYMENT_TYPE_CHOICES.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
+                    </select>
+                  </td>
                   <td style={{ padding: "8px", fontSize: 11, color: "#888" }}>{dateFmt(inv.created_at)}</td>
                   <td style={{ padding: "8px", whiteSpace: "nowrap" }}>
                     <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
