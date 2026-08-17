@@ -118,6 +118,11 @@ export default function NavBar() {
     { href: "/accessories", label: "Accessories" },
     { href: "/bundles", label: "Bundles" },
     { href: "/sell", label: "Sell Cards" },
+    // External site (separate Railway app) -- community-run scammer lookup,
+    // not part of this codebase. Opens in a new tab since it's a different
+    // domain (2026-08-17, Michael: "add to pokebulk.co.za, even add a page
+    // or link, whichever is easiest and cleanest").
+    { href: "https://safety.pokebulk.co.za", label: "Scam Check", external: true },
     { href: "/about", label: "About" },
   ];
 
@@ -223,27 +228,44 @@ export default function NavBar() {
       )}
 
       <div className={`pb-nav-links${menuOpen ? " pb-nav-open" : ""}`} style={{ display: "flex", gap: "1.5rem", alignItems: "center", position: "relative", zIndex: 1 }}>
-        {navLinks.map((link) => (
-          <Link
-            key={link.href}
-            href={link.href}
-            className="pb-nav-link"
-            style={{
-              color: isActive(link.href) ? "#fff" : "#a0a0b0",
-              textDecoration: "none", fontSize: "14px",
-              display: "flex", alignItems: "center", gap: "5px",
-            }}
-          >
-            {link.label}
-            {link.beta && (
-              <span style={{
-                background: "#ff6b3520", color: "#ff6b35", fontSize: "9px", fontWeight: 700,
-                padding: "1px 5px", borderRadius: "4px", letterSpacing: "0.03em",
-              }}>BETA</span>
-            )}
-            {isActive(link.href) && <span className="pb-nav-underline"><FoilUnderline /></span>}
-          </Link>
-        ))}
+        {navLinks.map((link) =>
+          link.external ? (
+            <a
+              key={link.href}
+              href={link.href}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="pb-nav-link"
+              style={{
+                color: "#a0a0b0",
+                textDecoration: "none", fontSize: "14px",
+                display: "flex", alignItems: "center", gap: "5px",
+              }}
+            >
+              🛡️ {link.label}
+            </a>
+          ) : (
+            <Link
+              key={link.href}
+              href={link.href}
+              className="pb-nav-link"
+              style={{
+                color: isActive(link.href) ? "#fff" : "#a0a0b0",
+                textDecoration: "none", fontSize: "14px",
+                display: "flex", alignItems: "center", gap: "5px",
+              }}
+            >
+              {link.label}
+              {link.beta && (
+                <span style={{
+                  background: "#ff6b3520", color: "#ff6b35", fontSize: "9px", fontWeight: 700,
+                  padding: "1px 5px", borderRadius: "4px", letterSpacing: "0.03em",
+                }}>BETA</span>
+              )}
+              {isActive(link.href) && <span className="pb-nav-underline"><FoilUnderline /></span>}
+            </Link>
+          )
+        )}
 
         {user && (
           <Link href="/orders" className="pb-nav-link" style={{ color: isActive("/orders") ? "#fff" : "#a0a0b0", textDecoration: "none", fontSize: "14px", position: "relative" }}>
