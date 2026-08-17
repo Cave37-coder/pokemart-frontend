@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { authFetch } from "@/lib/api";
@@ -39,6 +39,8 @@ export default function NavBar() {
   const [pileCount, setPileCount] = useState(0);
   const [unreadCount, setUnreadCount] = useState(0);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [moreOpen, setMoreOpen] = useState(false);
+  const moreRef = useRef<HTMLDivElement>(null);
   const pathname = usePathname();
 
   const fetchPileCount = async () => {
@@ -95,9 +97,23 @@ export default function NavBar() {
     };
   }, []);
 
-  // Close the mobile dropdown whenever the route changes -- otherwise it
-  // stays open and covers the new page after tapping a link.
-  useEffect(() => { setMenuOpen(false); }, [pathname]);
+  // Close the mobile dropdown and the desktop "More" menu whenever the
+  // route changes -- otherwise they stay open and cover the new page.
+  useEffect(() => { setMenuOpen(false); setMoreOpen(false); }, [pathname]);
+
+  // Close the "More" dropdown on an outside click (desktop only -- on
+  // mobile its contents render flattened into the hamburger list instead
+  // of as a floating panel, see the .pb-more-menu mobile override below).
+  useEffect(() => {
+    if (!moreOpen) return;
+    const onClick = (e: MouseEvent) => {
+      if (moreRef.current && !moreRef.current.contains(e.target as Node)) {
+        setMoreOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", onClick);
+    return () => document.removeEventListener("mousedown", onClick);
+  }, [moreOpen]);
 
   const logout = () => {
     localStorage.removeItem("access_token");
@@ -109,12 +125,19 @@ export default function NavBar() {
     window.location.href = "/";
   };
 
-  const navLinks = [
+  // Split into the links people use every visit (always inline) and the
+  // rest (grouped under "More" on desktop -- 2026-08-17, Michael: "the nav
+  // bar is crowded, how can I declutter"). On mobile everything still
+  // shows flattened in the hamburger list, see .pb-more-menu below.
+  const primaryLinks = [
     { href: "/cards", label: "Browse Cards" },
     { href: "/pokedex", label: "Pokédex" },
-    { href: "/checklists", label: "Checklists" },
     { href: "/community", label: "Community" },
     { href: "/decklist", label: "Deck Builder", beta: true },
+  ];
+
+  const moreLinks = [
+    { href: "/checklists", label: "Checklists" },
     { href: "/accessories", label: "Accessories" },
     { href: "/bundles", label: "Bundles" },
     { href: "/sell", label: "Sell Cards" },
@@ -127,6 +150,44 @@ export default function NavBar() {
   ];
 
   const isActive = (href: string) => pathname === href || pathname?.startsWith(href + "/");
+
+  const renderLink = (link: { href: string; label: string; beta?: boolean; external?: boolean }) =>
+    link.external ? (
+      <a
+        key={link.href}
+        href={link.href}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="pb-nav-link"
+        style={{
+          color: "#a0a0b0",
+          textDecoration: "none", fontSize: "14px",
+          display: "flex", alignItems: "center", gap: "5px",
+        }}
+      >
+        🛡️ {link.label}
+      </a>
+    ) : (
+      <Link
+        key={link.href}
+        href={link.href}
+        className="pb-nav-link"
+        style={{
+          color: isActive(link.href) ? "#fff" : "#a0a0b0",
+          textDecoration: "none", fontSize: "14px",
+          display: "flex", alignItems: "center", gap: "5px",
+        }}
+      >
+        {link.label}
+        {link.beta && (
+          <span style={{
+            background: "#ff6b3520", color: "#ff6b35", fontSize: "9px", fontWeight: 700,
+            padding: "1px 5px", borderRadius: "4px", letterSpacing: "0.03em",
+          }}>BETA</span>
+        )}
+        {isActive(link.href) && <span className="pb-nav-underline"><FoilUnderline /></span>}
+      </Link>
+    );
 
   return (
     <nav style={{
@@ -195,6 +256,24 @@ export default function NavBar() {
           }
           .pb-nav-links .pb-nav-signin { display: block !important; text-align: center; margin: 8px 20px; width: calc(100% - 40px); }
           .pb-nav-links .pb-nav-underline { display: none; }
+
+          /* The "More" dropdown only makes sense on desktop (hover/click a
+             floating panel). On mobile the hamburger list already stacks
+             everything full-width, so instead of nesting a dropdown inside
+             a dropdown, hide the toggle button and force the panel to
+             always render, flattened into the same list as everything
+             else -- it just becomes more rows in the hamburger menu. */
+          .pb-nav-links .pb-more-btn { display: none !important; }
+          .pb-nav-links .pb-more-menu {
+            display: flex !important;
+            position: static !important;
+            background: transparent !important;
+            border: none !important;
+            box-shadow: none !important;
+            padding: 0 !important;
+            min-width: 0 !important;
+            width: 100%;
+          }
         }
       `}</style>
 
@@ -228,44 +307,31 @@ export default function NavBar() {
       )}
 
       <div className={`pb-nav-links${menuOpen ? " pb-nav-open" : ""}`} style={{ display: "flex", gap: "1.5rem", alignItems: "center", position: "relative", zIndex: 1 }}>
-        {navLinks.map((link) =>
-          link.external ? (
-            <a
-              key={link.href}
-              href={link.href}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="pb-nav-link"
-              style={{
-                color: "#a0a0b0",
-                textDecoration: "none", fontSize: "14px",
-                display: "flex", alignItems: "center", gap: "5px",
-              }}
-            >
-              🛡️ {link.label}
-            </a>
-          ) : (
-            <Link
-              key={link.href}
-              href={link.href}
-              className="pb-nav-link"
-              style={{
-                color: isActive(link.href) ? "#fff" : "#a0a0b0",
-                textDecoration: "none", fontSize: "14px",
-                display: "flex", alignItems: "center", gap: "5px",
-              }}
-            >
-              {link.label}
-              {link.beta && (
-                <span style={{
-                  background: "#ff6b3520", color: "#ff6b35", fontSize: "9px", fontWeight: 700,
-                  padding: "1px 5px", borderRadius: "4px", letterSpacing: "0.03em",
-                }}>BETA</span>
-              )}
-              {isActive(link.href) && <span className="pb-nav-underline"><FoilUnderline /></span>}
-            </Link>
-          )
-        )}
+        {primaryLinks.map(renderLink)}
+
+        <div className="pb-more" ref={moreRef} style={{ position: "relative" }}>
+          <button
+            className="pb-nav-link pb-more-btn"
+            onClick={() => setMoreOpen((o) => !o)}
+            aria-expanded={moreOpen}
+            style={{
+              background: "transparent", border: "none", cursor: "pointer", font: "inherit",
+              color: moreLinks.some((l) => isActive(l.href)) || moreOpen ? "#fff" : "#a0a0b0",
+              fontSize: "14px", display: "flex", alignItems: "center", gap: "4px", padding: 0,
+            }}
+          >
+            More {moreOpen ? "▲" : "▾"}
+          </button>
+          <div className={`pb-more-menu${moreOpen ? " pb-more-menu-open" : ""}`} style={{
+            display: moreOpen ? "flex" : "none",
+            position: "absolute", top: "calc(100% + 14px)", right: 0,
+            background: "#1a1a24", border: "1px solid #2a2a3a", borderRadius: "10px",
+            padding: "8px", flexDirection: "column", minWidth: "180px", gap: "2px",
+            boxShadow: "0 12px 24px rgba(0,0,0,0.4)", zIndex: 50,
+          }}>
+            {moreLinks.map(renderLink)}
+          </div>
+        </div>
 
         {user && (
           <Link href="/orders" className="pb-nav-link" style={{ color: isActive("/orders") ? "#fff" : "#a0a0b0", textDecoration: "none", fontSize: "14px", position: "relative" }}>
