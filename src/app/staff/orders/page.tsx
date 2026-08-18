@@ -511,6 +511,13 @@ function InvoicesTab() {
                   <td style={{ padding: "8px", fontSize: 11, color: "#888" }}>{dateFmt(inv.created_at)}</td>
                   <td style={{ padding: "8px", whiteSpace: "nowrap" }}>
                     <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+                      {/* Edit Items only while status is Created (2026-08-18,
+                          Michael: "add or remove items... only while order is
+                          'Created' status") -- backend also refuses to serve/
+                          save the screen otherwise, this just hides the link. */}
+                      {inv.status === "created" && (
+                        <a style={{ ...btn, background: "#6a1b9a", color: "#fff", border: "none" }} href={`${API_URL}/admin/orders/manualinvoice/${inv.id}/manual-invoice-pos-edit/`} target="_blank" rel="noreferrer">✏️ Edit Items</a>
+                      )}
                       <a style={btn} href={`${API_URL}/admin/orders/manualinvoice/${inv.id}/manual-invoice-pull-sheet/`} target="_blank" rel="noreferrer">🖨 Pull Sheet</a>
                       <a style={btn} href={`${API_URL}/admin/orders/manualinvoice/${inv.id}/manual-invoice-print/`} target="_blank" rel="noreferrer">📄 Invoice</a>
                       <a style={btn} href={`${API_URL}/admin/orders/manualinvoice/${inv.id}/manual-invoice-pdf/`} target="_blank" rel="noreferrer">⬇ PDF</a>
