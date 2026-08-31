@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { trackAddShippingInfo } from "@/lib/analytics";
 import BackButton from "@/components/BackButton";
+import { EFT_DETAILS } from "@/lib/bankingDetails";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://pokemart-api-production.up.railway.app";
 
@@ -26,14 +27,6 @@ const COURIER_PAYMENT = [
   { id: "eft",     label: "EFT / Bank Transfer", desc: "Pay into our bank account. Order dispatched once payment reflects." },
   { id: "payfast", label: "PayFast",             desc: "Pay securely by card, instant EFT or SnapScan via PayFast." },
 ];
-
-const EFT_DETAILS = {
-  name:   "Poke Bulk SA",
-  bank:   "Nedbank",
-  type:   "Current Account",
-  acc:    "1301474037",
-  branch: "198765",
-};
 
 interface Profile {
   first_name: string; last_name: string; email: string; phone_number: string;

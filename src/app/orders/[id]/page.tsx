@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { useParams, useSearchParams } from "next/navigation";
 import { trackPurchase } from "@/lib/analytics";
 import BackButton from "@/components/BackButton";
+import { EFT_DETAILS } from "@/lib/bankingDetails";
 
 interface OrderTracking {
   id: number; status: string; status_display: string;
@@ -38,14 +39,6 @@ const STATUS_COLOR: Record<string,string> = {
   pending:"#888", printed:"#3B82F6", packed:"#8B5CF6",
   booked:"#F59E0B", ready:"#10B981", collected:"#059669",
   invoiced:"#1D4ED8", cancelled:"#EF4444",
-};
-
-const EFT_DETAILS = {
-  name: "Poke Bulk SA",
-  bank: "Nedbank",
-  type: "Current Account",
-  acc: "1301474037",
-  branch: "198765",
 };
 
 function fmt(dt: string) {
