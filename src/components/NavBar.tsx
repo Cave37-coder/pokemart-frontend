@@ -145,7 +145,7 @@ export default function NavBar() {
     // not part of this codebase. Opens in a new tab since it's a different
     // domain (2026-08-17, Michael: "add to pokebulk.co.za, even add a page
     // or link, whichever is easiest and cleanest").
-    { href: "https://safety.pokebulk.co.za", label: "Scam Check", external: true },
+    { href: "https://safety.pokebulk.co.za", label: "PokeGuard", external: true },
     { href: "/about", label: "About" },
   ];
 
