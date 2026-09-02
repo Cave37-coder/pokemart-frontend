@@ -109,6 +109,35 @@ function getProgress(code: string) {
 
 function fmt(zar: number) { return 'R ' + zar.toFixed(2); }
 
+// ── CSV export (Michael, 2026-09-02: Checklists CSV export -- a full list
+// with highlighted/owned status, and a "needed" pull list of just what's
+// missing). Reuses the same full variant names as the pull sheet / invoice
+// (orders/views.py VARIANT_LABEL_FULL) so what a customer exports reads
+// the same as what staff see when picking the order -- the bare vc code
+// (e.g. "RH") on its own means nothing outside this codebase.
+const VARIANT_LABEL_FULL: Record<string, string> = {
+  N: 'Normal', H: 'Holo', RH: 'Reverse Holo',
+  PB: 'Poke Ball', MB: 'Master Ball', LB: 'Love Ball',
+  FB: 'Friend Ball', QB: 'Quick Ball', UB: 'Ultra Ball',
+  DB: 'Dusk Ball', TR: 'Team Rocket', SE: 'Secret',
+  PBP: 'PB Pattern', MBP: 'MB Pattern',
+  CC: 'Code Card', TT: 'Trick or Trade',
+};
+
+function csvCell(value: string): string {
+  return /[",\n]/.test(value) ? '"' + value.replace(/"/g, '""') + '"' : value;
+}
+function downloadCsv(filename: string, header: string[], rows: string[][]) {
+  const csv = [header, ...rows].map(r => r.map(csvCell).join(',')).join('\r\n');
+  // Leading BOM so Excel opens the accented characters in card names correctly.
+  const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
 // ── OVERVIEW ─────────────────────────────────────────────────────────────────
 function Overview({ onOpen }: { onOpen: (code: string) => void }) {
   const [query, setQuery] = useState('');
@@ -414,6 +443,7 @@ function Checklist({ code, onBack }: { code: string; onBack: () => void }) {
   const [logoUrl, setLogoUrl] = useState('');
   const [symbolUrl, setSymbolUrl] = useState('');
   const [buying, setBuying] = useState<Set<string>>(new Set());
+  const [emailingPullList, setEmailingPullList] = useState(false);
 
   useEffect(() => {
     fetch(`${API_BASE}/api/sets/`)
@@ -640,6 +670,64 @@ function Checklist({ code, onBack }: { code: string; onBack: () => void }) {
   const eraColor = ERA_COLORS[set.era] || '#ff6b35';
   const sorted = [...set.cards].sort((a, b) => (parseInt(a.num) || 9999) - (parseInt(b.num) || 9999));
 
+  // ── CSV export handlers ──────────────────────────────────────────────
+  const exportFullListCsv = () => {
+    const rows: string[][] = [];
+    sorted.forEach(card => {
+      card.variants.forEach(v => {
+        const key = card.num + '_' + v.vc;
+        rows.push([card.num, card.name, card.rarity, VARIANT_LABEL_FULL[v.vc] || v.vc, checks[key] ? 'Yes' : 'No']);
+      });
+    });
+    downloadCsv(`${code}_full_checklist.csv`, ['Card #', 'Name', 'Rarity', 'Variant', 'Highlighted'], rows);
+  };
+
+  const buildNeededRows = () => {
+    const rows: { num: string; name: string; variant: string }[] = [];
+    sorted.forEach(card => {
+      card.variants.forEach(v => {
+        const key = card.num + '_' + v.vc;
+        if (!checks[key]) rows.push({ num: card.num, name: card.name, variant: VARIANT_LABEL_FULL[v.vc] || v.vc });
+      });
+    });
+    return rows;
+  };
+
+  const exportNeededListCsv = () => {
+    const needed = buildNeededRows();
+    if (needed.length === 0) { alert("You're not missing anything from this set!"); return; }
+    downloadCsv(`${code}_needed_list.csv`, ['Card #', 'Name', 'Variant'], needed.map(r => [r.num, r.name, r.variant]));
+  };
+
+  const emailNeededList = async () => {
+    const token = localStorage.getItem('access_token');
+    if (!token) { router.push('/auth/login'); return; }
+    const needed = buildNeededRows();
+    if (needed.length === 0) { alert("You're not missing anything from this set!"); return; }
+    setEmailingPullList(true);
+    try {
+      const res = await authFetch('/api/checklists/email-pull-list/', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ card_set: code, set_name: set.name, rows: needed }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({} as { error?: string }));
+        alert(err.error || 'Could not email the pull list — please try again.');
+        return;
+      }
+      alert(`Your needed list for ${set.name} was emailed to Poke Bulk.`);
+    } catch (e) {
+      if (e instanceof SessionExpiredError) {
+        router.push('/auth/login');
+      } else {
+        alert('Network error — could not email the pull list.');
+      }
+    } finally {
+      setEmailingPullList(false);
+    }
+  };
+
   return (
     <div style={{ padding: '16px' }}>
       <div style={{ display: 'flex', gap: '10px', alignItems: 'center', marginBottom: '14px', flexWrap: 'wrap' }}>
@@ -660,6 +748,9 @@ function Checklist({ code, onBack }: { code: string; onBack: () => void }) {
         <button onClick={() => setViewMode('grid')} style={{ background: viewMode==='grid' ? eraColor : '#1e1e2a', color: viewMode==='grid' ? '#fff' : '#a0a0b0', border: '1px solid #2a2a3a', padding: '7px 13px', borderRadius: '7px', fontSize: '12px', cursor: 'pointer' }}>⊞ Grid</button>
         <button onClick={() => window.print()} style={{ background: '#1e1e2a', color: '#a0a0b0', border: '1px solid #2a2a3a', padding: '7px 13px', borderRadius: '7px', fontSize: '12px', cursor: 'pointer' }}>🖨 Print</button>
         <button onClick={resetSet} style={{ background: 'transparent', color: '#ff4444', border: '1px solid #ff4444', padding: '7px 13px', borderRadius: '7px', fontSize: '12px', cursor: 'pointer' }}>Reset</button>
+        <button onClick={exportFullListCsv} style={{ background: '#1e1e2a', color: '#a0a0b0', border: '1px solid #2a2a3a', padding: '7px 13px', borderRadius: '7px', fontSize: '12px', cursor: 'pointer' }}>⬇ Full List CSV</button>
+        <button onClick={exportNeededListCsv} style={{ background: '#1e1e2a', color: '#a0a0b0', border: '1px solid #2a2a3a', padding: '7px 13px', borderRadius: '7px', fontSize: '12px', cursor: 'pointer' }}>⬇ Needed List CSV</button>
+        <button onClick={emailNeededList} disabled={emailingPullList} style={{ background: 'transparent', color: eraColor, border: `1px solid ${eraColor}`, padding: '7px 13px', borderRadius: '7px', fontSize: '12px', cursor: emailingPullList ? 'default' : 'pointer', opacity: emailingPullList ? 0.6 : 1 }}>{emailingPullList ? 'Emailing…' : '✉ Email Needed List to Poke Bulk'}</button>
       </div>
 
       {/* Stats bar */}
