@@ -132,12 +132,12 @@ export default function NavBar() {
   const primaryLinks = [
     { href: "/cards", label: "Browse Cards" },
     { href: "/pokedex", label: "Pokédex" },
+    { href: "/checklists", label: "Checklists" },
     { href: "/community", label: "Community" },
-    { href: "/decklist", label: "Deck Builder", beta: true },
   ];
 
   const moreLinks = [
-    { href: "/checklists", label: "Checklists" },
+    { href: "/decklist", label: "Deck Builder", beta: true },
     { href: "/accessories", label: "Accessories" },
     { href: "/bundles", label: "Bundles" },
     { href: "/sell", label: "Sell Cards" },
