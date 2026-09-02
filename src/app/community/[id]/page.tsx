@@ -25,6 +25,14 @@ interface ChecklistCompletion {
   tier_label: string;
 }
 
+interface InProgressSet {
+  set_code: string;
+  set_name: string;
+  owned: number;
+  total: number;
+  pct: number;
+}
+
 type FriendshipStatus = "self" | "friends" | "pending_sent" | "pending_received" | "none";
 
 interface PublicProfile {
@@ -41,6 +49,7 @@ interface PublicProfile {
   friendship_status: FriendshipStatus;
   is_friend: boolean;
   checklist_completions: ChecklistCompletion[];
+  in_progress_sets: InProgressSet[];
   full_pokedex?: { caught_pokedex_numbers: number[]; caught_card_images: Record<string, string> };
   full_checklist?: { entries: Record<string, string[]> };
 }
@@ -324,6 +333,31 @@ export default function PublicProfilePage() {
                   }}>
                     <span style={{ color: "#fff", fontWeight: 600 }}>{c.set_name}</span>
                     <span style={{ color: "#ff6b35", marginLeft: "8px", fontWeight: 700 }}>{c.tier_label}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* 2026-09-02, Michael: "put the sets the people are building on
+              their profile, so people can find common ground to become
+              friends too" -- sets with SOME progress but not finished yet,
+              separate from the completed tiers above. */}
+          {profile.in_progress_sets && profile.in_progress_sets.length > 0 && (
+            <div style={sectionStyle}>
+              <p style={{ color: "#a0a0b0", fontSize: "11px", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", margin: "0 0 14px 0" }}>
+                🛠 Currently Building
+              </p>
+              <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+                {profile.in_progress_sets.map((s) => (
+                  <div key={s.set_code}>
+                    <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "4px" }}>
+                      <span style={{ color: "#fff", fontSize: "13px", fontWeight: 600 }}>{s.set_name}</span>
+                      <span style={{ color: "#a0a0b0", fontSize: "12px" }}>{s.owned}/{s.total} &middot; {s.pct}%</span>
+                    </div>
+                    <div style={{ background: "#1a1a24", borderRadius: "999px", height: "6px", overflow: "hidden" }}>
+                      <div style={{ background: "#ff6b35", height: "100%", width: `${s.pct}%` }} />
+                    </div>
                   </div>
                 ))}
               </div>

@@ -1,10 +1,19 @@
 "use client";
 import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { authFetch } from "@/lib/api";
 import WishlistHeartButton from "@/components/WishlistHeartButton";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://pokemart-api-production.up.railway.app";
+
+interface BuildingSet {
+  set_code: string;
+  set_name: string;
+  owned: number;
+  total: number;
+  pct: number;
+}
 
 interface PublicCard {
   id: number;
@@ -14,6 +23,16 @@ interface PublicCard {
   community_bio: string;
   species_collected: number;
   wishlist_count: number;
+  building: BuildingSet[];
+}
+
+interface PublicWisher {
+  id: number;
+  display_name: string;
+  avatar: string | null;
+  trainer_level: string;
+  community_bio: string;
+  messaging_enabled: boolean;
 }
 
 interface MostWantedItem {
@@ -24,6 +43,7 @@ interface MostWantedItem {
   price: string;
   wanted_by: number;
   card_set: { name: string };
+  wishers: PublicWisher[];
 }
 
 interface FriendCard {
@@ -304,6 +324,154 @@ function FriendsTab() {
   );
 }
 
+// 2026-09-02, Michael: "The most wanted list has no interaction! ... you
+// don't know who it is wanting the card and i have no way to notify the
+// person that i can help" -- rows expand to show who's after the card
+// (from the new `wishers` field on each item) with a Reach Out compose box
+// that reuses the same trade-requests/create endpoint the profile page's
+// "I have this" button already calls, so a message sent this way shows up
+// in Messages exactly like any other trade request would.
+function MostWantedList({ items, myUserId }: { items: MostWantedItem[]; myUserId: number | null }) {
+  const router = useRouter();
+  const [expandedId, setExpandedId] = useState<number | null>(null);
+  const [composeFor, setComposeFor] = useState<{ productId: number; userId: number } | null>(null);
+  const [composeMsg, setComposeMsg] = useState("");
+  const [sending, setSending] = useState(false);
+  const [sentKeys, setSentKeys] = useState<Set<string>>(new Set());
+
+  const openCompose = (productId: number, userId: number) => {
+    if (!localStorage.getItem("access_token")) { router.push("/auth/login"); return; }
+    setComposeFor({ productId, userId });
+    setComposeMsg("");
+  };
+
+  const send = async () => {
+    if (!composeFor) return;
+    setSending(true);
+    try {
+      const res = await authFetch("/api/community/trade-requests/create/", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          to_user_id: composeFor.userId,
+          wanted_product_id: composeFor.productId,
+          message: composeMsg,
+        }),
+      });
+      if (res.ok) {
+        setSentKeys((prev) => new Set(prev).add(`${composeFor.productId}:${composeFor.userId}`));
+        setComposeFor(null);
+        setComposeMsg("");
+        window.dispatchEvent(new Event("messages-updated"));
+      }
+    } finally {
+      setSending(false);
+    }
+  };
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+      {items.map((c, i) => {
+        const expanded = expandedId === c.id;
+        const wishers = (c.wishers || []).filter((w) => w.id !== myUserId);
+        return (
+          <div key={c.id} style={{
+            background: "#16161f", border: "1px solid #2a2a3a", borderRadius: "10px", overflow: "hidden",
+          }}>
+            <div
+              onClick={() => wishers.length > 0 && setExpandedId(expanded ? null : c.id)}
+              style={{
+                display: "flex", alignItems: "center", gap: "14px", padding: "12px 16px",
+                cursor: wishers.length > 0 ? "pointer" : "default",
+              }}
+            >
+              <span style={{ color: "#ff6b35", fontWeight: 700, fontSize: "14px", width: "24px" }}>#{i + 1}</span>
+              <img
+                src={c.image_small_url || c.image_url}
+                alt={c.name}
+                style={{ width: "40px", height: "55px", objectFit: "contain", borderRadius: "4px", background: "#0e0e16" }}
+              />
+              <div style={{ flex: 1 }}>
+                <div style={{ color: "#fff", fontSize: "14px", fontWeight: 600 }}>{c.name}</div>
+                <div style={{ color: "#a0a0b0", fontSize: "12px" }}>{c.card_set?.name}</div>
+              </div>
+              <div style={{ color: "#ff6b35", fontSize: "13px", fontWeight: 700, whiteSpace: "nowrap" }}>
+                💛 {c.wanted_by} want this{wishers.length > 0 ? (expanded ? " ▲" : " ▾") : ""}
+              </div>
+              <WishlistHeartButton productId={c.id} variant="tile" />
+            </div>
+
+            {expanded && wishers.length > 0 && (
+              <div style={{ borderTop: "1px solid #2a2a3a", padding: "12px 16px", display: "flex", flexDirection: "column", gap: "10px" }}>
+                <p style={{ color: "#a0a0b0", fontSize: "11px", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", margin: "0 0 2px 0" }}>
+                  Who wants this
+                </p>
+                {wishers.map((w) => {
+                  const key = `${c.id}:${w.id}`;
+                  const composingHere = composeFor?.productId === c.id && composeFor?.userId === w.id;
+                  return (
+                    <div key={w.id}>
+                      <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                        <Link href={`/community/${w.id}`} style={{ display: "flex", alignItems: "center", gap: "10px", flex: 1, textDecoration: "none" }}>
+                          <img src={w.avatar || "/pokebulk-logo.png"} alt="" style={{ width: "28px", height: "28px", borderRadius: "50%", objectFit: "cover", background: "#1a1a24" }} />
+                          <span style={{ color: "#fff", fontSize: "13px" }}>
+                            {TRAINER_BADGE[w.trainer_level] || "🌱"} {w.display_name}
+                          </span>
+                        </Link>
+                        {sentKeys.has(key) ? (
+                          <span style={{ color: "#66cc66", fontSize: "12px", fontWeight: 600 }}>✓ Sent</span>
+                        ) : !w.messaging_enabled ? (
+                          <span style={{ color: "#555", fontSize: "11px" }}>Not accepting messages</span>
+                        ) : (
+                          <button
+                            onClick={() => composingHere ? setComposeFor(null) : openCompose(c.id, w.id)}
+                            style={{
+                              background: "transparent", border: "1px solid #ff6b35", color: "#ff6b35",
+                              borderRadius: "6px", padding: "5px 12px", fontSize: "11px", fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap",
+                            }}
+                          >
+                            {composingHere ? "Cancel" : "Reach out"}
+                          </button>
+                        )}
+                      </div>
+                      {composingHere && (
+                        <div style={{ marginTop: "8px", marginLeft: "38px" }}>
+                          <textarea
+                            value={composeMsg}
+                            onChange={(e) => setComposeMsg(e.target.value)}
+                            placeholder={`Let ${w.display_name} know you can help with this card…`}
+                            rows={2}
+                            style={{
+                              width: "100%", background: "#1a1a2e", border: "1px solid #2a2a3a",
+                              borderRadius: "8px", padding: "8px 12px", color: "#fff", fontSize: "13px",
+                              boxSizing: "border-box", resize: "vertical", marginBottom: "8px",
+                            }}
+                          />
+                          <button
+                            onClick={send}
+                            disabled={sending || !composeMsg.trim()}
+                            style={{
+                              background: sending ? "#333" : "#ff6b35", color: "#fff", border: "none",
+                              borderRadius: "6px", padding: "7px 14px", fontSize: "12px", fontWeight: 700,
+                              cursor: sending ? "not-allowed" : "pointer",
+                            }}
+                          >
+                            {sending ? "Sending…" : "Send"}
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 export default function CommunityPage() {
   const [tab, setTab] = useState<"trainers" | "wanted" | "friends">("trainers");
   const [profiles, setProfiles] = useState<PublicCard[]>([]);
@@ -316,13 +484,14 @@ export default function CommunityPage() {
   // on whether this visitor already has a public community profile
   // (the same opt-in that unlocks the discount at checkout).
   const [isMember, setIsMember] = useState<boolean | null>(null); // null = logged out / unknown
+  const [myUserId, setMyUserId] = useState<number | null>(null);
 
   useEffect(() => {
     const token = localStorage.getItem("access_token");
     if (!token) return;
     authFetch("/api/auth/profile/")
       .then((r) => r.json())
-      .then((data) => setIsMember(!!data.community_profile_public))
+      .then((data) => { setIsMember(!!data.community_profile_public); setMyUserId(data.id ?? null); })
       .catch(() => {});
   }, []);
 
@@ -435,6 +604,18 @@ export default function CommunityPage() {
                         </div>
                       </div>
                     </div>
+                    {p.building && p.building.length > 0 && (
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", marginBottom: p.community_bio ? "8px" : 0 }}>
+                        {p.building.slice(0, 2).map((b) => (
+                          <span key={b.set_code} style={{
+                            background: "#1a1a24", border: "1px solid #2a2a3a", borderRadius: "999px",
+                            padding: "3px 10px", fontSize: "10px", color: "#a0a0b0", whiteSpace: "nowrap",
+                          }}>
+                            🛠 {b.set_name} <span style={{ color: "#ff6b35", fontWeight: 700 }}>{b.pct}%</span>
+                          </span>
+                        ))}
+                      </div>
+                    )}
                     {p.community_bio && (
                       <p style={{ color: "#a0a0b0", fontSize: "12px", margin: 0, fontStyle: "italic" }}>
                         &quot;{p.community_bio}&quot;
@@ -450,29 +631,7 @@ export default function CommunityPage() {
             <p style={{ color: "#555", fontSize: "13px", margin: 0 }}>Nothing on any wishlist yet.</p>
           </div>
         ) : (
-          <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
-            {wanted.map((c, i) => (
-              <div key={c.id} style={{
-                display: "flex", alignItems: "center", gap: "14px", padding: "12px 16px",
-                background: "#16161f", border: "1px solid #2a2a3a", borderRadius: "10px",
-              }}>
-                <span style={{ color: "#ff6b35", fontWeight: 700, fontSize: "14px", width: "24px" }}>#{i + 1}</span>
-                <img
-                  src={c.image_small_url || c.image_url}
-                  alt={c.name}
-                  style={{ width: "40px", height: "55px", objectFit: "contain", borderRadius: "4px", background: "#0e0e16" }}
-                />
-                <div style={{ flex: 1 }}>
-                  <div style={{ color: "#fff", fontSize: "14px", fontWeight: 600 }}>{c.name}</div>
-                  <div style={{ color: "#a0a0b0", fontSize: "12px" }}>{c.card_set?.name}</div>
-                </div>
-                <div style={{ color: "#ff6b35", fontSize: "13px", fontWeight: 700, whiteSpace: "nowrap" }}>
-                  💛 {c.wanted_by} want this
-                </div>
-                <WishlistHeartButton productId={c.id} variant="tile" />
-              </div>
-            ))}
-          </div>
+          <MostWantedList items={wanted} myUserId={myUserId} />
         )}
       </div>
     </div>
