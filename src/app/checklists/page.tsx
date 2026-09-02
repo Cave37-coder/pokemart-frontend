@@ -127,8 +127,12 @@ const VARIANT_LABEL_FULL: Record<string, string> = {
 function csvCell(value: string): string {
   return /[",\n]/.test(value) ? '"' + value.replace(/"/g, '""') + '"' : value;
 }
-function downloadCsv(filename: string, header: string[], rows: string[][]) {
-  const csv = [header, ...rows].map(r => r.map(csvCell).join(',')).join('\r\n');
+// preRows (Michael, 2026-09-02: "the csv gives no customer details, no
+// context of what set") -- optional metadata rows (Customer / Set) written
+// before the header row, so an exported file is self-explanatory once it's
+// out of the browser and sitting in someone's Downloads folder.
+function downloadCsv(filename: string, header: string[], rows: string[][], preRows: string[][] = []) {
+  const csv = [...preRows, header, ...rows].map(r => r.map(csvCell).join(',')).join('\r\n');
   // Leading BOM so Excel opens the accented characters in card names correctly.
   const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
   const url = URL.createObjectURL(blob);
@@ -136,6 +140,87 @@ function downloadCsv(filename: string, header: string[], rows: string[][]) {
   a.href = url; a.download = filename;
   document.body.appendChild(a); a.click(); document.body.removeChild(a);
   URL.revokeObjectURL(url);
+}
+
+function escapeHtml(s: string): string {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+// Splits a list into N side-by-side columns, filled contiguously (col 1
+// gets the first chunk, col 2 the next, etc.) so a printed pull sheet reads
+// top-to-bottom then left-to-right, the way a paper checklist normally
+// does -- not round-robin, which would scatter consecutive card numbers
+// across every column.
+function splitIntoColumns<T>(items: T[], columns: number): T[][] {
+  const perCol = Math.ceil(items.length / columns);
+  const cols: T[][] = [];
+  for (let i = 0; i < items.length; i += perCol) cols.push(items.slice(i, i + perCol));
+  while (cols.length < columns) cols.push([]);
+  return cols;
+}
+
+interface PullSheetRow { num: string; name: string; variant: string; highlighted?: boolean }
+
+// Branded printable pull sheet, used for both the Needed List and the Full
+// List (Michael, 2026-09-02: "must it be changed to pdf to match My Pull
+// Sheets?", then: "make all printable ... presentable ... compact, maybe
+// Landscape and have 2 or 3 columns of pokemon"). Same visual language as
+// the staff order Pull Sheet / packing slip (orders/views.py print_order):
+// a PokeBulk SA header, customer + set context, a Print button so it can
+// be saved as a PDF via the browser's own print dialog -- landscape, and
+// the card list itself is split into 2-3 side-by-side columns (not a CSS
+// multi-column table, which doesn't repeat headers per column) so a full
+// 150-250 card set checklist is compact instead of one long scroll.
+function buildPullSheetHtml(opts: {
+  title: string; setName: string; setCode: string;
+  customerName: string; customerEmail: string;
+  rows: PullSheetRow[]; showHighlighted: boolean;
+}): string {
+  const { title, setName, setCode, customerName, customerEmail, rows, showHighlighted } = opts;
+  const numCols = rows.length > 60 ? 3 : rows.length > 20 ? 2 : 1;
+  const columns = splitIntoColumns(rows, numCols);
+  const rowHtml = (r: PullSheetRow) => {
+    const status = showHighlighted ? (r.highlighted ? '✓' : '–') : '[ ]';
+    return `<div class="row"><span class="num">${escapeHtml(r.num)}</span><span class="name">${escapeHtml(r.name)}</span><span class="variant">${escapeHtml(r.variant)}</span><span class="chk">${status}</span></div>`;
+  };
+  const colHeadHtml = `<div class="head-row"><span class="num">#</span><span class="name">Card Name</span><span class="variant">Variant</span><span class="chk">${showHighlighted ? 'Have' : 'Done'}</span></div>`;
+  const columnsHtml = columns.map(col => `<div class="col">${colHeadHtml}${col.map(rowHtml).join('')}</div>`).join('');
+  const generated = new Date().toLocaleString('en-ZA', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+  const countLabel = `${rows.length} card${rows.length !== 1 ? 's' : ''}${showHighlighted ? ' total' : ' needed'}`;
+  return `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${escapeHtml(title)} — ${escapeHtml(setName)} - PokeBulk SA</title>
+<style>
+* { margin:0;padding:0;box-sizing:border-box }
+body { font-family:Arial,sans-serif;font-size:11px;color:#000;padding:14px;line-height:1.2 }
+.cols { display:flex; gap:16px; align-items:flex-start; margin-top:8px }
+.col { flex:1; min-width:0 }
+.row { display:flex; align-items:center; gap:5px; padding:2px 0; border-bottom:1px solid #eee }
+.row .num { width:34px; flex-shrink:0; color:#888; font-size:9px }
+.row .name { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:10px }
+.row .variant { width:58px; flex-shrink:0; text-align:right; font-size:8px; text-transform:uppercase; color:#666 }
+.row .chk { width:20px; flex-shrink:0; text-align:right; font-size:10px; font-weight:bold }
+.head-row { display:flex; gap:5px; padding:2px 0; border-bottom:2px solid #ccc; margin-bottom:2px; font-size:8px; font-weight:bold; text-transform:uppercase; color:#888 }
+.head-row .num { width:34px; flex-shrink:0 } .head-row .name { flex:1 } .head-row .variant { width:58px; flex-shrink:0; text-align:right } .head-row .chk { width:20px; flex-shrink:0; text-align:right }
+@media print { .no-print { display:none } @page { margin:10mm; size:A4 landscape } }
+</style>
+</head><body>
+<div class="no-print" style="margin-bottom:14px">
+  <button onclick="window.print()" style="background:#ff6b35;color:#fff;border:none;padding:8px 20px;border-radius:6px;font-size:14px;cursor:pointer">Print</button>
+  <button onclick="window.close()" style="margin-left:8px;padding:8px 20px;border-radius:6px;border:1px solid #ccc;cursor:pointer">Close</button>
+</div>
+<div style="display:flex;justify-content:space-between;margin-bottom:6px;border-bottom:2px solid #000;padding-bottom:6px">
+  <div>
+    <h1 style="font-size:18px">${escapeHtml(title)}</h1>
+    <div style="font-size:10px;color:#ff6b35;font-weight:bold;letter-spacing:.5px">pokebulk.co.za</div>
+    <div style="font-size:11px;color:#444;margin-top:2px">${escapeHtml(setName)} [${escapeHtml(setCode)}] · ${countLabel}</div>
+    <div style="font-size:11px;color:#444">Customer: <strong>${escapeHtml(customerName)}</strong>${customerEmail ? ` (${escapeHtml(customerEmail)})` : ''}</div>
+  </div>
+  <div style="text-align:right;font-size:11px;color:#444">Generated ${generated}</div>
+</div>
+<div class="cols">${columnsHtml}</div>
+<div style="margin-top:14px;border-top:1px solid #ccc;padding-top:6px;font-size:9px;color:#666">
+  Poke Bulk SA (Pty) Ltd · Reg. No: 2024/615040/07 · Unit 4, Sunkist Village, 11 Heliose Street, Birchleigh North, Kempton Park · enquiries@pokebulk.co.za
+</div>
+</body></html>`;
 }
 
 // ── OVERVIEW ─────────────────────────────────────────────────────────────────
@@ -444,6 +529,7 @@ function Checklist({ code, onBack }: { code: string; onBack: () => void }) {
   const [symbolUrl, setSymbolUrl] = useState('');
   const [buying, setBuying] = useState<Set<string>>(new Set());
   const [emailingPullList, setEmailingPullList] = useState(false);
+  const [profile, setProfile] = useState<{ first_name: string; last_name: string; email: string; username: string } | null>(null);
 
   useEffect(() => {
     fetch(`${API_BASE}/api/sets/`)
@@ -671,7 +757,28 @@ function Checklist({ code, onBack }: { code: string; onBack: () => void }) {
   const sorted = [...set.cards].sort((a, b) => (parseInt(a.num) || 9999) - (parseInt(b.num) || 9999));
 
   // ── CSV export handlers ──────────────────────────────────────────────
-  const exportFullListCsv = () => {
+  // Resolves the logged-in customer's display name + email once (cached in
+  // `profile` state) for the "Customer:" line on exports/print sheets.
+  // Guests (no token) fall back to "Guest" rather than hitting the API.
+  const getCustomerInfo = async (): Promise<{ name: string; email: string }> => {
+    const token = localStorage.getItem('access_token');
+    if (!token) return { name: 'Guest', email: '' };
+    if (profile) {
+      return { name: `${profile.first_name} ${profile.last_name}`.trim() || profile.username, email: profile.email || '' };
+    }
+    try {
+      const res = await authFetch('/api/auth/profile/');
+      if (res.ok) {
+        const data = await res.json();
+        setProfile(data);
+        return { name: `${data.first_name} ${data.last_name}`.trim() || data.username, email: data.email || '' };
+      }
+    } catch {}
+    return { name: 'Guest', email: '' };
+  };
+
+  const exportFullListCsv = async () => {
+    const { name, email } = await getCustomerInfo();
     const rows: string[][] = [];
     sorted.forEach(card => {
       card.variants.forEach(v => {
@@ -679,11 +786,23 @@ function Checklist({ code, onBack }: { code: string; onBack: () => void }) {
         rows.push([card.num, card.name, card.rarity, VARIANT_LABEL_FULL[v.vc] || v.vc, checks[key] ? 'Yes' : 'No']);
       });
     });
-    downloadCsv(`${code}_full_checklist.csv`, ['Card #', 'Name', 'Rarity', 'Variant', 'Highlighted'], rows);
+    const meta = [['Customer', email ? `${name} (${email})` : name], ['Set', `${set.name} (${code})`], []];
+    downloadCsv(`${code}_full_checklist.csv`, ['Card #', 'Name', 'Rarity', 'Variant', 'Highlighted'], rows, meta);
   };
 
-  const buildNeededRows = () => {
-    const rows: { num: string; name: string; variant: string }[] = [];
+  const buildFullRows = (): PullSheetRow[] => {
+    const rows: PullSheetRow[] = [];
+    sorted.forEach(card => {
+      card.variants.forEach(v => {
+        const key = card.num + '_' + v.vc;
+        rows.push({ num: card.num, name: card.name, variant: VARIANT_LABEL_FULL[v.vc] || v.vc, highlighted: !!checks[key] });
+      });
+    });
+    return rows;
+  };
+
+  const buildNeededRows = (): PullSheetRow[] => {
+    const rows: PullSheetRow[] = [];
     sorted.forEach(card => {
       card.variants.forEach(v => {
         const key = card.num + '_' + v.vc;
@@ -693,10 +812,32 @@ function Checklist({ code, onBack }: { code: string; onBack: () => void }) {
     return rows;
   };
 
-  const exportNeededListCsv = () => {
+  const openPullSheet = (html: string) => {
+    const blob = new Blob([html], { type: 'text/html' });
+    const url = URL.createObjectURL(blob);
+    window.open(url, '_blank');
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+  };
+
+  // Opens the branded, landscape, multi-column pull sheet (see
+  // buildPullSheetHtml above) in a new tab -- Michael, 2026-09-02: "must it
+  // be changed to pdf to match My Pull Sheets?" -- so it matches the staff
+  // Pull Sheet look and can be saved as a PDF via the browser's own Print
+  // dialog, same as every other printable page on the site.
+  const printNeededPullSheet = async () => {
     const needed = buildNeededRows();
     if (needed.length === 0) { alert("You're not missing anything from this set!"); return; }
-    downloadCsv(`${code}_needed_list.csv`, ['Card #', 'Name', 'Variant'], needed.map(r => [r.num, r.name, r.variant]));
+    const { name, email } = await getCustomerInfo();
+    openPullSheet(buildPullSheetHtml({ title: 'Needed List', setName: set.name, setCode: code, customerName: name, customerEmail: email, rows: needed, showHighlighted: false }));
+  };
+
+  // Same pull sheet, but the WHOLE set with a Have/Missing column instead of
+  // just what's missing -- Michael, 2026-09-02: "make all printable, I want
+  // people to have something presentable".
+  const printFullListPullSheet = async () => {
+    const all = buildFullRows();
+    const { name, email } = await getCustomerInfo();
+    openPullSheet(buildPullSheetHtml({ title: 'Full Checklist', setName: set.name, setCode: code, customerName: name, customerEmail: email, rows: all, showHighlighted: true }));
   };
 
   const emailNeededList = async () => {
@@ -749,7 +890,8 @@ function Checklist({ code, onBack }: { code: string; onBack: () => void }) {
         <button onClick={() => window.print()} style={{ background: '#1e1e2a', color: '#a0a0b0', border: '1px solid #2a2a3a', padding: '7px 13px', borderRadius: '7px', fontSize: '12px', cursor: 'pointer' }}>🖨 Print</button>
         <button onClick={resetSet} style={{ background: 'transparent', color: '#ff4444', border: '1px solid #ff4444', padding: '7px 13px', borderRadius: '7px', fontSize: '12px', cursor: 'pointer' }}>Reset</button>
         <button onClick={exportFullListCsv} style={{ background: '#1e1e2a', color: '#a0a0b0', border: '1px solid #2a2a3a', padding: '7px 13px', borderRadius: '7px', fontSize: '12px', cursor: 'pointer' }}>⬇ Full List CSV</button>
-        <button onClick={exportNeededListCsv} style={{ background: '#1e1e2a', color: '#a0a0b0', border: '1px solid #2a2a3a', padding: '7px 13px', borderRadius: '7px', fontSize: '12px', cursor: 'pointer' }}>⬇ Needed List CSV</button>
+        <button onClick={printFullListPullSheet} style={{ background: '#1e1e2a', color: '#a0a0b0', border: '1px solid #2a2a3a', padding: '7px 13px', borderRadius: '7px', fontSize: '12px', cursor: 'pointer' }}>🖨 Full List Pull Sheet</button>
+        <button onClick={printNeededPullSheet} style={{ background: '#1e1e2a', color: '#a0a0b0', border: '1px solid #2a2a3a', padding: '7px 13px', borderRadius: '7px', fontSize: '12px', cursor: 'pointer' }}>🖨 Needed List Pull Sheet</button>
         <button onClick={emailNeededList} disabled={emailingPullList} style={{ background: 'transparent', color: eraColor, border: `1px solid ${eraColor}`, padding: '7px 13px', borderRadius: '7px', fontSize: '12px', cursor: emailingPullList ? 'default' : 'pointer', opacity: emailingPullList ? 0.6 : 1 }}>{emailingPullList ? 'Emailing…' : '✉ Email Needed List to Poke Bulk'}</button>
       </div>
 
