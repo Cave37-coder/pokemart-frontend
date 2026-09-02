@@ -179,9 +179,15 @@ function buildPullSheetHtml(opts: {
   const { title, setName, setCode, customerName, customerEmail, rows, showHighlighted } = opts;
   const numCols = rows.length > 60 ? 3 : rows.length > 20 ? 2 : 1;
   const columns = splitIntoColumns(rows, numCols);
+  // Michael, 2026-09-02: "Can change the missing cards with Red writing,
+  // just to highlight them" -- only meaningful in showHighlighted mode (the
+  // Full List), where a row can actually be either owned or missing; every
+  // row on the Needed List is already missing by definition, so it stays
+  // plain black there instead of turning the whole sheet red.
   const rowHtml = (r: PullSheetRow) => {
+    const missing = showHighlighted && !r.highlighted;
     const status = showHighlighted ? (r.highlighted ? '✓' : '–') : '[ ]';
-    return `<div class="row"><span class="num">${escapeHtml(r.num)}</span><span class="name">${escapeHtml(r.name)}</span><span class="variant">${escapeHtml(r.variant)}</span><span class="chk">${status}</span></div>`;
+    return `<div class="row${missing ? ' missing' : ''}"><span class="num">${escapeHtml(r.num)}</span><span class="name">${escapeHtml(r.name)}</span><span class="variant">${escapeHtml(r.variant)}</span><span class="chk">${status}</span></div>`;
   };
   const colHeadHtml = `<div class="head-row"><span class="num">#</span><span class="name">Card Name</span><span class="variant">Variant</span><span class="chk">${showHighlighted ? 'Have' : 'Done'}</span></div>`;
   const columnsHtml = columns.map(col => `<div class="col">${colHeadHtml}${col.map(rowHtml).join('')}</div>`).join('');
@@ -198,6 +204,7 @@ body { font-family:Arial,sans-serif;font-size:11px;color:#000;padding:14px;line-
 .row .name { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:10px }
 .row .variant { width:58px; flex-shrink:0; text-align:right; font-size:8px; text-transform:uppercase; color:#666 }
 .row .chk { width:20px; flex-shrink:0; text-align:right; font-size:10px; font-weight:bold }
+.row.missing .name, .row.missing .chk { color:#c0392b }
 .head-row { display:flex; gap:5px; padding:2px 0; border-bottom:2px solid #ccc; margin-bottom:2px; font-size:8px; font-weight:bold; text-transform:uppercase; color:#888 }
 .head-row .num { width:34px; flex-shrink:0 } .head-row .name { flex:1 } .head-row .variant { width:58px; flex-shrink:0; text-align:right } .head-row .chk { width:20px; flex-shrink:0; text-align:right }
 @media print { .no-print { display:none } @page { margin:10mm; size:A4 landscape } }
@@ -217,8 +224,8 @@ body { font-family:Arial,sans-serif;font-size:11px;color:#000;padding:14px;line-
   <div style="text-align:right;font-size:11px;color:#444">Generated ${generated}</div>
 </div>
 <div class="cols">${columnsHtml}</div>
-<div style="margin-top:14px;border-top:1px solid #ccc;padding-top:6px;font-size:9px;color:#666">
-  Poke Bulk SA (Pty) Ltd · Reg. No: 2024/615040/07 · Unit 4, Sunkist Village, 11 Heliose Street, Birchleigh North, Kempton Park · enquiries@pokebulk.co.za
+<div style="margin-top:14px;border-top:1px solid #ccc;padding-top:6px;font-size:9px;color:#666;text-align:center">
+  Proudly brought to you by Poke Bulk SA · <a href="https://www.pokebulk.co.za" style="color:#ff6b35;text-decoration:none">www.pokebulk.co.za</a> · enquiries@pokebulk.co.za
 </div>
 </body></html>`;
 }
@@ -248,6 +255,13 @@ function Overview({ onOpen }: { onOpen: (code: string) => void }) {
   // just falls back to the existing coloured text pill, so this is safe to
   // ship before every era has a logo filled in via admin.
   const [eraLogos, setEraLogos] = useState<Record<string, string>>({});
+  // Michael, 2026-09-02: "we need to fix the images for the era's, evn if
+  // we just go back to simple name labels" -- a dead/broken logo_url (404,
+  // wrong R2 path, etc.) was rendering the browser's broken-image icon
+  // instead of falling back to the coloured text pill below. Tracking which
+  // URLs actually failed to load lets eraBadge() treat "failed" the same
+  // as "never set" and fall back cleanly.
+  const [failedEraLogos, setFailedEraLogos] = useState<Set<string>>(new Set());
   useEffect(() => {
     fetch(`${API_BASE}/api/eras/`)
       .then(r => r.json())
@@ -409,8 +423,9 @@ function Overview({ onOpen }: { onOpen: (code: string) => void }) {
   // either way so nothing else about the layout needs to change per-era.
   const eraBadge = (label: string, color: string) => {
     const logoUrl = eraLogos[normalizeEraName(label)];
-    if (logoUrl) {
-      return <img src={logoUrl} alt={label} title={label} style={{ height: '20px', maxWidth: '120px', objectFit: 'contain' }} />;
+    if (logoUrl && !failedEraLogos.has(logoUrl)) {
+      return <img src={logoUrl} alt={label} title={label} style={{ height: '20px', maxWidth: '120px', objectFit: 'contain' }}
+        onError={() => setFailedEraLogos(prev => new Set(prev).add(logoUrl))} />;
     }
     return (
       <div style={{ background: color, color: '#fff', fontSize: '10px', fontWeight: 700, letterSpacing: '1px', textTransform: 'uppercase', padding: '3px 10px', borderRadius: '4px' }}>{label}</div>
