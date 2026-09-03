@@ -38,6 +38,8 @@ interface Announcement {
   date: string;
   product: number | null;
   product_name: string;
+  card_set: string | null;
+  card_set_name: string;
   link_url: string;
   created_at: string;
 }
@@ -45,6 +47,13 @@ interface Announcement {
 interface Paginated<T> { count: number; next: string | null; previous: string | null; results: T[]; }
 
 interface ApiProduct { id: number; name: string; card_set?: { name: string; code: string } | null; card_number?: string | null; }
+
+// Michael, 2026-09-03: "can we have a dropdown for which set" -- restocks
+// are usually about a whole set (e.g. "Prismatic Evolutions booster boxes
+// back in stock"), so a set picker is a much faster/more natural fit than
+// searching for one specific product every time. Reuses the same public
+// /api/sets/ endpoint the Browse Cards & Checklists pages already use.
+interface ApiSet { code: string; name: string; }
 
 const card: React.CSSProperties = { background: "#1a1a24", border: "1px solid #2a2a3a", borderRadius: 12, padding: 16 };
 const btn: React.CSSProperties = { background: "#12121a", border: "1px solid #2a2a3a", color: "#a0a0b0", borderRadius: 6, padding: "5px 10px", fontSize: 11, cursor: "pointer" };
@@ -139,6 +148,28 @@ function ProductPicker({ productId, productName, onChange }: { productId: number
   );
 }
 
+// Set dropdown -- loads the full list once (same shape as the Browse Cards
+// set filter) rather than live-searching like ProductPicker, since there
+// are only a couple hundred sets and Michael picks from a list, not types
+// a name.
+function SetPicker({ value, onChange }: { value: string | null; onChange: (code: string | null) => void }) {
+  const [sets, setSets] = useState<ApiSet[]>([]);
+
+  useEffect(() => {
+    fetch(`${API_URL}/api/sets/`)
+      .then((r) => r.json())
+      .then((d) => setSets(d.results || []))
+      .catch(() => setSets([]));
+  }, []);
+
+  return (
+    <select style={{ ...inp, width: "100%" }} value={value || ""} onChange={(e) => onChange(e.target.value || null)}>
+      <option value="">— none —</option>
+      {sets.map((s) => <option key={s.code} value={s.code}>{s.name}</option>)}
+    </select>
+  );
+}
+
 function AnnouncementForm({ initial, onSaved, onCancel }: { initial?: Announcement; onSaved: () => void; onCancel?: () => void }) {
   const [kind, setKind] = useState(initial?.kind || "announcement");
   const [title, setTitle] = useState(initial?.title || "");
@@ -146,6 +177,7 @@ function AnnouncementForm({ initial, onSaved, onCancel }: { initial?: Announceme
   const [date, setDate] = useState(initial?.date || new Date().toISOString().slice(0, 10));
   const [productId, setProductId] = useState<number | null>(initial?.product ?? null);
   const [productName, setProductName] = useState(initial?.product_name || "");
+  const [cardSet, setCardSet] = useState<string | null>(initial?.card_set ?? null);
   const [linkUrl, setLinkUrl] = useState(initial?.link_url || "");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -155,7 +187,7 @@ function AnnouncementForm({ initial, onSaved, onCancel }: { initial?: Announceme
     setSaving(true);
     setError("");
     try {
-      const payload = { kind, title, body, date, product: productId, link_url: linkUrl };
+      const payload = { kind, title, body, date, product: productId, card_set: cardSet, link_url: linkUrl };
       const url = initial ? `/api/admin/announcements/${initial.id}/` : `/api/admin/announcements/`;
       const res = await authFetch(url, {
         method: initial ? "PATCH" : "POST",
@@ -194,13 +226,17 @@ function AnnouncementForm({ initial, onSaved, onCancel }: { initial?: Announceme
       </div>
 
       <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
+        <div style={{ flex: 1, minWidth: 200 }}>
+          <label style={{ fontSize: 10, color: "#888", display: "block", marginBottom: 3 }}>Set (optional)</label>
+          <SetPicker value={cardSet} onChange={setCardSet} />
+        </div>
         <div style={{ flex: 1, minWidth: 220 }}>
-          <label style={{ fontSize: 10, color: "#888", display: "block", marginBottom: 3 }}>Link a product</label>
+          <label style={{ fontSize: 10, color: "#888", display: "block", marginBottom: 3 }}>...or link a specific product</label>
           <ProductPicker productId={productId} productName={productName} onChange={(id, name) => { setProductId(id); setProductName(name); }} />
         </div>
         <div style={{ flex: 1, minWidth: 220 }}>
-          <label style={{ fontSize: 10, color: "#888", display: "block", marginBottom: 3 }}>...or a link URL (used if no product is linked)</label>
-          <input style={{ ...inp, width: "100%" }} value={linkUrl} onChange={(e) => setLinkUrl(e.target.value)} placeholder="https://pokebulk.co.za/community" disabled={!!productId} />
+          <label style={{ fontSize: 10, color: "#888", display: "block", marginBottom: 3 }}>...or a link URL (used if no set/product is linked)</label>
+          <input style={{ ...inp, width: "100%" }} value={linkUrl} onChange={(e) => setLinkUrl(e.target.value)} placeholder="https://pokebulk.co.za/community" disabled={!!productId || !!cardSet} />
         </div>
       </div>
 
@@ -269,7 +305,7 @@ function AnnouncementsList() {
                   <td style={{ padding: "8px" }}><KindBadge kind={a.kind} label={a.kind_display} /></td>
                   <td style={{ padding: "8px", color: "#fff", fontWeight: 600 }}>{a.title}</td>
                   <td style={{ padding: "8px", color: "#888" }}>
-                    {a.product_name || (a.link_url ? <a href={a.link_url} target="_blank" rel="noreferrer" style={{ color: "#ff6b35" }}>{a.link_url}</a> : "—")}
+                    {a.product_name || a.card_set_name || (a.link_url ? <a href={a.link_url} target="_blank" rel="noreferrer" style={{ color: "#ff6b35" }}>{a.link_url}</a> : "—")}
                   </td>
                   <td style={{ padding: "8px", textAlign: "right", whiteSpace: "nowrap" }}>
                     <button style={btn} onClick={() => setEditingId(editingId === a.id ? null : a.id)}>{editingId === a.id ? "Close" : "Edit"}</button>{" "}
