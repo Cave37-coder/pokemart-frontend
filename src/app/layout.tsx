@@ -1,7 +1,8 @@
-import type { Metadata } from "next";
+﻿import type { Metadata } from "next";
 import "./globals.css";
 import NavBar from "@/components/NavBar";
 import ProfileCompletionPopup from "@/components/ProfileCompletionPopup";
+import GoogleAnalytics from "@/components/GoogleAnalytics";
 
 export const metadata: Metadata = {
   title: "PokeBulk SA - Premium Pokemon Cards",
@@ -31,6 +32,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en">
       <body>
+        <GoogleAnalytics />
         <NavBar />
         {/* TEMPORARY (2026-06-21) -- remove this line + the import above
             once the 2-week "complete your profile" campaign ends. See
