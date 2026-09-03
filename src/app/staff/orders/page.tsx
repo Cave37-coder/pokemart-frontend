@@ -178,8 +178,8 @@ function OrderManageRow({ order, onSaved }: { order: AdminOrder; onSaved: () => 
           <input style={{ ...inp, width: 180 }} value={courierUrl} onChange={(e) => setCourierUrl(e.target.value)} placeholder="https://..." />
         </div>
         <div style={{ flex: 1, minWidth: 160 }}>
-          <label style={{ fontSize: 10, color: "#888", display: "block", marginBottom: 3 }}>Note (internal, optional)</label>
-          <input style={{ ...inp, width: "100%" }} value={note} onChange={(e) => setNote(e.target.value)} placeholder="visible in this order's tracking history" />
+          <label style={{ fontSize: 10, color: "#888", display: "block", marginBottom: 3 }}>Note (optional -- included in the customer's status-update email)</label>
+          <input style={{ ...inp, width: "100%" }} value={note} onChange={(e) => setNote(e.target.value)} placeholder="e.g. Packed with extra care, ships tomorrow" />
         </div>
       </div>
 
@@ -571,6 +571,7 @@ export default function StaffOrdersPage() {
             <a href={`${API_URL}/admin/`} target="_blank" rel="noreferrer" style={{ color: "#ff6b35" }}>Django admin</a> in this browser.
             {" · "}<a href={`${API_URL}/admin/store-overview/`} target="_blank" rel="noreferrer" style={{ color: "#ff6b35" }}>Store Overview →</a>
             {" · "}<Link href="/staff/checklists" style={{ color: "#ff6b35" }}>Customer Checklists →</Link>
+            {" · "}<Link href="/staff/announcements" style={{ color: "#ff6b35" }}>Restocks & Announcements →</Link>
           </p>
         </div>
 
