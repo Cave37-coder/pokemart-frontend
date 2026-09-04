@@ -22,7 +22,7 @@ const STATUS_CHOICES: [string, string][] = [
   ["pending", "Order Received"],
   ["pending_eft", "Awaiting EFT Payment"],
   ["printed", "Order Printed"],
-  ["packed", "Order Packed"],
+  ["packed", "Order Preparing"],
   ["booked", "Courier Booking"],
   ["ready", "Ready for Collection"],
   ["collected", "Courier Collected"],
@@ -36,13 +36,20 @@ const STATUS_COLOR: Record<string, string> = {
   ready: "#00acc1", collected: "#43a047", invoiced: "#1b5e20", cancelled: "#757575",
 };
 
-// Manual Invoice's own, shorter status set (2026-08-12) -- no courier/
-// booking stages of its own, see ManualInvoice.STATUS_CHOICES. Packed comes
-// before Payment Confirmed (2026-08-12 follow-up, Michael: "most clients
-// make payment when collecting") -- matches the model's own choices order.
+// Manual Invoice's own status set (2026-08-12, expanded 2026-09-04 to
+// mirror Order's pipeline more closely -- Michael: "structure manual
+// invoicing the same as normal order"). Still no courier-only steps
+// (Courier Booking / Courier Collected) since Manual Invoice has no
+// courier leg of its own; everything else lines up with Order's own
+// STATUS_CHOICES, including matching codes. Preparing (packed) still
+// comes before Payment Confirmed (2026-08-12: "most clients make payment
+// when collecting") -- matches ManualInvoice.STATUS_CHOICES order.
 const INVOICE_STATUS_CHOICES: [string, string][] = [
   ["created", "Created"],
-  ["packed", "Packed"],
+  ["pending_eft", "Awaiting EFT Payment"],
+  ["printed", "Order Printed"],
+  ["packed", "Preparing"],
+  ["ready", "Ready for Collection"],
   ["payment_confirmed", "Payment Confirmed"],
   ["complete", "Complete"],
   ["cancelled", "Cancelled"],
@@ -56,10 +63,10 @@ const INVOICE_STATUS_CHOICES: [string, string][] = [
 // 'Trade/Credit'") -- matches ManualInvoice.PAYMENT_METHOD_CHOICES.
 const PAYMENT_TYPE_CHOICES: [string, string][] = [
   ["", "Not received"],
-  ["eft", "EFT"],
   ["cash", "Cash"],
-  ["card", "Card"],
-  ["trade", "Trade/Credit"],
+  ["eft", "EFT"],
+  ["card", "Card (Payfast)"],
+  ["trade", "Trade-In"],
 ];
 
 const PAYMENT_TYPE_COLOR: Record<string, string> = {
@@ -67,7 +74,8 @@ const PAYMENT_TYPE_COLOR: Record<string, string> = {
 };
 
 const INVOICE_STATUS_COLOR: Record<string, string> = {
-  created: "#546e7a", payment_confirmed: "#1565c0", packed: "#6a1b9a", complete: "#1b5e20", cancelled: "#757575",
+  created: "#546e7a", pending_eft: "#e65100", printed: "#0288d1", packed: "#6a1b9a",
+  ready: "#00acc1", payment_confirmed: "#1565c0", complete: "#1b5e20", cancelled: "#757575",
 };
 
 interface AdminOrder {
@@ -434,7 +442,8 @@ function InvoicesTab() {
       <div style={{ display: "flex", gap: 10, marginBottom: 16, flexWrap: "wrap", alignItems: "center" }}>
         <a style={btnPrimary} href={`${API_URL}/admin/orders/manualinvoice/pos/`} target="_blank" rel="noreferrer">+ New Manual Invoice</a>
         <select style={inp} value={invStatus} onChange={(e) => { setInvStatus(e.target.value); setPage(1); }}>
-          <option value="">Any status</option>
+          <option value="">Open invoices (default)</option>
+          <option value="__all__" disabled>── or filter by status ──</option>
           {INVOICE_STATUS_CHOICES.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
         </select>
         <select style={inp} value={paymentReceived} onChange={(e) => { setPaymentReceived(e.target.value); setPage(1); }}>
@@ -446,6 +455,9 @@ function InvoicesTab() {
           onKeyDown={(e) => { if (e.key === "Enter") { setSearch(searchInput); setPage(1); } }}
           placeholder="Search customer / invoice #…" />
         <button style={btn} onClick={() => { setSearch(searchInput); setPage(1); }}>Search</button>
+        {(invStatus || paymentReceived || search) && (
+          <button style={btn} onClick={() => { setInvStatus(""); setPaymentReceived(""); setSearch(""); setSearchInput(""); setPage(1); }}>Clear filters</button>
+        )}
       </div>
 
       {error && <div style={{ color: "#EF4444", fontSize: 13, marginBottom: 12 }}>{error}</div>}
