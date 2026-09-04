@@ -8,6 +8,12 @@ import { authFetch } from "@/lib/api";
 // aceBorder gradient) — reused here as the site's connective foil-stripe signature.
 const FOIL_STRIPE = ["#E24B4A", "#ff6b35", "#EF9F27", "#1D9E75", "#378ADD", "#7F77DD"];
 
+// 2026-09-04, Michael: "where are the analytics? dropdown a bit messy" --
+// the Staff dropdown was missing the Store Overview link that used to sit
+// on the Orders page header (it still does, this just also surfaces it in
+// the dropdown itself so it's not the only way in).
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://pokemart-api-production.up.railway.app";
+
 function FoilUnderline() {
   return (
     <div style={{ position: "absolute", left: 0, right: 0, bottom: "-9px", height: "2px", display: "flex" }}>
@@ -167,6 +173,7 @@ export default function NavBar() {
   ];
 
   const staffLinks = [
+    { href: `${API_URL}/admin/store-overview/`, label: "Store Overview", icon: "📊", external: true },
     { href: "/staff/orders", label: "📦 Orders" },
     { href: "/staff/checklists", label: "📋 Customer Checklists" },
     { href: "/staff/announcements", label: "📣 Restocks & Announcements" },
@@ -175,7 +182,7 @@ export default function NavBar() {
 
   const isActive = (href: string) => pathname === href || pathname?.startsWith(href + "/");
 
-  const renderLink = (link: { href: string; label: string; beta?: boolean; external?: boolean }) =>
+  const renderLink = (link: { href: string; label: string; beta?: boolean; external?: boolean; icon?: string }) =>
     link.external ? (
       <a
         key={link.href}
@@ -189,7 +196,7 @@ export default function NavBar() {
           display: "flex", alignItems: "center", gap: "5px",
         }}
       >
-        🛡️ {link.label}
+        {link.icon || "🛡️"} {link.label}
       </a>
     ) : (
       <Link
@@ -229,6 +236,18 @@ export default function NavBar() {
         .pb-nav-signin { transition: transform 0.15s ease, box-shadow 0.15s ease; }
         .pb-nav-signin:hover { transform: translateY(-1px); box-shadow: 0 4px 14px rgba(255,107,53,0.3); }
         .pb-nav-hamburger { display: none; }
+
+        /* Dropdown rows (More + Staff menus share this class) -- give each
+           entry real padding and a hover background so the panel reads as
+           a stack of buttons instead of cramped, ungrouped text. */
+        .pb-more-menu a, .pb-more-menu button {
+          padding: 8px 10px !important;
+          border-radius: 6px;
+          justify-content: flex-start;
+        }
+        .pb-more-menu a:hover, .pb-more-menu button:hover {
+          background: #22222e;
+        }
 
         /* Below this width the link row no longer fits -- collapse it into
            a hamburger-triggered dropdown instead of letting it overflow and
