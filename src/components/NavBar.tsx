@@ -41,6 +41,12 @@ export default function NavBar() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
   const moreRef = useRef<HTMLDivElement>(null);
+  // 2026-09-04, Michael: "add a dropdown under Staff, current layout a bit
+  // off, drop down makes more sense" -- same pattern as the "More" dropdown
+  // above, just for the staff-only sub-pages instead of always jumping
+  // straight to Orders.
+  const [staffOpen, setStaffOpen] = useState(false);
+  const staffRef = useRef<HTMLDivElement>(null);
   const pathname = usePathname();
 
   const fetchPileCount = async () => {
@@ -99,7 +105,7 @@ export default function NavBar() {
 
   // Close the mobile dropdown and the desktop "More" menu whenever the
   // route changes -- otherwise they stay open and cover the new page.
-  useEffect(() => { setMenuOpen(false); setMoreOpen(false); }, [pathname]);
+  useEffect(() => { setMenuOpen(false); setMoreOpen(false); setStaffOpen(false); }, [pathname]);
 
   // Close the "More" dropdown on an outside click (desktop only -- on
   // mobile its contents render flattened into the hamburger list instead
@@ -114,6 +120,17 @@ export default function NavBar() {
     document.addEventListener("mousedown", onClick);
     return () => document.removeEventListener("mousedown", onClick);
   }, [moreOpen]);
+
+  useEffect(() => {
+    if (!staffOpen) return;
+    const onClick = (e: MouseEvent) => {
+      if (staffRef.current && !staffRef.current.contains(e.target as Node)) {
+        setStaffOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", onClick);
+    return () => document.removeEventListener("mousedown", onClick);
+  }, [staffOpen]);
 
   const logout = () => {
     localStorage.removeItem("access_token");
@@ -147,6 +164,13 @@ export default function NavBar() {
     // or link, whichever is easiest and cleanest").
     { href: "https://safety.pokebulk.co.za", label: "Poke Guardian", external: true },
     { href: "/about", label: "About" },
+  ];
+
+  const staffLinks = [
+    { href: "/staff/orders", label: "📦 Orders" },
+    { href: "/staff/checklists", label: "📋 Customer Checklists" },
+    { href: "/staff/announcements", label: "📣 Restocks & Announcements" },
+    { href: "/staff/users", label: "👤 Users" },
   ];
 
   const isActive = (href: string) => pathname === href || pathname?.startsWith(href + "/");
@@ -341,10 +365,29 @@ export default function NavBar() {
         )}
 
         {isStaff && (
-          <Link href="/staff/orders" className="pb-nav-link" style={{ color: isActive("/staff/orders") ? "#fff" : "#a0a0b0", textDecoration: "none", fontSize: "14px", position: "relative" }}>
-            🛠 Staff
-            {isActive("/staff/orders") && <span className="pb-nav-underline"><FoilUnderline /></span>}
-          </Link>
+          <div className="pb-more" ref={staffRef} style={{ position: "relative" }}>
+            <button
+              className="pb-nav-link pb-more-btn"
+              onClick={() => setStaffOpen((o) => !o)}
+              aria-expanded={staffOpen}
+              style={{
+                background: "transparent", border: "none", cursor: "pointer", font: "inherit",
+                color: staffLinks.some((l) => isActive(l.href)) || staffOpen ? "#fff" : "#a0a0b0",
+                fontSize: "14px", display: "flex", alignItems: "center", gap: "4px", padding: 0,
+              }}
+            >
+              🛠 Staff {staffOpen ? "▲" : "▾"}
+            </button>
+            <div className={`pb-more-menu${staffOpen ? " pb-more-menu-open" : ""}`} style={{
+              display: staffOpen ? "flex" : "none",
+              position: "absolute", top: "calc(100% + 14px)", right: 0,
+              background: "#1a1a24", border: "1px solid #2a2a3a", borderRadius: "10px",
+              padding: "8px", flexDirection: "column", minWidth: "210px", gap: "2px",
+              boxShadow: "0 12px 24px rgba(0,0,0,0.4)", zIndex: 50,
+            }}>
+              {staffLinks.map(renderLink)}
+            </div>
+          </div>
         )}
 
         {user && (
