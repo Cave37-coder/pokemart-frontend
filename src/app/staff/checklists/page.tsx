@@ -280,6 +280,7 @@ export default function StaffChecklistsPage() {
           <p style={{ color: "#555", fontSize: 12, marginTop: 4 }}>
             Look up any customer to see what they have and what they still need.{" "}
             <Link href="/staff/orders" style={{ color: "#ff6b35" }}>← Orders</Link>
+            {" · "}<Link href="/staff/users" style={{ color: "#ff6b35" }}>Users →</Link>
           </p>
         </div>
 
