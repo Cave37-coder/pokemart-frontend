@@ -172,13 +172,41 @@ export default function NavBar() {
     { href: "/about", label: "About" },
   ];
 
-  const staffLinks = [
-    { href: `${API_URL}/admin/store-overview/`, label: "Store Overview", icon: "📊", external: true },
-    { href: "/staff/orders", label: "📦 Orders" },
-    { href: "/staff/checklists", label: "📋 Customer Checklists" },
-    { href: "/staff/announcements", label: "📣 Restocks & Announcements" },
-    { href: "/staff/users", label: "👤 Users" },
+  const staffGroups = [
+    {
+      title: "Store",
+      links: [
+        { href: "/staff/orders", label: "📦 Orders" },
+        { href: "/staff/checklists", label: "📋 Customer Checklists" },
+        { href: "/staff/announcements", label: "📣 Restocks & Announcements" },
+        { href: "/staff/users", label: "👤 Users" },
+      ],
+    },
+    {
+      title: "Inventory Tools",
+      links: [
+        { href: `${API_URL}/api/stock/entry/`, label: "Stock Entry", icon: "📥", external: true },
+        { href: `${API_URL}/api/stock/bundles/`, label: "Bundle Stock Entry", icon: "🎴", external: true },
+        { href: `${API_URL}/api/manage/`, label: "Manage Set", icon: "🗂️", external: true },
+      ],
+    },
+    {
+      title: "Analytics",
+      links: [
+        { href: `${API_URL}/admin/analytics-dashboard/`, label: "Analytics Dashboard", icon: "📈", external: true },
+        { href: `${API_URL}/admin/store-overview/`, label: "Store Overview", icon: "📊", external: true },
+      ],
+    },
+    {
+      title: "Backend",
+      links: [
+        { href: `${API_URL}/admin/`, label: "Django Admin", icon: "⚙️", external: true },
+      ],
+    },
   ];
+  // Flattened purely so the Staff button's active-highlight check
+  // (staffLinks.some(...)) keeps working unchanged.
+  const staffLinks = staffGroups.flatMap((g) => g.links);
 
   const isActive = (href: string) => pathname === href || pathname?.startsWith(href + "/");
 
@@ -401,10 +429,21 @@ export default function NavBar() {
               display: staffOpen ? "flex" : "none",
               position: "absolute", top: "calc(100% + 14px)", right: 0,
               background: "#1a1a24", border: "1px solid #2a2a3a", borderRadius: "10px",
-              padding: "8px", flexDirection: "column", minWidth: "210px", gap: "2px",
+              padding: "8px", flexDirection: "column", minWidth: "240px", gap: "2px",
               boxShadow: "0 12px 24px rgba(0,0,0,0.4)", zIndex: 50,
             }}>
-              {staffLinks.map(renderLink)}
+              {staffGroups.map((g, i) => (
+                <div key={g.title}>
+                  {i > 0 && <div style={{ height: 1, background: "#2a2a3a", margin: "6px 4px" }} />}
+                  <div style={{
+                    fontSize: "10px", fontWeight: 700, color: "#666", textTransform: "uppercase",
+                    letterSpacing: "0.04em", padding: "6px 10px 2px",
+                  }}>
+                    {g.title}
+                  </div>
+                  {g.links.map(renderLink)}
+                </div>
+              ))}
             </div>
           </div>
         )}
