@@ -33,13 +33,16 @@ export function getVariantKey(card: { variant_override: string; rarity: string; 
     if (v === "DB") return "BRH-DB";
     if (v === "TR" || v === "TT") return "BRH-R";
     if (v === "CC") return "MH";
-    // 2026-09-09, Michael: "add a variant for EX cards - holo is too vague
-    // ... HR-EX (Double Rare EX)" -- same visual treatment as the existing
-    // DR/EX bucket below (diagonal pattern + "EX" badge), just recognising
-    // the new explicit code too.
-    if (v === "HR-EX") return "DR";
+    // 2026-09-09, Michael (round 2): "HR-EX is incorrect - It's not Hyper
+    // rare, but Double Rare" -- HR-EX is repurposed to mean Illustration
+    // Rare (routes to the existing "IR" bucket: diagonal pattern + "IR"
+    // badge + star), and EX becomes its own separate code for the actual
+    // Double Rare cards (falls into the "DR" bucket below, alongside the
+    // newly added VMAX/VSTAR/RR/RAD codes).
+    if (v === "HR-EX") return "IR";
     if (v === "DR" || v === "EX") return "DR";
     if (v === "GX" || v === "V" || v === "VX" || v === "VST" || v === "UR") return "DR";
+    if (v === "VMAX" || v === "VSTAR" || v === "RR" || v === "RAD") return "DR";
     if (v === "GS" || v === "SHN" || v === "LGD" || v === "BRK") return "DR";
     if (v === "AS") return "AS";
     if (v === "MH") return "MH";
