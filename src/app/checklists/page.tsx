@@ -121,7 +121,7 @@ const VARIANT_LABEL_FULL: Record<string, string> = {
   FB: 'Friend Ball', QB: 'Quick Ball', UB: 'Ultra Ball',
   DB: 'Dusk Ball', TR: 'Team Rocket', SE: 'Secret',
   PBP: 'PB Pattern', MBP: 'MB Pattern',
-  CC: 'Code Card', TT: 'Trick or Trade',
+  CC: 'Code Card', TT: 'Trick or Trade', 'HR-EX': 'Double Rare EX',
 };
 
 function csvCell(value: string): string {
@@ -1160,6 +1160,7 @@ function Checklist({ code, onBack }: { code: string; onBack: () => void }) {
                       PB: '#e040fb', MB: '#7c4dff', LB: '#00bcd4',
                       FB: '#4caf50', QB: '#f44336', UB: '#2196f3',
                       DB: '#795548', TR: '#607d8b', SE: '#ff9800',
+                      'HR-EX': '#e91e63',
                     };
                     const col = vcColor[v.vc] || '#a0a0b0';
                     // Buy button on Grid View (2026-08-12, Michael: "went
@@ -1225,6 +1226,7 @@ function Checklist({ code, onBack }: { code: string; onBack: () => void }) {
                         PB: '#e040fb', MB: '#7c4dff', LB: '#00bcd4',
                         FB: '#4caf50', QB: '#f44336', UB: '#2196f3',
                         DB: '#795548', TR: '#607d8b', SE: '#ff9800',
+                        'HR-EX': '#e91e63',
                       };
                       const col = vcColor[v.vc] || eraColor;
                       return (
