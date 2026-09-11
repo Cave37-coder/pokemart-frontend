@@ -27,5 +27,43 @@ export const TIER_LABELS_FE: Record<string, string> = {
   master_set: "Master Set",
   complete_set: "Complete Set",
 };
+// Mirrors products/completion.py's tier variant-scope frozensets exactly --
+// used to filter the per-set card grid/list down to just what a selected
+// tier actually requires (Michael, 2026-09-11: "make the type selectable
+// and the screen then reflects that selection. Only showing the cards
+// required to complete Base Set"). Kept as plain arrays (not Set literals)
+// so this file stays parseable the same way the rest of it is.
+export const BROKE_BASE_VARIANTS: string[] = ["N", "H"];
+export const BASE_SET_VARIANTS: string[] = ["N", "H", "RH"];
+export const BALL_VARIANTS: string[] = ["PB", "MB", "LB", "FB", "QB", "UB", "DB"];
+export const OTHER_TRACKED_VARIANTS: string[] = ["TT"];
+export const PATTERN_VARIANTS: string[] = ["ESH"];
+export const FULL_VARIANTS: string[] = [
+  ...BASE_SET_VARIANTS, ...BALL_VARIANTS, ...OTHER_TRACKED_VARIANTS, ...PATTERN_VARIANTS,
+];
+// Which variant codes count toward each tier -- broke_base only requires
+// ANY ONE of {N,H} per card (see products/completion.py _broke_base_progress),
+// but for grid-filtering purposes showing both available chips is correct;
+// the any-vs-all distinction only affects how completion % is scored, not
+// which chips exist for a card.
+export const TIER_VARIANT_SCOPE: Record<string, string[]> = {
+  broke_base: BROKE_BASE_VARIANTS,
+  base_set: BASE_SET_VARIANTS,
+  special_set_base: FULL_VARIANTS,
+  master_set: FULL_VARIANTS,
+  complete_set: FULL_VARIANTS,
+};
+// Tiers restricted to numbered cards only (card_number <= the set's
+// total_cards -- i.e. a card.num like "003/165" whose numerator is <= its
+// own denominator). master_set/complete_set include extras/secret rares
+// numbered above the set total too. Mirrors the `numbered` split in
+// products/completion.py's compute_set_completion().
+export const TIER_NUMBERED_ONLY: Record<string, boolean> = {
+  broke_base: true,
+  base_set: true,
+  special_set_base: true,
+  master_set: false,
+  complete_set: false,
+};
 export const ERA_ORDER: string[] = ["WotC Base","WotC Neo","WotC Legendary","WotC Other","EX Era","Diamond & Pearl","HG&SS","Black & White","XY Era","Sun & Moon","Sword & Shield","Scarlet & Violet","Mega Evolution","Special - Prize Pack","Special - Trick or Trade"];
 export const RSYM: Record<string, string> = {"Common":"\u25cf","Uncommon":"\u25c6","Rare":"\u2605","Holo Rare":"\u2605H","Double Rare":"\u2605\u2605","Illustration Rare":"\u2605i","Ultra Rare":"\u25c7\u25c7","Special Illustration Rare":"\u2605\u25c7","Mega Hyper Rare":"\u25c8","Hyper Rare":"\u25c8","Shiny Holo Rare":"\u2726","Shiny Rare":"\u2726","Amazing Rare":"\u2605A","Radiant Rare":"\u2605R","Prism Rare":"\u2605P","Rainbow Rare":"\u2605RB","Classic Collection":"\u2605CC","Secret Rare":"\u2605SR","Rare BREAK":"\u2605BR","Rare Ace":"\u2605AC","Shiny Ultra Rare":"\u2726UR","ACE SPEC Rare":"A\u2660","Black White Rare":"\u2605BW","Promo":"P","Mega Attack Rare":"\u2605M"};

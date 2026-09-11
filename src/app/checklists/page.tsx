@@ -7,6 +7,7 @@ const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'https://pokemart-api-produc
 
 import {
   SETS, SET_INDEX, ERA_COLORS, TIER_COLORS, TIER_LABELS_FE, ERA_ORDER, RSYM,
+  TIER_VARIANT_SCOPE, TIER_NUMBERED_ONLY, FULL_VARIANTS,
 } from '@/lib/checklistData';
 import type { Variant, Card, SetData, SetMeta } from '@/lib/checklistData';
 
@@ -636,7 +637,12 @@ function Checklist({ code, onBack }: { code: string; onBack: () => void }) {
         { key: 'special_set_base', label: 'Special Set Base' },
         { key: 'master_set', label: 'Master Set' },
       ];
-  const [lbTier, setLbTier] = useState(tierTabs[0].key);
+  // The "everything, unfiltered" tier -- same tier the top stats bar has
+  // always scored against (see topTierKey below). Used as the default
+  // selection so opening a set doesn't immediately hide cards/variants;
+  // narrowing down to Broke Base/Base Set/etc is an explicit tab click.
+  const fullTierKey = isSimpleSet ? 'complete_set' : 'master_set';
+  const [lbTier, setLbTier] = useState(fullTierKey);
   const [leaderboard, setLeaderboard] = useState<{ display_name: string; avatar: string | null; owned: number; required: number; pct: number; complete: boolean; completed_at: string | null; tiers_complete: string[] }[]>([]);
   const [lbLoading, setLbLoading] = useState(false);
   // Michael, 2026-08-01: "vague... i want to look at page and know it is
@@ -649,7 +655,7 @@ function Checklist({ code, onBack }: { code: string; onBack: () => void }) {
   // fall back to a plain tier-coloured outline with no %/fill in that case.
   const [myTierProgress, setMyTierProgress] = useState<Record<string, { owned: number; required: number; pct: number; complete: boolean }> | null>(null);
 
-  useEffect(() => { setLbTier(tierTabs[0].key); }, [code]);
+  useEffect(() => { setLbTier(fullTierKey); }, [code]);
 
   useEffect(() => {
     setLbLoading(true);
@@ -811,13 +817,34 @@ function Checklist({ code, onBack }: { code: string; onBack: () => void }) {
   // bar mirrors the Master Set (or Complete Set, for simple sets) tier
   // exactly -- one source of truth. Falls back to the local count only when
   // logged out, since /progress/ requires auth.
-  const topTierKey = isSimpleSet ? 'complete_set' : 'master_set';
+  const topTierKey = fullTierKey;
   const topTier = myTierProgress?.[topTierKey];
   const ownedDisplay = topTier ? topTier.owned : ownedVariants;
   const totalDisplay = topTier ? topTier.required : totalVariants;
   const pct = topTier ? topTier.pct : (totalDisplay ? Math.round(ownedDisplay / totalDisplay * 100) : 0);
   const eraColor = ERA_COLORS[set.era] || '#ff6b35';
   const sorted = [...set.cards].sort((a, b) => (parseInt(a.num) || 9999) - (parseInt(b.num) || 9999));
+
+  // Michael, 2026-09-11: "the checklists are broken up into different
+  // types, can we make the type selectable and the screen then reflects
+  // that selection. Only showing the cards required to complete 'Base
+  // Set'" -- reuses the tier tab selection above (lbTier) to also scope
+  // the card grid/list, not just the leaderboard: cards not required at
+  // all for the selected tier (e.g. secret rares above the set total, for
+  // every tier except Master Set/Complete Set) are hidden entirely, and
+  // each remaining card only shows the variant chips that tier actually
+  // counts. Mirrors products/completion.py's own numbered/variant-scope
+  // split exactly (see TIER_VARIANT_SCOPE/TIER_NUMBERED_ONLY).
+  const isNumberedCard = (num: string) => {
+    const [n, total] = num.split('/').map(s => parseInt(s, 10));
+    return !isNaN(n) && !isNaN(total) && n <= total;
+  };
+  const tierScope = new Set(TIER_VARIANT_SCOPE[lbTier] || FULL_VARIANTS);
+  const tierNumberedOnly = TIER_NUMBERED_ONLY[lbTier] ?? false;
+  const tierFilteredSorted = sorted
+    .filter(card => !tierNumberedOnly || isNumberedCard(card.num))
+    .map(card => ({ ...card, variants: card.variants.filter(v => tierScope.has(v.vc)) }))
+    .filter(card => card.variants.length > 0);
 
   // ── CSV export handlers ──────────────────────────────────────────────
   // Resolves the logged-in customer's display name + email once (cached in
@@ -1090,6 +1117,15 @@ function Checklist({ code, onBack }: { code: string; onBack: () => void }) {
       {/* Legend + filters */}
       <div style={{ display: 'flex', gap: '10px', marginBottom: '10px', flexWrap: 'wrap', alignItems: 'center' }}>
         <span style={{ fontSize: '10px', color: '#555', flex: 1 }}>● C &nbsp;◆ UC &nbsp;★ R &nbsp;★H Holo &nbsp;★★ DR &nbsp;★i IR &nbsp;◇◇ UR &nbsp;★◇ SIR &nbsp;◈ MHR</span>
+        {tierTabs.length > 1 && (
+          <span style={{ fontSize: '11px', color: '#777' }}>
+            Showing cards for:{' '}
+            <span style={{ color: TIER_COLORS[lbTier] || eraColor, fontWeight: 700 }}>
+              {TIER_LABELS_FE[lbTier] || lbTier}
+            </span>
+            <span style={{ color: '#444' }}> — change in Leaderboard tabs above</span>
+          </span>
+        )}
         <div style={{ display: 'flex', gap: '6px' }}>
           {(['all','missing','owned'] as const).map(f => (
             <button key={f} onClick={() => setFilter(f)}
@@ -1104,7 +1140,7 @@ function Checklist({ code, onBack }: { code: string; onBack: () => void }) {
       {/* Card grid IMAGE view */}
       {viewMode === 'grid' && (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))', gap: '10px', marginBottom: '16px' }}>
-          {sorted.map(card => {
+          {tierFilteredSorted.map(card => {
             const allOwned = card.variants.every(v => checks[card.num + '_' + v.vc]);
             const noneOwned = card.variants.every(v => !checks[card.num + '_' + v.vc]);
             if (filter === 'missing' && allOwned) return null;
@@ -1211,7 +1247,7 @@ function Checklist({ code, onBack }: { code: string; onBack: () => void }) {
       {viewMode === 'list' && (
       <div style={{ background: '#1e1e2a', border: '1px solid #2a2a3a', borderRadius: '8px', padding: '16px' }}>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: '2px 5px' }}>
-          {sorted.map(card => {
+          {tierFilteredSorted.map(card => {
             const allOwned = card.variants.every(v => checks[card.num + '_' + v.vc]);
             const noneOwned = card.variants.every(v => !checks[card.num + '_' + v.vc]);
             if (filter === 'missing' && allOwned) return null;
