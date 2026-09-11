@@ -159,7 +159,7 @@ function ChecklistsBody() {
 
       {/* Selected customer's checklist */}
       <div>
-        {detailLoading && <div style={{ color: "#555", fontSize: 13 }}>Loading checklist…</div>}
+        {detailLoading && <div style={{ color: "#555", fontSize: 13 }}>Loading collection…</div>}
 
         {!detailLoading && !selected && (
           <div style={{ ...card, color: "#555", fontSize: 13, textAlign: "center", padding: 40 }}>
@@ -276,7 +276,7 @@ export default function StaffChecklistsPage() {
     <div style={{ minHeight: "100vh", background: "#0e0e16", padding: "32px 20px" }}>
       <div style={{ maxWidth: "1200px", margin: "0 auto" }}>
         <div style={{ marginBottom: 20 }}>
-          <h1 style={{ color: "#fff", fontSize: 22, fontWeight: 700, margin: 0 }}>Customer Checklists</h1>
+          <h1 style={{ color: "#fff", fontSize: 22, fontWeight: 700, margin: 0 }}>Customer Collections</h1>
           <p style={{ color: "#555", fontSize: 12, marginTop: 4 }}>
             Look up any customer to see what they have and what they still need.{" "}
             <Link href="/staff/orders" style={{ color: "#ff6b35" }}>← Orders</Link>

@@ -39,7 +39,7 @@ export default function FriendChecklistSection({ entries, ownerLabel }: {
   return (
     <div style={sectionStyle}>
       <p style={{ color: "#a0a0b0", fontSize: "11px", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", margin: "0 0 4px 0" }}>
-        📋 {ownerLabel} Checklists
+        📋 {ownerLabel}&apos;s Collection
       </p>
       <p style={{ color: "#555", fontSize: "12px", margin: "0 0 14px 0" }}>
         Sets they&apos;re actively collecting — tap a set to see exactly which cards they have and which they still need.

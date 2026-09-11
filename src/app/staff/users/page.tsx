@@ -220,7 +220,7 @@ export default function StaffUsersPage() {
           <p style={{ color: "#555", fontSize: 12, marginTop: 4 }}>
             Every customer account, grouped by when they were last active on the site, plus a quick temporary password reset for locked-out customers.
             {" · "}<Link href="/staff/orders" style={{ color: "#ff6b35" }}>Orders →</Link>
-            {" · "}<Link href="/staff/checklists" style={{ color: "#ff6b35" }}>Customer Checklists →</Link>
+            {" · "}<Link href="/staff/checklists" style={{ color: "#ff6b35" }}>Customer Collections →</Link>
             {" · "}<Link href="/staff/announcements" style={{ color: "#ff6b35" }}>Restocks & Announcements →</Link>
           </p>
         </div>

@@ -323,7 +323,7 @@ export default function PublicProfilePage() {
           {profile.checklist_completions.length > 0 && (
             <div style={sectionStyle}>
               <p style={{ color: "#a0a0b0", fontSize: "11px", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", margin: "0 0 14px 0" }}>
-                ✅ Checklist Progress
+                ✅ Collection Progress
               </p>
               <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
                 {profile.checklist_completions.map((c) => (

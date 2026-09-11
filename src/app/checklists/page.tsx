@@ -254,7 +254,7 @@ function downloadSheetPdf(btn) {
     return;
   }
   var el = document.getElementById('sheet');
-  var filename = el.getAttribute('data-filename') || 'PokeBulk-checklist.pdf';
+  var filename = el.getAttribute('data-filename') || 'PokeBulk-my-collection.pdf';
   var original = btn.textContent;
   btn.textContent = 'Preparing...';
   btn.disabled = true;
@@ -850,7 +850,7 @@ function Checklist({ code, onBack }: { code: string; onBack: () => void }) {
       });
     });
     const meta = [['Customer', email ? `${name} (${email})` : name], ['Set', `${set.name} (${code})`], []];
-    downloadCsv(`${code}_full_checklist.csv`, ['Card #', 'Name', 'Rarity', 'Variant', 'Highlighted'], rows, meta);
+    downloadCsv(`${code}_full_collection.csv`, ['Card #', 'Name', 'Rarity', 'Variant', 'Highlighted'], rows, meta);
   };
 
   const buildFullRows = (): PullSheetRow[] => {
@@ -900,7 +900,7 @@ function Checklist({ code, onBack }: { code: string; onBack: () => void }) {
   const printFullListPullSheet = async () => {
     const all = buildFullRows();
     const { name, email } = await getCustomerInfo();
-    openPullSheet(buildPullSheetHtml({ title: 'Full Checklist', setName: set.name, setCode: code, customerName: name, customerEmail: email, rows: all, showHighlighted: true }));
+    openPullSheet(buildPullSheetHtml({ title: 'Full List', setName: set.name, setCode: code, customerName: name, customerEmail: email, rows: all, showHighlighted: true }));
   };
 
   const emailNeededList = async () => {
@@ -1083,7 +1083,7 @@ function Checklist({ code, onBack }: { code: string; onBack: () => void }) {
           </div>
         )}
         <div style={{ fontSize: '10px', color: '#444', marginTop: '10px' }}>
-          Want to appear here? Set a display name and enable checklist sharing in your <a href="/profile" style={{ color: eraColor }}>Profile</a>.
+          Want to appear here? Set a display name and enable collection sharing in your <a href="/profile" style={{ color: eraColor }}>Profile</a>.
         </div>
       </div>
 
@@ -1336,11 +1336,11 @@ function ChecklistsPageInner() {
     <div style={{ minHeight: '100vh', background: '#12121a', color: '#e0e0e0' }}>
       <div style={{ maxWidth: '1200px', margin: '0 auto' }}>
         <div style={{ padding: '20px 20px 0' }}>
-          <h1 style={{ fontSize: '22px', fontWeight: 700, color: '#fff', marginBottom: '4px' }}>Set Checklists</h1>
+          <h1 style={{ fontSize: '22px', fontWeight: 700, color: '#fff', marginBottom: '4px' }}>My Collection</h1>
           <p style={{ fontSize: '13px', color: '#555' }}>Track your collection across all 146 sets. Log in to save your progress to your account.</p>
         </div>
         {!ready ? (
-          <div style={{ padding: '60px 20px', textAlign: 'center', color: '#555', fontSize: '13px' }}>Loading your checklist progress...</div>
+          <div style={{ padding: '60px 20px', textAlign: 'center', color: '#555', fontSize: '13px' }}>Loading your collection progress...</div>
         ) : activeSet ? (
           <Checklist code={activeSet} onBack={closeSet} />
         ) : (

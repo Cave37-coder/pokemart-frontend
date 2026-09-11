@@ -97,7 +97,7 @@ export default function PokedexGrid({ pokemon, allPokemon, external, ownerLabel 
                         </>
                     ) : (
                         <>
-                            <div style={{ fontSize: "13px", color: "#a0a0b0" }}>Track your own Pokédex collection, separate from your Checklist.</div>
+                            <div style={{ fontSize: "13px", color: "#a0a0b0" }}>Track your own Pokédex collection, separate from My Collection.</div>
                             <Link href="/auth/login" style={{ fontSize: "12px", color: "#ff6b35", textDecoration: "none", fontWeight: 600, whiteSpace: "nowrap" }}>
                                 Log in to start →
                             </Link>

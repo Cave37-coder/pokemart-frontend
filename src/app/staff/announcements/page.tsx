@@ -364,7 +364,7 @@ export default function StaffAnnouncementsPage() {
             Log a restock or announcement here, tagged with the date it should count toward — the
             monthly update email (sent on the 20th) pulls in whatever falls in the current month.
             {" · "}<Link href="/staff/orders" style={{ color: "#ff6b35" }}>Orders →</Link>
-            {" · "}<Link href="/staff/checklists" style={{ color: "#ff6b35" }}>Customer Checklists →</Link>
+            {" · "}<Link href="/staff/checklists" style={{ color: "#ff6b35" }}>Customer Collections →</Link>
             {" · "}<Link href="/staff/users" style={{ color: "#ff6b35" }}>Users →</Link>
           </p>
         </div>

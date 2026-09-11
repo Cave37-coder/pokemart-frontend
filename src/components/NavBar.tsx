@@ -155,7 +155,7 @@ export default function NavBar() {
   const primaryLinks = [
     { href: "/cards", label: "Browse Cards" },
     { href: "/pokedex", label: "Pokédex" },
-    { href: "/checklists", label: "Checklists" },
+    { href: "/checklists", label: "My Collection" },
     { href: "/community", label: "Community" },
   ];
 
@@ -177,7 +177,7 @@ export default function NavBar() {
       title: "Store",
       links: [
         { href: "/staff/orders", label: "📦 Orders" },
-        { href: "/staff/checklists", label: "📋 Customer Checklists" },
+        { href: "/staff/checklists", label: "📋 Customer Collections" },
         { href: "/staff/announcements", label: "📣 Restocks & Announcements" },
         { href: "/staff/users", label: "👤 Users" },
       ],

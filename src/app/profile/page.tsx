@@ -439,10 +439,10 @@ export default function ProfilePage() {
           </div>
         </div>
 
-        {/* Editable — Checklist Privacy */}
+        {/* Editable — Collection Privacy */}
         <div style={sectionStyle}>
           <p style={{ color: "#a0a0b0", fontSize: "11px", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", margin: "0 0 4px 0" }}>
-            Checklist Privacy
+            Collection Privacy
           </p>
           <p style={{ color: "#555", fontSize: "12px", margin: "0 0 16px 0" }}>
             Opt-in only — you won&apos;t appear on any leaderboard or the Wall of Honour unless you set a display name AND turn this on.
@@ -465,7 +465,7 @@ export default function ProfilePage() {
               style={{ width: "18px", height: "18px", cursor: "pointer" }}
             />
             <span style={{ color: "#e0e0e0", fontSize: "13px" }}>
-              Show my checklist progress on leaderboards and the Wall of Honour
+              Show my collection progress on leaderboards and the Wall of Honour
             </span>
           </label>
         </div>
@@ -476,8 +476,8 @@ export default function ProfilePage() {
             Community Profile
           </p>
           <p style={{ color: "#555", fontSize: "12px", margin: "0 0 16px 0" }}>
-            A separate opt-in from Checklist Privacy above — this one controls whether your Pokédex collection and wishlist are visible to other trainers on{" "}
-            <a href="/community" style={{ color: "#ff6b35" }}>the Community page</a>. Uses the same public display name as your checklist settings.
+            A separate opt-in from Collection Privacy above — this one controls whether your Pokédex collection and wishlist are visible to other trainers on{" "}
+            <a href="/community" style={{ color: "#ff6b35" }}>the Community page</a>. Uses the same public display name as your collection settings.
           </p>
 
           <div style={{
