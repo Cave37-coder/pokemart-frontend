@@ -7,7 +7,7 @@ const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'https://pokemart-api-produc
 
 import {
   SETS, SET_INDEX, ERA_COLORS, TIER_COLORS, TIER_LABELS_FE, ERA_ORDER, RSYM,
-  TIER_VARIANT_SCOPE, TIER_NUMBERED_ONLY, FULL_VARIANTS,
+  TIER_VARIANT_SCOPE, TIER_RARITY_SCOPE, FULL_VARIANTS,
 } from '@/lib/checklistData';
 import type { Variant, Card, SetData, SetMeta } from '@/lib/checklistData';
 
@@ -636,12 +636,17 @@ function Checklist({ code, onBack }: { code: string; onBack: () => void }) {
         { key: 'base_set', label: 'Base Set' },
         { key: 'special_set_base', label: 'Special Set Base' },
         { key: 'master_set', label: 'Master Set' },
+        { key: 'full_master', label: 'Full Master' },
       ];
   // The "everything, unfiltered" tier -- same tier the top stats bar has
   // always scored against (see topTierKey below). Used as the default
   // selection so opening a set doesn't immediately hide cards/variants;
   // narrowing down to Broke Base/Base Set/etc is an explicit tab click.
-  const fullTierKey = isSimpleSet ? 'complete_set' : 'master_set';
+  // NOTE: Master Set is no longer the top of the ladder as of the
+  // rarity-based tier split (Michael, 2026-09-11) -- it now trades
+  // Pokeball/Masterball requirements for Illustration Rares, so it's no
+  // longer a strict superset of everything else. Full Master is.
+  const fullTierKey = isSimpleSet ? 'complete_set' : 'full_master';
   const [lbTier, setLbTier] = useState(fullTierKey);
   const [leaderboard, setLeaderboard] = useState<{ display_name: string; avatar: string | null; owned: number; required: number; pct: number; complete: boolean; completed_at: string | null; tiers_complete: string[] }[]>([]);
   const [lbLoading, setLbLoading] = useState(false);
@@ -829,20 +834,17 @@ function Checklist({ code, onBack }: { code: string; onBack: () => void }) {
   // types, can we make the type selectable and the screen then reflects
   // that selection. Only showing the cards required to complete 'Base
   // Set'" -- reuses the tier tab selection above (lbTier) to also scope
-  // the card grid/list, not just the leaderboard: cards not required at
-  // all for the selected tier (e.g. secret rares above the set total, for
-  // every tier except Master Set/Complete Set) are hidden entirely, and
+  // the card grid/list, not just the leaderboard: cards whose rarity isn't
+  // required at all for the selected tier (Illustration Rares etc, for
+  // every tier except Master Set/Full Master) are hidden entirely, and
   // each remaining card only shows the variant chips that tier actually
-  // counts. Mirrors products/completion.py's own numbered/variant-scope
-  // split exactly (see TIER_VARIANT_SCOPE/TIER_NUMBERED_ONLY).
-  const isNumberedCard = (num: string) => {
-    const [n, total] = num.split('/').map(s => parseInt(s, 10));
-    return !isNaN(n) && !isNaN(total) && n <= total;
-  };
+  // counts (e.g. no Pokeball/Masterball chips outside Special Set
+  // Base/Full Master). Mirrors products/completion.py's own rarity +
+  // variant-scope split exactly (see TIER_VARIANT_SCOPE/TIER_RARITY_SCOPE).
   const tierScope = new Set(TIER_VARIANT_SCOPE[lbTier] || FULL_VARIANTS);
-  const tierNumberedOnly = TIER_NUMBERED_ONLY[lbTier] ?? false;
+  const tierRarityScope = TIER_RARITY_SCOPE[lbTier] ?? null;
   const tierFilteredSorted = sorted
-    .filter(card => !tierNumberedOnly || isNumberedCard(card.num))
+    .filter(card => tierRarityScope === null || tierRarityScope.includes(card.rarity))
     .map(card => ({ ...card, variants: card.variants.filter(v => tierScope.has(v.vc)) }))
     .filter(card => card.variants.length > 0);
 

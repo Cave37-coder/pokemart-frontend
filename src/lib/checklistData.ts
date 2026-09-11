@@ -18,6 +18,7 @@ export const TIER_COLORS: Record<string, string> = {
   base_set: "#4caf50",
   special_set_base: "#7c4dff",
   master_set: "#ffd700",
+  full_master: "#e91e63",
   complete_set: "#ff6b35",
 };
 export const TIER_LABELS_FE: Record<string, string> = {
@@ -25,45 +26,59 @@ export const TIER_LABELS_FE: Record<string, string> = {
   base_set: "Base Set",
   special_set_base: "Special Set Base",
   master_set: "Master Set",
+  full_master: "Full Master",
   complete_set: "Complete Set",
 };
-// Mirrors products/completion.py's tier variant-scope frozensets exactly --
+// Mirrors products/completion.py's rarity + variant-scope ladder exactly --
 // used to filter the per-set card grid/list down to just what a selected
-// tier actually requires (Michael, 2026-09-11: "make the type selectable
-// and the screen then reflects that selection. Only showing the cards
-// required to complete Base Set"). Kept as plain arrays (not Set literals)
-// so this file stays parseable the same way the rest of it is.
+// tier actually requires (Michael, 2026-09-11: "the checklists are broken
+// up into different types, can we make the type selectable and the screen
+// then reflects that selection. Only showing the cards required to
+// complete Base Set"). The ladder is RARITY-driven, not card_number-range
+// -driven: Broke Base/Base Set/Special Set Base only ever require "core"
+// rarities (Common through Ultra Rare/EX); Master Set adds Illustration
+// Rare/Special Illustration Rare (and every rarer tier) in exchange for
+// dropping the Pokeball/Masterball requirement; Full Master requires
+// everything, every rarity, every variant.
+export const CORE_RARITIES: string[] = ["Common", "Uncommon", "Rare", "Holo Rare", "Ultra Rare"];
+
 export const BROKE_BASE_VARIANTS: string[] = ["N", "H"];
 export const BASE_SET_VARIANTS: string[] = ["N", "H", "RH"];
 export const BALL_VARIANTS: string[] = ["PB", "MB", "LB", "FB", "QB", "UB", "DB"];
 export const OTHER_TRACKED_VARIANTS: string[] = ["TT"];
 export const PATTERN_VARIANTS: string[] = ["ESH"];
+export const SPECIAL_SET_BASE_VARIANTS: string[] = [...BASE_SET_VARIANTS, ...BALL_VARIANTS];
+// Master Set explicitly excludes Pokeball/Masterball variants (Michael,
+// 2026-09-11) -- same N/H/RH scope as Base Set/Special Set Base, just with
+// Illustration Rares required on top (see TIER_RARITY_SCOPE below).
+export const MASTER_SET_VARIANTS: string[] = BASE_SET_VARIANTS;
 export const FULL_VARIANTS: string[] = [
   ...BASE_SET_VARIANTS, ...BALL_VARIANTS, ...OTHER_TRACKED_VARIANTS, ...PATTERN_VARIANTS,
 ];
+
 // Which variant codes count toward each tier -- broke_base only requires
-// ANY ONE of {N,H} per card (see products/completion.py _broke_base_progress),
-// but for grid-filtering purposes showing both available chips is correct;
-// the any-vs-all distinction only affects how completion % is scored, not
-// which chips exist for a card.
+// ANY ONE of {N,H} per card (see products/completion.py
+// _broke_base_progress), but for grid-filtering purposes showing both
+// available chips is correct; the any-vs-all distinction only affects how
+// completion % is scored, not which chips exist for a card.
 export const TIER_VARIANT_SCOPE: Record<string, string[]> = {
   broke_base: BROKE_BASE_VARIANTS,
   base_set: BASE_SET_VARIANTS,
-  special_set_base: FULL_VARIANTS,
-  master_set: FULL_VARIANTS,
+  special_set_base: SPECIAL_SET_BASE_VARIANTS,
+  master_set: MASTER_SET_VARIANTS,
+  full_master: FULL_VARIANTS,
   complete_set: FULL_VARIANTS,
 };
-// Tiers restricted to numbered cards only (card_number <= the set's
-// total_cards -- i.e. a card.num like "003/165" whose numerator is <= its
-// own denominator). master_set/complete_set include extras/secret rares
-// numbered above the set total too. Mirrors the `numbered` split in
-// products/completion.py's compute_set_completion().
-export const TIER_NUMBERED_ONLY: Record<string, boolean> = {
-  broke_base: true,
-  base_set: true,
-  special_set_base: true,
-  master_set: false,
-  complete_set: false,
+// Which rarities count toward each tier -- null means every rarity counts
+// (Master Set/Full Master/simple-set Complete Set all impose no rarity
+// restriction of their own).
+export const TIER_RARITY_SCOPE: Record<string, string[] | null> = {
+  broke_base: CORE_RARITIES,
+  base_set: CORE_RARITIES,
+  special_set_base: CORE_RARITIES,
+  master_set: null,
+  full_master: null,
+  complete_set: null,
 };
 export const ERA_ORDER: string[] = ["WotC Base","WotC Neo","WotC Legendary","WotC Other","EX Era","Diamond & Pearl","HG&SS","Black & White","XY Era","Sun & Moon","Sword & Shield","Scarlet & Violet","Mega Evolution","Special - Prize Pack","Special - Trick or Trade"];
 export const RSYM: Record<string, string> = {"Common":"\u25cf","Uncommon":"\u25c6","Rare":"\u2605","Holo Rare":"\u2605H","Double Rare":"\u2605\u2605","Illustration Rare":"\u2605i","Ultra Rare":"\u25c7\u25c7","Special Illustration Rare":"\u2605\u25c7","Mega Hyper Rare":"\u25c8","Hyper Rare":"\u25c8","Shiny Holo Rare":"\u2726","Shiny Rare":"\u2726","Amazing Rare":"\u2605A","Radiant Rare":"\u2605R","Prism Rare":"\u2605P","Rainbow Rare":"\u2605RB","Classic Collection":"\u2605CC","Secret Rare":"\u2605SR","Rare BREAK":"\u2605BR","Rare Ace":"\u2605AC","Shiny Ultra Rare":"\u2726UR","ACE SPEC Rare":"A\u2660","Black White Rare":"\u2605BW","Promo":"P","Mega Attack Rare":"\u2605M"};
