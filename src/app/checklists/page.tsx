@@ -881,22 +881,36 @@ function Checklist({ code, onBack }: { code: string; onBack: () => void }) {
     return { name: 'Guest', email: '' };
   };
 
+  // Michael, 2026-09-11: "Can we add the option to print the different sets
+  // out ... print out the Broke set, Base Set" -- these exports used to
+  // always walk `sorted` (every card in the set, full variant scope),
+  // ignoring whatever tier tab was selected -- so "Print" from the Base Set
+  // tab and "Print" from Full Master produced the exact same CSV/pull
+  // sheet. Switched to `tierFilteredSorted`, the same tier-scoped list
+  // already driving the on-screen grid (see its own comment above), so
+  // every export -- CSV, Full List, Needed List -- matches whichever tier
+  // is currently selected. Filenames/titles below now say which tier too,
+  // so two exports for the same set don't look identical or overwrite each
+  // other on disk.
+  const tierLabel = TIER_LABELS_FE[lbTier] || lbTier;
+
   const exportFullListCsv = async () => {
     const { name, email } = await getCustomerInfo();
     const rows: string[][] = [];
-    sorted.forEach(card => {
+    tierFilteredSorted.forEach(card => {
       card.variants.forEach(v => {
         const key = card.num + '_' + v.vc;
         rows.push([card.num, card.name, card.rarity, VARIANT_LABEL_FULL[v.vc] || v.vc, checks[key] ? 'Yes' : 'No']);
       });
     });
-    const meta = [['Customer', email ? `${name} (${email})` : name], ['Set', `${set.name} (${code})`], []];
-    downloadCsv(`${code}_full_collection.csv`, ['Card #', 'Name', 'Rarity', 'Variant', 'Highlighted'], rows, meta);
+    const meta = [['Customer', email ? `${name} (${email})` : name], ['Set', `${set.name} (${code})`], ['Tier', tierLabel], []];
+    const tierSlug = lbTier.replace(/[^a-z0-9]+/gi, '_');
+    downloadCsv(`${code}_${tierSlug}_collection.csv`, ['Card #', 'Name', 'Rarity', 'Variant', 'Highlighted'], rows, meta);
   };
 
   const buildFullRows = (): PullSheetRow[] => {
     const rows: PullSheetRow[] = [];
-    sorted.forEach(card => {
+    tierFilteredSorted.forEach(card => {
       card.variants.forEach(v => {
         const key = card.num + '_' + v.vc;
         rows.push({ num: card.num, name: card.name, variant: VARIANT_LABEL_FULL[v.vc] || v.vc, highlighted: !!checks[key] });
@@ -907,7 +921,7 @@ function Checklist({ code, onBack }: { code: string; onBack: () => void }) {
 
   const buildNeededRows = (): PullSheetRow[] => {
     const rows: PullSheetRow[] = [];
-    sorted.forEach(card => {
+    tierFilteredSorted.forEach(card => {
       card.variants.forEach(v => {
         const key = card.num + '_' + v.vc;
         if (!checks[key]) rows.push({ num: card.num, name: card.name, variant: VARIANT_LABEL_FULL[v.vc] || v.vc });
@@ -932,7 +946,7 @@ function Checklist({ code, onBack }: { code: string; onBack: () => void }) {
     const needed = buildNeededRows();
     if (needed.length === 0) { alert("You're not missing anything from this set!"); return; }
     const { name, email } = await getCustomerInfo();
-    openPullSheet(buildPullSheetHtml({ title: 'Needed List', setName: set.name, setCode: code, customerName: name, customerEmail: email, rows: needed, showHighlighted: false }));
+    openPullSheet(buildPullSheetHtml({ title: `Needed List — ${tierLabel}`, setName: set.name, setCode: code, customerName: name, customerEmail: email, rows: needed, showHighlighted: false }));
   };
 
   // Same pull sheet, but the WHOLE set with a Have/Missing column instead of
@@ -941,7 +955,7 @@ function Checklist({ code, onBack }: { code: string; onBack: () => void }) {
   const printFullListPullSheet = async () => {
     const all = buildFullRows();
     const { name, email } = await getCustomerInfo();
-    openPullSheet(buildPullSheetHtml({ title: 'Full List', setName: set.name, setCode: code, customerName: name, customerEmail: email, rows: all, showHighlighted: true }));
+    openPullSheet(buildPullSheetHtml({ title: `Full List — ${tierLabel}`, setName: set.name, setCode: code, customerName: name, customerEmail: email, rows: all, showHighlighted: true }));
   };
 
   const emailNeededList = async () => {
@@ -1137,7 +1151,14 @@ function Checklist({ code, onBack }: { code: string; onBack: () => void }) {
             <span style={{ color: TIER_COLORS[lbTier] || eraColor, fontWeight: 700 }}>
               {TIER_LABELS_FE[lbTier] || lbTier}
             </span>
-            <span style={{ color: '#444' }}> — change in Leaderboard tabs above</span>
+            {/* Michael, 2026-09-11: the "change in Leaderboard tabs above"
+                part only makes sense on screen -- printed via the plain
+                Print button (which prints whatever tier is currently
+                selected here), it read like a broken instruction on paper.
+                data-no-print hides just that clause when printing; the
+                tier name itself stays so a printed sheet is still clearly
+                labelled which list it is. */}
+            <span data-no-print style={{ color: '#444' }}> — change in Leaderboard tabs above</span>
           </span>
         )}
         <div style={{ display: 'flex', gap: '6px' }}>
