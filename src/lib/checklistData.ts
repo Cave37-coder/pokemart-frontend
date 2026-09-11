@@ -38,7 +38,19 @@ export const TIER_LABELS_FE: Record<string, string> = {
 // additionally pulls in Illustration Rare/Special Illustration Rare cards
 // living past the numbered range ("Master Set ... all illustration
 // Rares"); Full Master is every card, every rarity, no restriction.
-export const MASTER_SET_CHASE_RARITIES: string[] = ["Illustration Rare", "Special Illustration Rare"];
+// Era research, 2026-09-11: "Illustration Rare"/"Special Illustration Rare"
+// is SV/MEG-only vocabulary. Pre-SV eras (WotC through SWSH) tag their own
+// unnumbered past-the-print-run chase cards "Secret Rare" instead (confirmed
+// live on XY-era Evolutions). Michael's own MEG-era sets also mint two custom
+// top-tier chase rarities beyond Illustration Rare: "Mega Hyper Rare" and
+// "Mega Attack Rare" (e.g. Mega Charizard Y ex 294/217 in Ascended Heroes).
+// All three now count toward Master Set the same as Illustration Rare always did
+// -- mirrors backend products/completion.py MASTER_SET_CHASE_RARITIES.
+export const MASTER_SET_CHASE_RARITIES: string[] = [
+  "Illustration Rare", "Special Illustration Rare",
+  "Secret Rare",
+  "Mega Hyper Rare", "Mega Attack Rare",
+];
 
 export const BROKE_BASE_VARIANTS: string[] = ["N", "H"];
 export const BASE_SET_VARIANTS: string[] = ["N", "H", "RH"];
