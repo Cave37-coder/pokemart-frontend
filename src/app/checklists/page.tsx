@@ -7,7 +7,7 @@ const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'https://pokemart-api-produc
 
 import {
   SETS, SET_INDEX, ERA_COLORS, TIER_COLORS, TIER_LABELS_FE, ERA_ORDER, RSYM,
-  TIER_VARIANT_SCOPE, TIER_RARITY_SCOPE, FULL_VARIANTS,
+  TIER_VARIANT_SCOPE, TIER_NUMBERED_ONLY, MASTER_SET_CHASE_RARITIES, FULL_VARIANTS,
 } from '@/lib/checklistData';
 import type { Variant, Card, SetData, SetMeta } from '@/lib/checklistData';
 
@@ -834,17 +834,29 @@ function Checklist({ code, onBack }: { code: string; onBack: () => void }) {
   // types, can we make the type selectable and the screen then reflects
   // that selection. Only showing the cards required to complete 'Base
   // Set'" -- reuses the tier tab selection above (lbTier) to also scope
-  // the card grid/list, not just the leaderboard: cards whose rarity isn't
-  // required at all for the selected tier (Illustration Rares etc, for
-  // every tier except Master Set/Full Master) are hidden entirely, and
-  // each remaining card only shows the variant chips that tier actually
-  // counts (e.g. no Pokeball/Masterball chips outside Special Set
-  // Base/Full Master). Mirrors products/completion.py's own rarity +
-  // variant-scope split exactly (see TIER_VARIANT_SCOPE/TIER_RARITY_SCOPE).
+  // the card grid/list, not just the leaderboard. Broke Base/Base
+  // Set/Special Set Base are gated by NUMBERED cards only (card_number <=
+  // the set's total_cards -- Michael, 2026-09-11, after live-testing:
+  // "cards under 088 are numbered, the rest ... are unnumbered"), not by
+  // rarity. Master Set admits numbered cards PLUS unnumbered cards whose
+  // rarity is an Illustration Rare/Special Illustration Rare ("Master
+  // Set ... all illustration Rares"). Full Master admits every card. Each
+  // remaining card only shows the variant chips that tier actually counts
+  // (e.g. no Pokeball/Masterball chips outside Special Set Base/Full
+  // Master). Mirrors products/completion.py's compute_set_completion()
+  // exactly (see TIER_VARIANT_SCOPE/TIER_NUMBERED_ONLY/MASTER_SET_CHASE_RARITIES).
+  const isNumberedCard = (num: string) => {
+    const [n, total] = num.split('/').map(s => parseInt(s, 10));
+    return !isNaN(n) && !isNaN(total) && n <= total;
+  };
   const tierScope = new Set(TIER_VARIANT_SCOPE[lbTier] || FULL_VARIANTS);
-  const tierRarityScope = TIER_RARITY_SCOPE[lbTier] ?? null;
+  const tierNumberedOnly = TIER_NUMBERED_ONLY[lbTier] ?? false;
   const tierFilteredSorted = sorted
-    .filter(card => tierRarityScope === null || tierRarityScope.includes(card.rarity))
+    .filter(card => {
+      if (tierNumberedOnly) return isNumberedCard(card.num);
+      if (lbTier === 'master_set') return isNumberedCard(card.num) || MASTER_SET_CHASE_RARITIES.includes(card.rarity);
+      return true; // full_master / complete_set -- every card
+    })
     .map(card => ({ ...card, variants: card.variants.filter(v => tierScope.has(v.vc)) }))
     .filter(card => card.variants.length > 0);
 
