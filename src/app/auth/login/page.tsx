@@ -72,8 +72,11 @@ export default function LoginPage() {
           )}
           <form onSubmit={handleSubmit}>
             <div style={{ marginBottom: 16 }}>
-              <label style={{ display: "block", fontSize: 13, color: "#a0a0b0", marginBottom: 6 }}>Username</label>
-              <input style={inp} type="text" value={username} onChange={e => setUsername(e.target.value)} required autoFocus autoComplete="username" placeholder="your username" />
+              <label style={{ display: "block", fontSize: 13, color: "#a0a0b0", marginBottom: 6 }}>Username or Email</label>
+              {/* 2026-09-13, Michael: "Can we add the email, not just
+                  Username for sign in" -- same field/POST key as before
+                  (backend now accepts either, see LoginSerializer). */}
+              <input style={inp} type="text" value={username} onChange={e => setUsername(e.target.value)} required autoFocus autoComplete="username" placeholder="your username or email" />
             </div>
             <div style={{ marginBottom: 24 }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 6 }}>
