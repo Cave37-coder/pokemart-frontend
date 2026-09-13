@@ -1,6 +1,7 @@
 ﻿"use client";
 import { useState } from "react";
 import Link from "next/link";
+import PasswordField from "@/components/PasswordField";
 
 export default function LoginPage() {
   const [username, setUsername] = useState("");
@@ -55,20 +56,33 @@ export default function LoginPage() {
         <div style={{ background: "#1a1a24", border: "1px solid #2a2a3a", borderRadius: 12, padding: "28px 24px" }}>
           {error && (
             <div style={{ background: "#EF444420", border: "1px solid #EF444444", borderRadius: 8, padding: "10px 14px", marginBottom: 20, color: "#EF4444", fontSize: 13 }}>
-              {error}
+              <div>{error}</div>
+              {/* 2026-09-13: if your password was just reset by staff or via
+                  email, the #1 cause of "it still says invalid" is the
+                  browser silently autofilling an OLD saved password over
+                  what you typed -- click the eye icon below to check what's
+                  actually in the field before trying again. */}
+              {error.toLowerCase().includes("invalid credentials") && (
+                <div style={{ color: "#f2a0a0", fontSize: 12, marginTop: 6, lineHeight: 1.5 }}>
+                  If your password was recently reset, click the 👁 icon in the password field to make sure your
+                  browser hasn't autofilled an old saved password.
+                </div>
+              )}
             </div>
           )}
           <form onSubmit={handleSubmit}>
             <div style={{ marginBottom: 16 }}>
               <label style={{ display: "block", fontSize: 13, color: "#a0a0b0", marginBottom: 6 }}>Username</label>
-              <input style={inp} type="text" value={username} onChange={e => setUsername(e.target.value)} required autoFocus placeholder="your username" />
+              <input style={inp} type="text" value={username} onChange={e => setUsername(e.target.value)} required autoFocus autoComplete="username" placeholder="your username" />
             </div>
             <div style={{ marginBottom: 24 }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 6 }}>
                 <label style={{ fontSize: 13, color: "#a0a0b0" }}>Password</label>
                 <Link href="/auth/forgot-password" style={{ fontSize: 12, color: "#ff6b35", textDecoration: "none" }}>Forgot password?</Link>
               </div>
-              <input style={inp} type="password" value={password} onChange={e => setPassword(e.target.value)} required placeholder="password" />
+              {/* 2026-09-13: show/hide toggle -- see PasswordField's own
+                  comment for why (silent browser-autofill override). */}
+              <PasswordField style={inp} value={password} onChange={setPassword} required autoComplete="current-password" placeholder="password" />
             </div>
             <button type="submit" disabled={loading} style={{
               width: "100%", background: loading ? "#cc5528" : "#ff6b35",

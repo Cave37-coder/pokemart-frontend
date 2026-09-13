@@ -2,6 +2,7 @@
 import { useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import BackButton from "@/components/BackButton";
+import PasswordField from "@/components/PasswordField";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://pokemart-api-production.up.railway.app";
 
@@ -100,11 +101,15 @@ export default function ResetPasswordPage() {
             <form onSubmit={handleSubmit}>
               <div style={{ marginBottom: 14 }}>
                 <label style={lbl}>New password</label>
-                <input style={inp} type="password" value={password} onChange={(e) => setPassword(e.target.value)} required autoFocus placeholder="Min 8 characters" />
+                {/* 2026-09-13: show/hide toggle -- see PasswordField's own
+                    comment for why (silent browser-autofill override). Also
+                    ensures whatever you set here is visible/confirmable
+                    before you rely on it to sign back in. */}
+                <PasswordField style={inp} value={password} onChange={setPassword} required autoFocus autoComplete="new-password" placeholder="Min 8 characters" />
               </div>
               <div style={{ marginBottom: 20 }}>
                 <label style={lbl}>Confirm new password</label>
-                <input style={inp} type="password" value={password2} onChange={(e) => setPassword2(e.target.value)} required placeholder="••••••••" />
+                <PasswordField style={inp} value={password2} onChange={setPassword2} required autoComplete="new-password" placeholder="••••••••" />
               </div>
               <button type="submit" disabled={loading} style={{ width: "100%", background: loading ? "#cc5528" : "#ff6b35", color: "#fff", border: "none", borderRadius: 8, padding: "11px", fontSize: 14, fontWeight: 600, cursor: loading ? "not-allowed" : "pointer" }}>
                 {loading ? "Updating..." : "Update password"}
