@@ -352,7 +352,11 @@ function Checklist({ code, onBack }: { code: string; onBack: () => void }) {
   const [stockLoaded, setStockLoaded] = useState(false);
   const [filter, setFilter] = useState<'all'|'missing'|'owned'>('all');
 
-  const [viewMode, setViewMode] = useState<'list'|'grid'>('list');
+  // Michael, 2026-09-16: "when going to set, open default Grid screen!" --
+  // the image-forward grid is now the first thing a customer sees on a set;
+  // List is still there as a toggle for anyone who prefers the dense text
+  // layout (or wants to print it).
+  const [viewMode, setViewMode] = useState<'list'|'grid'>('grid');
   const [cardImages, setCardImages] = useState<Record<number, string>>({});
   // Keyed by `${pid}_${variant}`, not bare pid -- see the note where this is
   // populated below for why pid alone isn't unique per card.
@@ -602,20 +606,42 @@ function Checklist({ code, onBack }: { code: string; onBack: () => void }) {
   // card; here a card can have Normal/Holo/Reverse Holo/etc side by side --
   // per Michael's call: check = every card's Normal print, lightning = every
   // Reverse Holo, star = whichever print of each card is the "chase" one.
-  // Each action only MARKS owned (never un-marks), scoped to whichever tier
-  // tab is currently selected, so running one after ticking a few by hand
-  // never loses progress -- safe to tap more than once.
-  const markAllByPicker = useCallback((vcPicker: (card: Card) => Variant | null) => {
+  // Michael, 2026-09-16 (round 2): "the toggle 'Select All' must also
+  // Deselect if pushed again" -- so this is a real toggle, not a one-way
+  // mark: if every targeted card is already owned, pressing again clears
+  // all of them; otherwise it marks whatever's still missing owned. Scoped
+  // to whichever tier tab is currently selected, same set of cards the
+  // button's own "is everything already selected" check reads from.
+  const isAllPickerOwned = useCallback((vcPicker: (card: Card) => Variant | null): boolean => {
+    let sawAny = false;
+    for (const card of tierFilteredSorted) {
+      const v = vcPicker(card);
+      if (!v) continue;
+      sawAny = true;
+      if (!checks[card.num + '_' + v.vc]) return false;
+    }
+    return sawAny;
+  }, [tierFilteredSorted, checks]);
+
+  const toggleAllByPicker = useCallback((vcPicker: (card: Card) => Variant | null) => {
     const token = localStorage.getItem('access_token');
     if (!token) { router.push('/auth/login'); return; }
-    const newlyMarked: string[] = [];
+    const targets: string[] = [];
+    tierFilteredSorted.forEach(card => {
+      const v = vcPicker(card);
+      if (v) targets.push(card.num + '_' + v.vc);
+    });
+    if (targets.length === 0) return;
+    const deselecting = targets.every(key => checks[key]);
+    const changed: string[] = [];
     setChecks(prev => {
       const next = { ...prev };
-      tierFilteredSorted.forEach(card => {
-        const v = vcPicker(card);
-        if (!v) return;
-        const key = card.num + '_' + v.vc;
-        if (!next[key]) { next[key] = true; newlyMarked.push(key); }
+      targets.forEach(key => {
+        if (deselecting) {
+          if (next[key]) { delete next[key]; changed.push(key); }
+        } else {
+          if (!next[key]) { next[key] = true; changed.push(key); }
+        }
       });
       saveChecks(code, next);
       return next;
@@ -623,24 +649,22 @@ function Checklist({ code, onBack }: { code: string; onBack: () => void }) {
     // Fire-and-forget, same one-POST-per-card pattern `toggle` already uses
     // for a single card -- just for many at once, so a batch of 100+ can't
     // block the UI. An occasional dropped request just needs a re-tap.
-    newlyMarked.forEach(key => {
+    changed.forEach(key => {
       authFetch('/api/checklists/toggle/', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ card_set: code, card_key: key }),
       }).catch(() => {});
     });
-  }, [code, router, tierFilteredSorted]);
+  }, [code, router, tierFilteredSorted, checks]);
 
-  const markAllNormal = () => markAllByPicker(card => card.variants.find(v => v.vc === 'N') || null);
-  const markAllReverseHolo = () => markAllByPicker(card => card.variants.find(v => v.vc === 'RH') || null);
+  const pickNormal = (card: Card) => card.variants.find(v => v.vc === 'N') || null;
+  const pickReverseHolo = (card: Card) => card.variants.find(v => v.vc === 'RH') || null;
   // No single variant code means "chase" across every set (the priciest
   // print of a given card might be an RH, an H, an ESH, a ball variant,
   // etc) -- so instead of hard-coding one code, pick whichever variant of
   // each card is worth the most.
-  const markAllChase = () => markAllByPicker(card =>
-    card.variants.reduce((best: Variant | null, v) => (!best || v.zar > best.zar ? v : best), null)
-  );
+  const pickChase = (card: Card) => card.variants.reduce((best: Variant | null, v) => (!best || v.zar > best.zar ? v : best), null);
 
   // ── CSV export handlers ──────────────────────────────────────────────
   // Resolves the logged-in customer's display name + email once (cached in
@@ -955,17 +979,33 @@ function Checklist({ code, onBack }: { code: string; onBack: () => void }) {
         {/* "Select All" bulk row -- Michael, 2026-09-16, from his reference
             app's Select All icons: check/lightning/star. Marks owned across
             every card currently shown by the tier tab above (Normal /
-            Reverse Holo / chase print respectively) -- never un-marks, so
-            it's safe to tap more than once. Logged-out visitors get sent to
-            login, same as tapping any other checkbox. */}
+            Reverse Holo / chase print respectively). Michael, same day
+            (round 2): "the toggle 'Select All' must also Deselect if pushed
+            again" -- each icon fills in solid the moment every targeted card
+            is already owned, and tapping it again clears all of them (see
+            isAllPickerOwned/toggleAllByPicker above). Logged-out visitors
+            get sent to login, same as tapping any other checkbox. */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px', flexWrap: 'wrap' }}>
           <span style={{ fontSize: '11px', color: '#777', fontWeight: 600 }}>Select All:</span>
-          <button onClick={markAllNormal} title="Mark every Normal print owned"
-            style={{ width: '30px', height: '30px', borderRadius: '50%', background: '#1e1e2a', border: '1.5px solid #2196f3', color: '#2196f3', fontSize: '14px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✓</button>
-          <button onClick={markAllReverseHolo} title="Mark every Reverse Holo print owned"
-            style={{ width: '30px', height: '30px', borderRadius: '50%', background: '#1e1e2a', border: '1.5px solid #7c4dff', color: '#7c4dff', fontSize: '14px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>⚡</button>
-          <button onClick={markAllChase} title="Mark each card's rarest/priciest print owned"
-            style={{ width: '30px', height: '30px', borderRadius: '50%', background: '#1e1e2a', border: '1.5px solid #ffd700', color: '#ffd700', fontSize: '14px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>★</button>
+          {([
+            { picker: pickNormal, color: '#2196f3', icon: '✓', title: 'Normal print' },
+            { picker: pickReverseHolo, color: '#7c4dff', icon: '⚡', title: 'Reverse Holo print' },
+            { picker: pickChase, color: '#ffd700', icon: '★', title: "each card's rarest/priciest print" },
+          ] as const).map(({ picker, color, icon, title }) => {
+            const active = isAllPickerOwned(picker);
+            return (
+              <button key={title} onClick={() => toggleAllByPicker(picker)}
+                title={`${active ? 'Deselect' : 'Mark'} ${title}${active ? '' : ' owned'}`}
+                style={{
+                  width: '30px', height: '30px', borderRadius: '50%',
+                  background: active ? color : '#1e1e2a',
+                  border: `1.5px solid ${color}`, color: active ? '#12121a' : color,
+                  fontSize: '14px', fontWeight: 700, cursor: 'pointer',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  transition: 'background 0.15s, color 0.15s',
+                }}>{icon}</button>
+            );
+          })}
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))', gap: '10px', marginBottom: '16px' }}>
           {tierFilteredSorted.map(card => {
@@ -974,17 +1014,11 @@ function Checklist({ code, onBack }: { code: string; onBack: () => void }) {
             if (filter === 'missing' && allOwned) return null;
             if (filter === 'owned' && noneOwned) return null;
             const imgUrl = card.variants.reduce((found: string, v) => found || cardImages[v.pid] || '', '');
-            // "Caught" symbol (Michael, 2026-09-16: "the same as Pokedex, if
-            // customer click that they have it, place the 'Caught' symbol")
-            // -- tapping the card image itself catches its base (Normal)
-            // print, same single-tap feel as the Pokedex page's Catch
-            // button, while the variant chips below still handle
-            // Holo/Reverse Holo/etc for cards with more than one valuable
-            // print. Falls back to the card's first variant for the rare
-            // case a card has no plain Normal print at all.
+            // Tapping the card image itself still quick-catches its base
+            // (Normal) print -- falls back to the card's first variant for
+            // the rare case a card has no plain Normal print at all.
             const baseVariant = card.variants.find(v => v.vc === 'N') || card.variants[0];
             const baseKey = card.num + '_' + baseVariant.vc;
-            const isCaught = !!checks[baseKey];
             return (
               <div key={card.num} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
                 {/* Card image */}
@@ -1011,85 +1045,84 @@ function Checklist({ code, onBack }: { code: string; onBack: () => void }) {
                         fontSize: '10px', color: '#555', textAlign: 'center', padding: '4px', width: '100%' }}>{card.name}</span>
                     </div>
                   )}
-                  {/* Pokedex-style green "Caught!" badge -- shown the moment
-                      the base print is owned, same visual language as
-                      /pokedex's ✓ badge (PokedexGrid.tsx) so this feels like
-                      the same feature. Kept separate from the orange
-                      allOwned ring/dimming above (that one means "every
-                      print of this card", this one means "you told us you
-                      have it"). */}
-                  {isCaught && !allOwned && (
-                    <div style={{ position: 'absolute', top: '4px', right: '4px', background: '#22c55e',
-                      borderRadius: '50%', width: '18px', height: '18px', display: 'flex',
-                      alignItems: 'center', justifyContent: 'center', fontSize: '10px', fontWeight: 700, color: '#fff',
-                      boxShadow: '0 0 0 1.5px #12121a' }}>✓</div>
-                  )}
-                  {allOwned && (
-                    <div style={{ position: 'absolute', top: '4px', right: '4px', background: eraColor,
-                      borderRadius: '50%', width: '18px', height: '18px', display: 'flex',
-                      alignItems: 'center', justifyContent: 'center', fontSize: '10px', color: '#fff' }}>✓</div>
-                  )}
                   {code === 'PRIZEPACK' && (
                     <img
                       src="https://images.pokebulk.co.za/sets/symbols/prizepack_stamp.png"
                       alt="Play! Pokemon stamp"
-                      style={{ position: 'absolute', bottom: '4px', left: '4px', width: '20px', height: '14px',
+                      style={{ position: 'absolute', top: '4px', left: '4px', width: '20px', height: '14px',
                         objectFit: 'contain', filter: 'drop-shadow(0 1px 2px rgba(0,0,0,0.6))' }}
                     />
                   )}
+                  {/* Variant chips overlaid directly on the card art --
+                      Michael, 2026-09-16: "instead of having the selector
+                      under card, have it on the card, so when you select
+                      that variant, it turns into 'Caught'". Replaces both
+                      the old below-image chip row AND the separate corner
+                      checkmark badges -- each print's own chip now doubles
+                      as its Caught indicator (same green as the Pokedex
+                      page's Catch button), so there's one on-card control
+                      per print instead of a control plus a separate status
+                      dot. e.stopPropagation() keeps a chip tap from also
+                      firing the image's own tap-to-catch above it. */}
+                  <div style={{ position: 'absolute', left: '3px', right: '3px', bottom: '3px', display: 'flex', gap: '3px', justifyContent: 'center', flexWrap: 'wrap', zIndex: 5 }}>
+                    {card.variants.map(v => {
+                      const key = card.num + '_' + v.vc;
+                      const owned = !!checks[key];
+                      const vcColor: Record<string, string> = {
+                        N: '#a0a0b0', RH: '#ff6b35', H: '#ffd700', ESH: '#1D9E75',
+                        PB: '#e040fb', MB: '#7c4dff', LB: '#00bcd4',
+                        FB: '#4caf50', QB: '#f44336', UB: '#2196f3',
+                        DB: '#795548', TR: '#607d8b', SE: '#ff9800',
+                        'HR-EX': '#e91e63',
+                        EX: '#eab308', GX: '#3b82f6', V: '#9ca3af', VMAX: '#f43f5e',
+                        VSTAR: '#f59e0b', RR: '#ec4899', RAD: '#f97316',
+                      };
+                      const col = vcColor[v.vc] || '#a0a0b0';
+                      // Buy affordance (2026-08-12, Michael: "went customer
+                      // goes to 'Grid View' please add the buy button for
+                      // available stock!") -- now a tiny "+" inside the same
+                      // chip instead of a separate button underneath, with
+                      // its own stopPropagation so tapping it adds to the
+                      // pile instead of toggling owned.
+                      const canBuy = !owned && inStock.has(`${v.pid}_${v.vc}`);
+                      return (
+                        <div key={v.vc}
+                          onClick={(e) => { e.preventDefault(); e.stopPropagation(); toggle(key, v.zar); }}
+                          title={owned ? `Caught -- ${v.vc} (tap to un-mark)` : `Mark ${v.vc} owned`}
+                          style={{
+                            display: 'flex', alignItems: 'center', gap: '3px', cursor: 'pointer',
+                            background: owned ? '#16a34a' : 'rgba(10,10,16,0.82)',
+                            border: `1.5px solid ${owned ? '#22c55e' : col}`,
+                            borderRadius: '8px', padding: '2px 5px 2px 6px',
+                            boxShadow: owned ? '0 0 0 1px #12121a' : undefined,
+                          }}>
+                          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', lineHeight: 1.1 }}>
+                            <span style={{ fontSize: '8px', fontWeight: 800, color: owned ? '#eafff1' : col }}>{owned ? '✓' : v.vc}</span>
+                            <span style={{ fontSize: '6px', color: owned ? '#c8f7d8' : '#888' }}>
+                              {owned ? 'Caught' : (canBuy ? 'Buy' : (v.zar > 0 ? 'R' + v.zar.toFixed(0) : ''))}
+                            </span>
+                          </div>
+                          {canBuy && (
+                            <button
+                              onClick={(e) => { e.preventDefault(); e.stopPropagation(); buyCard(v.pid, v.vc, key, v.zar, card.name); }}
+                              disabled={buying.has(key)}
+                              title="Add to pile"
+                              style={{ fontSize: '10px', fontWeight: 800, color: '#ff6b35', background: 'transparent', border: 'none', padding: 0, lineHeight: 1, cursor: buying.has(key) ? 'default' : 'pointer', opacity: buying.has(key) ? 0.5 : 1 }}>
+                              {buying.has(key) ? '…' : '+'}
+                            </button>
+                          )}
+                          {code === 'PRIZEPACK' && v.vc === 'H' && (
+                            <span style={{ fontSize: '7px', color: '#CECBF6' }} title="Cosmos Holo">✦</span>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
                 {/* Card name */}
                 <div style={{ fontSize: '9px', color: '#666', textAlign: 'center', margin: '3px 0 4px',
                   whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', width: '100%' }}>
                   {card.num.split('/')[0]} · {card.name}
-                </div>
-                {/* Variant checkboxes */}
-                <div style={{ display: 'flex', gap: '4px', justifyContent: 'center', flexWrap: 'wrap' }}>
-                  {card.variants.map(v => {
-                    const key = card.num + '_' + v.vc;
-                    const vcColor: Record<string, string> = {
-                      N: '#a0a0b0', RH: '#ff6b35', H: '#ffd700', ESH: '#1D9E75',
-                      PB: '#e040fb', MB: '#7c4dff', LB: '#00bcd4',
-                      FB: '#4caf50', QB: '#f44336', UB: '#2196f3',
-                      DB: '#795548', TR: '#607d8b', SE: '#ff9800',
-                      'HR-EX': '#e91e63',
-                      EX: '#eab308', GX: '#3b82f6', V: '#9ca3af', VMAX: '#f43f5e',
-                      VSTAR: '#f59e0b', RR: '#ec4899', RAD: '#f97316',
-                    };
-                    const col = vcColor[v.vc] || '#a0a0b0';
-                    // Buy button on Grid View (2026-08-12, Michael: "went
-                    // customer goes to 'Grid View' please add the buy
-                    // button for available stock!") -- same
-                    // inStock/buying/buyCard wiring List View already uses,
-                    // just laid out for the grid's smaller per-card footprint.
-                    const canBuy = !checks[key] && inStock.has(`${v.pid}_${v.vc}`);
-                    return (
-                      <div key={v.vc} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px' }}>
-                        <div onClick={() => toggle(key, v.zar)} style={{ position: 'relative', cursor: 'pointer' }}>
-                          <div style={{
-                            background: checks[key] ? col : '#1a1a2e',
-                            border: `1px solid ${col}`,
-                            borderRadius: '4px', padding: '2px 5px',
-                            fontSize: '8px', fontWeight: 700, color: checks[key] ? '#fff' : col,
-                            textTransform: 'uppercase', lineHeight: 1.2,
-                          }}>{v.vc}</div>
-                          {code === 'PRIZEPACK' && v.vc === 'H' && (
-                            <span style={{ position: 'absolute', top: '-5px', right: '-5px', fontSize: '7px', color: '#CECBF6' }} title="Cosmos Holo">✦</span>
-                          )}
-                        </div>
-                        {canBuy ? (
-                          <button
-                            onClick={() => buyCard(v.pid, v.vc, key, v.zar, card.name)}
-                            disabled={buying.has(key)}
-                            style={{ fontSize: '7px', color: '#ff6b35', background: 'transparent', border: '1px solid #ff6b35', borderRadius: '3px', padding: '0px 3px', fontWeight: 700, lineHeight: 1.4, cursor: buying.has(key) ? 'default' : 'pointer', opacity: buying.has(key) ? 0.5 : 1 }}>
-                            {buying.has(key) ? '…' : 'Buy'}
-                          </button>
-                        ) : (
-                          <span style={{ fontSize: '7px', color: '#444' }}>{v.zar > 0 ? 'R'+v.zar.toFixed(0) : ''}</span>
-                        )}
-                      </div>
-                    );
-                  })}
                 </div>
               </div>
             );
