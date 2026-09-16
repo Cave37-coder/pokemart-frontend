@@ -1282,7 +1282,7 @@ function Checklist({ code, onBack }: { code: string; onBack: () => void }) {
                     priced variant gets its price shown here for reference;
                     only ones still available to buy (in stock, not yet
                     owned) get the orange Buy button next to their price. */}
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', justifyContent: 'center', width: '100%', marginTop: '4px' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'stretch', gap: '3px', width: '100%', marginTop: '4px' }}>
                   {card.variants.map(v => {
                     const key = card.num + '_' + v.vc;
                     const owned = !!checks[key];
@@ -1290,9 +1290,9 @@ function Checklist({ code, onBack }: { code: string; onBack: () => void }) {
                     if (v.zar <= 0 && !canBuy) return null;
                     return (
                       <div key={v.vc} style={{
-                        display: 'flex', alignItems: 'center', gap: '4px',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px',
                         background: '#1e1e2a', border: '1px solid #2a2a3a', borderRadius: '6px',
-                        padding: '2px 6px 2px 7px', fontSize: '10px',
+                        padding: '2px 6px 2px 7px', fontSize: '10px', width: '100%',
                       }}>
                         <span style={{ color: '#777', fontWeight: 700 }}>{v.vc}</span>
                         {v.zar > 0 && <span style={{ color: '#ccc' }}>R{v.zar.toFixed(2)}</span>}
