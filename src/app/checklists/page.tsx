@@ -233,7 +233,13 @@ function EraHome({ onOpen }: { onOpen: (code: string) => void }) {
       : (logoUrl && !failedEraLogos.has(logoUrl)) ? logoUrl
       : null;
     if (imgUrl) {
-      return <img src={imgUrl} alt={label} title={label} style={{ height: big ? '46px' : '20px', maxWidth: big ? '80%' : '120px', objectFit: 'contain' }}
+      // Michael, 2026-09-16: the Mega Evolution logo (a transparent PNG)
+      // was showing a solid white box behind it on the era card -- some
+      // other rule on the site sets a white background on <img> by default
+      // (product photos want that), which this era-logo image was silently
+      // inheriting since it never said otherwise. Explicit `background:
+      // transparent` here overrides that for every era logo/symbol.
+      return <img src={imgUrl} alt={label} title={label} style={{ height: big ? '46px' : '20px', maxWidth: big ? '80%' : '120px', objectFit: 'contain', background: 'transparent' }}
         onError={() => setFailedEraLogos(prev => new Set(prev).add(imgUrl))} />;
     }
     return (

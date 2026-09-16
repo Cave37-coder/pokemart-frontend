@@ -103,7 +103,7 @@ export default function EraPage() {
           <button onClick={() => router.push('/checklists')}
             style={{ background: '#1e1e2a', color: '#a0a0b0', border: '1px solid #2a2a3a', padding: '7px 12px', borderRadius: '7px', fontSize: '15px', cursor: 'pointer', lineHeight: 1 }}>←</button>
           {!isSpecial && eraLogoUrl ? (
-            <img src={eraLogoUrl} alt={label} style={{ height: '32px', maxWidth: '200px', objectFit: 'contain' }} />
+            <img src={eraLogoUrl} alt={label} style={{ height: '32px', maxWidth: '200px', objectFit: 'contain', background: 'transparent' }} />
           ) : (
             <div style={{ fontSize: '18px', fontWeight: 700, color: '#fff' }}>{label}</div>
           )}
