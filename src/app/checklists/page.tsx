@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect, useCallback, Suspense } from 'react';
+import { useState, useEffect, useCallback, useMemo, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { authFetch, SessionExpiredError } from '@/lib/api';
 import { buildPullSheetHtml, openPullSheet, type PullSheetRow } from '@/lib/pullSheet';
@@ -11,8 +11,15 @@ import {
 import {
   SETS, SET_INDEX, ERA_COLORS, TIER_COLORS, TIER_LABELS_FE, ERA_ORDER, RSYM,
   TIER_VARIANT_SCOPE, TIER_NUMBERED_ONLY, MASTER_SET_CHASE_RARITIES, FULL_VARIANTS,
+  BALL_VARIANTS, PATTERN_VARIANTS,
 } from '@/lib/checklistData';
 import type { Variant, Card, SetData, SetMeta } from '@/lib/checklistData';
+
+// Rotating palette for the "Select All" rarity pills (Michael, 2026-09-16
+// round 3) -- purely cosmetic so a set with many rarity tiers stays visually
+// distinguishable; the count of pills is dynamic per set, so this is sized
+// generously and just cycles if a set somehow has more tiers than colors.
+const SELECT_GROUP_COLORS = ['#2196f3', '#7c4dff', '#ffd700', '#ec4899', '#22c55e', '#f97316', '#06b6d4', '#a855f7'];
 
 // ── CSV export (Michael, 2026-09-02: Checklists CSV export -- a full list
 // with highlighted/owned status, and a "needed" pull list of just what's
@@ -612,24 +619,31 @@ function Checklist({ code, onBack }: { code: string; onBack: () => void }) {
   // all of them; otherwise it marks whatever's still missing owned. Scoped
   // to whichever tier tab is currently selected, same set of cards the
   // button's own "is everything already selected" check reads from.
-  const isAllPickerOwned = useCallback((vcPicker: (card: Card) => Variant | null): boolean => {
+  // Michael, 2026-09-16 (round 4): each group can now target MORE THAN ONE
+  // print per card (e.g. "Commons & Holos" must mark both the N and the H
+  // print of a card that has both, not just its preferred one) -- pickers
+  // return Variant[] instead of a single Variant|null. A group only counts
+  // as "fully owned" when every variant it targets, for every card it
+  // targets, is checked.
+  const isAllPickerOwned = useCallback((vcPicker: (card: Card) => Variant[]): boolean => {
     let sawAny = false;
     for (const card of tierFilteredSorted) {
-      const v = vcPicker(card);
-      if (!v) continue;
+      const vs = vcPicker(card);
+      if (vs.length === 0) continue;
       sawAny = true;
-      if (!checks[card.num + '_' + v.vc]) return false;
+      for (const v of vs) {
+        if (!checks[card.num + '_' + v.vc]) return false;
+      }
     }
     return sawAny;
   }, [tierFilteredSorted, checks]);
 
-  const toggleAllByPicker = useCallback((vcPicker: (card: Card) => Variant | null) => {
+  const toggleAllByPicker = useCallback((vcPicker: (card: Card) => Variant[]) => {
     const token = localStorage.getItem('access_token');
     if (!token) { router.push('/auth/login'); return; }
     const targets: string[] = [];
     tierFilteredSorted.forEach(card => {
-      const v = vcPicker(card);
-      if (v) targets.push(card.num + '_' + v.vc);
+      vcPicker(card).forEach(v => targets.push(card.num + '_' + v.vc));
     });
     if (targets.length === 0) return;
     const deselecting = targets.every(key => checks[key]);
@@ -658,13 +672,142 @@ function Checklist({ code, onBack }: { code: string; onBack: () => void }) {
     });
   }, [code, router, tierFilteredSorted, checks]);
 
-  const pickNormal = (card: Card) => card.variants.find(v => v.vc === 'N') || null;
-  const pickReverseHolo = (card: Card) => card.variants.find(v => v.vc === 'RH') || null;
-  // No single variant code means "chase" across every set (the priciest
-  // print of a given card might be an RH, an H, an ESH, a ball variant,
-  // etc) -- so instead of hard-coding one code, pick whichever variant of
-  // each card is worth the most.
-  const pickChase = (card: Card) => card.variants.reduce((best: Variant | null, v) => (!best || v.zar > best.zar ? v : best), null);
+  // Michael, 2026-09-16 (round 3): "Select all is broken down to Commons
+  // and Holo's / Rev Holo's / EX - Double Rares / Illustration Rares...
+  // our breakdown of the set types, is the ultimate dictator of which
+  // Select all does! You can even put EX's before Rev Holo's". Round 4,
+  // same day, after live-testing round 3's "one group per rarity actually
+  // present" version ("The Rarity issue is bad!" -> too many buttons, one
+  // per rarity tier including Illustration/Ultra/Special-Illustration/Mega
+  // Hyper Rare): "So Broke set all Commons and Holo's / Base Set all
+  // Commons and Holo's All Ex's All Rev Holo's -- No cards outside of the
+  // Set card number! / Master Set all cards including cards outside Set
+  // Card Number" -- the GROUP BREAKDOWN itself now differs per tier tab,
+  // it's not just "whatever rarities happen to be in scope":
+  //   - Broke Base: one group, any numbered card's single N/H print (Broke
+  //     Base only ever requires ONE print per card regardless of rarity --
+  //     see products/completion.py _broke_base_progress).
+  //   - Base Set / Special Set Base: exactly Commons & Holos, EX's (Double
+  //     Rare), Reverse Holos -- plus Poke Balls on Special Set Base only,
+  //     the one tier that actually requires ball variants. No separate
+  //     button per higher chase rarity (Illustration Rare etc) even if one
+  //     happens to be numbered in this set -- those get ticked by hand.
+  //   - Master Set / Full Master / Complete Set: one "All Cards" group --
+  //     the whole point of these tiers is "everything", numbered or not.
+  // Numbered-only scoping for Broke Base/Base Set/Special Set Base already
+  // comes from TIER_NUMBERED_ONLY feeding tierFilteredSorted above -- no
+  // change needed there, this is purely about which SELECT ALL BUTTONS
+  // appear. Each group's picker now returns every variant it should mark
+  // for a card (not just one), so e.g. Commons & Holos correctly requires
+  // BOTH a card's N and H print when both exist, matching how
+  // completion.py actually scores the tier.
+  const BASE_RARITIES = new Set(['Common', 'Uncommon', 'Rare', 'Holo Rare']);
+  const EX_RARITIES = new Set(['Double Rare']);
+  const BALL_VARIANT_SET = new Set(BALL_VARIANTS);
+  // Michael, 2026-09-16 (round 5): "we need to enforce the same criteria to
+  // 'Select All' buttons? also include the special variants to sets that
+  // have them ie ASC, Black Bolt, White Flair, Prismatic Evolutions" -- ASC
+  // already has one of these (Energy Symbol Holo, vc "ESH"), and the newer
+  // SV-era sets he named are getting their own exclusive parallel prints as
+  // they get catalogued. Rather than hardcode ASC/ESH (or guess at whatever
+  // Black Bolt/White Flair/Prismatic Evolutions end up calling theirs), this
+  // reads off PATTERN_VARIANTS -- the SAME list checklistData.ts/
+  // completion.py already use to decide which prints are "special/chase
+  // parallel" vs a normal print -- so the day a new pattern code gets added
+  // there (one line, same as ESH was) every tier's Select All picks it up
+  // automatically as its own "Special Variants" button, no further frontend
+  // changes needed for whichever set introduces it.
+  const PATTERN_VARIANT_SET = new Set(PATTERN_VARIANTS);
+  const selectAllGroups = useMemo(() => {
+    type SelectGroup = { key: string; label: string; icon: string; picker: (card: Card) => Variant[] };
+    const groups: SelectGroup[] = [];
+    const has = (pred: (c: Card) => boolean) => tierFilteredSorted.some(pred);
+    const hasPattern = has(c => c.variants.some(v => PATTERN_VARIANT_SET.has(v.vc)));
+
+    if (lbTier === 'broke_base') {
+      if (has(() => true)) {
+        groups.push({
+          key: '__all__', label: 'Commons & Holos', icon: '●',
+          picker: card => {
+            const v = card.variants.find(v => v.vc === 'N') || card.variants.find(v => v.vc === 'H');
+            return v ? [v] : [];
+          },
+        });
+      }
+      return groups;
+    }
+
+    if (lbTier === 'master_set') {
+      // Michael: "Master Set all cards including cards outside Set Card
+      // Number" -- stays one bucket, no breakdown. (Master Set's own
+      // variant scope is N/H/RH only -- see MASTER_SET_VARIANTS -- so
+      // there's nothing pattern-specific to split out here today anyway.)
+      if (has(() => true)) {
+        groups.push({ key: '__all__', label: 'All Cards', icon: '★', picker: card => card.variants });
+      }
+      return groups;
+    }
+
+    if (lbTier === 'full_master' || lbTier === 'complete_set') {
+      // "Every card, every rarity, every variant" -- but if this set has a
+      // special/pattern parallel (ASC's Energy Symbol Holo etc), split it
+      // into its own button so it can be targeted on its own, same as
+      // Reverse Holos/Poke Balls get their own button below instead of
+      // being buried inside one giant catch-all.
+      if (hasPattern) {
+        if (has(() => true)) {
+          groups.push({
+            key: '__core__', label: 'Core Cards', icon: '★',
+            picker: card => card.variants.filter(v => !PATTERN_VARIANT_SET.has(v.vc)),
+          });
+        }
+        groups.push({
+          key: '__pattern__', label: 'Special Variants', icon: '✨',
+          picker: card => card.variants.filter(v => PATTERN_VARIANT_SET.has(v.vc)),
+        });
+      } else if (has(() => true)) {
+        groups.push({ key: '__all__', label: 'All Cards', icon: '★', picker: card => card.variants });
+      }
+      return groups;
+    }
+
+    // base_set / special_set_base
+    if (has(c => BASE_RARITIES.has(c.rarity))) {
+      groups.push({
+        key: '__base__', label: 'Commons & Holos', icon: '●',
+        picker: card => (BASE_RARITIES.has(card.rarity) ? card.variants.filter(v => v.vc === 'N' || v.vc === 'H') : []),
+      });
+    }
+    if (has(c => EX_RARITIES.has(c.rarity))) {
+      groups.push({
+        key: '__ex__', label: "EX's", icon: RSYM['Double Rare'] || '★★',
+        picker: card => (EX_RARITIES.has(card.rarity) ? card.variants.filter(v => v.vc !== 'RH') : []),
+      });
+    }
+    if (has(c => c.variants.some(v => v.vc === 'RH'))) {
+      groups.push({
+        key: '__rh__', label: 'Reverse Holos', icon: '⚡',
+        picker: card => card.variants.filter(v => v.vc === 'RH'),
+      });
+    }
+    if (lbTier === 'special_set_base' && has(c => c.variants.some(v => BALL_VARIANT_SET.has(v.vc)))) {
+      groups.push({
+        key: '__balls__', label: 'Poke Balls', icon: '⬤',
+        picker: card => card.variants.filter(v => BALL_VARIANT_SET.has(v.vc)),
+      });
+    }
+    // Future-proofing (see comment above PATTERN_VARIANT_SET): if a special
+    // variant ever gets added to Base Set/Special Set Base's own variant
+    // scope for some set, it surfaces here automatically too.
+    if (hasPattern) {
+      groups.push({
+        key: '__pattern__', label: 'Special Variants', icon: '✨',
+        picker: card => card.variants.filter(v => PATTERN_VARIANT_SET.has(v.vc)),
+      });
+    }
+
+    return groups;
+  }, [tierFilteredSorted, lbTier]);
 
   // ── CSV export handlers ──────────────────────────────────────────────
   // Resolves the logged-in customer's display name + email once (cached in
@@ -976,34 +1119,34 @@ function Checklist({ code, onBack }: { code: string; onBack: () => void }) {
       {/* Card grid IMAGE view */}
       {viewMode === 'grid' && (
       <>
-        {/* "Select All" bulk row -- Michael, 2026-09-16, from his reference
-            app's Select All icons: check/lightning/star. Marks owned across
-            every card currently shown by the tier tab above (Normal /
-            Reverse Holo / chase print respectively). Michael, same day
-            (round 2): "the toggle 'Select All' must also Deselect if pushed
-            again" -- each icon fills in solid the moment every targeted card
-            is already owned, and tapping it again clears all of them (see
-            isAllPickerOwned/toggleAllByPicker above). Logged-out visitors
-            get sent to login, same as tapping any other checkbox. */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px', flexWrap: 'wrap' }}>
+        {/* "Select All" bulk row -- one pill per rarity tier actually present
+            in this set (per Michael, 2026-09-16 round 3: "our breakdown of
+            the set types, is the ultimate dictator of which Select all
+            does!"), built by selectAllGroups above, plus a cross-cutting
+            Reverse Holo pill. Each pill fills in solid the moment every
+            targeted card is already owned, and tapping it again clears all
+            of them (round 2: "the toggle 'Select All' must also Deselect if
+            pushed again"). Logged-out visitors get sent to login, same as
+            tapping any other checkbox. */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px', flexWrap: 'wrap' }}>
           <span style={{ fontSize: '11px', color: '#777', fontWeight: 600 }}>Select All:</span>
-          {([
-            { picker: pickNormal, color: '#2196f3', icon: '✓', title: 'Normal print' },
-            { picker: pickReverseHolo, color: '#7c4dff', icon: '⚡', title: 'Reverse Holo print' },
-            { picker: pickChase, color: '#ffd700', icon: '★', title: "each card's rarest/priciest print" },
-          ] as const).map(({ picker, color, icon, title }) => {
+          {selectAllGroups.map(({ key, label, icon, picker }, i) => {
+            const color = SELECT_GROUP_COLORS[i % SELECT_GROUP_COLORS.length];
             const active = isAllPickerOwned(picker);
             return (
-              <button key={title} onClick={() => toggleAllByPicker(picker)}
-                title={`${active ? 'Deselect' : 'Mark'} ${title}${active ? '' : ' owned'}`}
+              <button key={key} onClick={() => toggleAllByPicker(picker)}
+                title={`${active ? 'Deselect' : 'Mark'} every ${label}${active ? '' : ' owned'}`}
                 style={{
-                  width: '30px', height: '30px', borderRadius: '50%',
+                  display: 'flex', alignItems: 'center', gap: '5px',
+                  padding: '5px 11px', borderRadius: '999px',
                   background: active ? color : '#1e1e2a',
                   border: `1.5px solid ${color}`, color: active ? '#12121a' : color,
-                  fontSize: '14px', fontWeight: 700, cursor: 'pointer',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  fontSize: '11px', fontWeight: 700, cursor: 'pointer',
                   transition: 'background 0.15s, color 0.15s',
-                }}>{icon}</button>
+                }}>
+                <span style={{ fontSize: '12px' }}>{icon}</span>
+                <span>{label}</span>
+              </button>
             );
           })}
         </div>
