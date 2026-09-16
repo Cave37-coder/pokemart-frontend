@@ -11,7 +11,7 @@ import {
 import {
   SETS, SET_INDEX, ERA_COLORS, TIER_COLORS, TIER_LABELS_FE, ERA_ORDER, RSYM,
   TIER_VARIANT_SCOPE, TIER_NUMBERED_ONLY, MASTER_SET_CHASE_RARITIES, FULL_VARIANTS,
-  BALL_VARIANTS, PATTERN_VARIANTS,
+  PATTERN_VARIANTS,
 } from '@/lib/checklistData';
 import type { Variant, Card, SetData, SetMeta } from '@/lib/checklistData';
 
@@ -687,62 +687,51 @@ function Checklist({ code, onBack }: { code: string; onBack: () => void }) {
     });
   }, [code, router, tierFilteredSorted, checks]);
 
-  // Michael, 2026-09-16 (round 3): "Select all is broken down to Commons
+  // Michael, 2026-09-16 (round 3/4): "Select all is broken down to Commons
   // and Holo's / Rev Holo's / EX - Double Rares / Illustration Rares...
   // our breakdown of the set types, is the ultimate dictator of which
-  // Select all does! You can even put EX's before Rev Holo's". Round 4,
-  // same day, after live-testing round 3's "one group per rarity actually
-  // present" version ("The Rarity issue is bad!" -> too many buttons, one
-  // per rarity tier including Illustration/Ultra/Special-Illustration/Mega
-  // Hyper Rare): "So Broke set all Commons and Holo's / Base Set all
+  // Select all does!" then, after live-testing showed too many one-per-
+  // rarity buttons: "Broke set all Commons and Holo's / Base Set all
   // Commons and Holo's All Ex's All Rev Holo's -- No cards outside of the
   // Set card number! / Master Set all cards including cards outside Set
-  // Card Number" -- the GROUP BREAKDOWN itself now differs per tier tab,
-  // it's not just "whatever rarities happen to be in scope":
-  //   - Broke Base: one group, any numbered card's single N/H print (Broke
-  //     Base only ever requires ONE print per card regardless of rarity --
-  //     see products/completion.py _broke_base_progress).
-  //   - Base Set / Special Set Base: exactly Commons & Holos, EX's (Double
-  //     Rare), Reverse Holos -- plus Poke Balls on Special Set Base only,
-  //     the one tier that actually requires ball variants. No separate
-  //     button per higher chase rarity (Illustration Rare etc) even if one
-  //     happens to be numbered in this set -- those get ticked by hand.
-  //   - Master Set / Full Master / Complete Set: one "All Cards" group --
-  //     the whole point of these tiers is "everything", numbered or not.
-  // Numbered-only scoping for Broke Base/Base Set/Special Set Base already
-  // comes from TIER_NUMBERED_ONLY feeding tierFilteredSorted above -- no
-  // change needed there, this is purely about which SELECT ALL BUTTONS
-  // appear. Each group's picker now returns every variant it should mark
-  // for a card (not just one), so e.g. Commons & Holos correctly requires
-  // BOTH a card's N and H print when both exist, matching how
-  // completion.py actually scores the tier.
+  // Card Number".
+  //
+  // Round 6, same day: "I want every Select button to work on Master and
+  // full Set / Broke Set - N&H / Base Set - N&H, Rev Holo, EX's / Special
+  // Set - N&H, Rev Holo or Energy Symbol, EX's(incld V's for SwSH - GX for
+  // older sets), Pokeball, Master ball / Master set all avaialble with
+  // Illustrations" -- Master Set/Full Master no longer get a single
+  // catch-all button; every tier except Broke Base now shares the SAME
+  // per-print-type buttons (N & H, Reverse Holo/Energy Symbol, EX's, Poke
+  // Ball, Master Ball), each only appearing when `has()` finds something in
+  // THIS tier's own already-scoped card list for it to target -- Master
+  // Set structurally has no ball chips (MASTER_SET_VARIANTS excludes them
+  // by design) so those two buttons simply never render there, no special
+  // casing needed. Master Set/Full Master/Complete Set additionally get an
+  // "Illustrations" button for the set's own top chase rarity (whatever's
+  // actually in MASTER_SET_CHASE_RARITIES for this particular set).
   const BASE_RARITIES = new Set(['Common', 'Uncommon', 'Rare', 'Holo Rare']);
-  const EX_RARITIES = new Set(['Double Rare']);
-  const BALL_VARIANT_SET = new Set(BALL_VARIANTS);
-  // Michael, 2026-09-16 (round 5): "we need to enforce the same criteria to
-  // 'Select All' buttons? also include the special variants to sets that
-  // have them ie ASC, Black Bolt, White Flair, Prismatic Evolutions" -- ASC
-  // already has one of these (Energy Symbol Holo, vc "ESH"), and the newer
-  // SV-era sets he named are getting their own exclusive parallel prints as
-  // they get catalogued. Rather than hardcode ASC/ESH (or guess at whatever
-  // Black Bolt/White Flair/Prismatic Evolutions end up calling theirs), this
-  // reads off PATTERN_VARIANTS -- the SAME list checklistData.ts/
-  // completion.py already use to decide which prints are "special/chase
-  // parallel" vs a normal print -- so the day a new pattern code gets added
-  // there (one line, same as ESH was) every tier's Select All picks it up
-  // automatically as its own "Special Variants" button, no further frontend
-  // changes needed for whichever set introduces it.
+  // Michael, 2026-09-16 (round 5): "also include the special variants to
+  // sets that have them ie ASC, Black Bolt, White Flair, Prismatic
+  // Evolutions" -- reads off PATTERN_VARIANTS (the same list checklistData
+  // .ts/completion.py already use to mark a print as a special/chase
+  // parallel, e.g. ASC's Energy Symbol Holo, vc "ESH") rather than
+  // hardcoding ASC specifically, so a future pattern code for Black
+  // Bolt/White Flair/Prismatic Evolutions is picked up automatically the
+  // day it's added there -- no further frontend changes needed.
   const PATTERN_VARIANT_SET = new Set(PATTERN_VARIANTS);
   const selectAllGroups = useMemo(() => {
     type SelectGroup = { key: string; label: string; icon: string; picker: (card: Card) => Variant[] };
     const groups: SelectGroup[] = [];
     const has = (pred: (c: Card) => boolean) => tierFilteredSorted.some(pred);
-    const hasPattern = has(c => c.variants.some(v => PATTERN_VARIANT_SET.has(v.vc)));
 
     if (lbTier === 'broke_base') {
+      // Broke Base only ever requires ONE print per card regardless of
+      // rarity (see products/completion.py _broke_base_progress) -- stays
+      // its own single button, not broken down any further.
       if (has(() => true)) {
         groups.push({
-          key: '__all__', label: 'Commons & Holos', icon: '●',
+          key: '__all__', label: 'N & H', icon: '●',
           picker: card => {
             const v = card.variants.find(v => v.vc === 'N') || card.variants.find(v => v.vc === 'H');
             return v ? [v] : [];
@@ -752,73 +741,74 @@ function Checklist({ code, onBack }: { code: string; onBack: () => void }) {
       return groups;
     }
 
-    if (lbTier === 'master_set') {
-      // Michael: "Master Set all cards including cards outside Set Card
-      // Number" -- stays one bucket, no breakdown. (Master Set's own
-      // variant scope is N/H/RH only -- see MASTER_SET_VARIANTS -- so
-      // there's nothing pattern-specific to split out here today anyway.)
-      if (has(() => true)) {
-        groups.push({ key: '__all__', label: 'All Cards', icon: '★', picker: card => card.variants });
-      }
-      return groups;
-    }
-
-    if (lbTier === 'full_master' || lbTier === 'complete_set') {
-      // "Every card, every rarity, every variant" -- but if this set has a
-      // special/pattern parallel (ASC's Energy Symbol Holo etc), split it
-      // into its own button so it can be targeted on its own, same as
-      // Reverse Holos/Poke Balls get their own button below instead of
-      // being buried inside one giant catch-all.
-      if (hasPattern) {
-        if (has(() => true)) {
-          groups.push({
-            key: '__core__', label: 'Core Cards', icon: '★',
-            picker: card => card.variants.filter(v => !PATTERN_VARIANT_SET.has(v.vc)),
-          });
-        }
-        groups.push({
-          key: '__pattern__', label: 'Special Variants', icon: '✨',
-          picker: card => card.variants.filter(v => PATTERN_VARIANT_SET.has(v.vc)),
-        });
-      } else if (has(() => true)) {
-        groups.push({ key: '__all__', label: 'All Cards', icon: '★', picker: card => card.variants });
-      }
-      return groups;
-    }
-
-    // base_set / special_set_base
     if (has(c => BASE_RARITIES.has(c.rarity))) {
       groups.push({
-        key: '__base__', label: 'Commons & Holos', icon: '●',
+        key: '__base__', label: 'N & H', icon: '●',
         picker: card => (BASE_RARITIES.has(card.rarity) ? card.variants.filter(v => v.vc === 'N' || v.vc === 'H') : []),
       });
     }
-    if (has(c => EX_RARITIES.has(c.rarity))) {
+
+    // "Rev Holo or Energy Symbol" -- one button covers whichever
+    // reverse-holo-style parallel this set actually uses; label adapts so
+    // it never claims "Reverse Holos" on a set that only has an Energy
+    // Symbol Holo print (or vice versa). Degrades to plain "Reverse Holos"
+    // on every tier that doesn't have Energy Symbol Holo in scope at all
+    // (everywhere except Special Set Base/Full Master today).
+    const hasRH = has(c => c.variants.some(v => v.vc === 'RH'));
+    const hasESH = has(c => c.variants.some(v => PATTERN_VARIANT_SET.has(v.vc)));
+    if (hasRH || hasESH) {
       groups.push({
-        key: '__ex__', label: "EX's", icon: RSYM['Double Rare'] || '★★',
-        picker: card => (EX_RARITIES.has(card.rarity) ? card.variants.filter(v => v.vc !== 'RH') : []),
+        key: '__rh__',
+        label: hasRH && hasESH ? 'Rev Holo & Energy Symbol' : hasESH ? 'Energy Symbol' : 'Reverse Holos',
+        icon: '⚡',
+        picker: card => card.variants.filter(v => v.vc === 'RH' || PATTERN_VARIANT_SET.has(v.vc)),
       });
     }
-    if (has(c => c.variants.some(v => v.vc === 'RH'))) {
+
+    // "EX's" -- Double Rare is Scarlet & Violet/Mega Evolution's own name
+    // for this tier; older eras never use that rarity string and tag the
+    // same "one big non-Basic chase Pokemon" concept as Ultra Rare instead
+    // (V/VMAX/VSTAR for Sword & Shield, GX for Sun & Moon/XY -- confirmed
+    // live, none of those ever get their own "V"/"GX" rarity string).
+    // Michael: "EX's (incld V's for SwSH - GX for older sets)" -- so Ultra
+    // Rare only folds into this button when the set has NO genuine Double
+    // Rares of its own; modern sets (CRI etc) have both Double Rare AND a
+    // separate, pricier Ultra Rare tier that must stay distinct.
+    const hasDoubleRare = has(c => c.rarity === 'Double Rare');
+    const exRarity = hasDoubleRare ? 'Double Rare' : 'Ultra Rare';
+    if (has(c => c.rarity === exRarity)) {
       groups.push({
-        key: '__rh__', label: 'Reverse Holos', icon: '⚡',
-        picker: card => card.variants.filter(v => v.vc === 'RH'),
+        key: '__ex__', label: "EX's", icon: RSYM[exRarity] || '★★',
+        picker: card => (card.rarity === exRarity ? card.variants.filter(v => v.vc !== 'RH' && !PATTERN_VARIANT_SET.has(v.vc)) : []),
       });
     }
-    if (lbTier === 'special_set_base' && has(c => c.variants.some(v => BALL_VARIANT_SET.has(v.vc)))) {
+
+    if (has(c => c.variants.some(v => v.vc === 'PB'))) {
       groups.push({
-        key: '__balls__', label: 'Poke Balls', icon: '⬤',
-        picker: card => card.variants.filter(v => BALL_VARIANT_SET.has(v.vc)),
+        key: '__pb__', label: 'Poke Ball', icon: '⬤',
+        picker: card => card.variants.filter(v => v.vc === 'PB'),
       });
     }
-    // Future-proofing (see comment above PATTERN_VARIANT_SET): if a special
-    // variant ever gets added to Base Set/Special Set Base's own variant
-    // scope for some set, it surfaces here automatically too.
-    if (hasPattern) {
+    if (has(c => c.variants.some(v => v.vc === 'MB'))) {
       groups.push({
-        key: '__pattern__', label: 'Special Variants', icon: '✨',
-        picker: card => card.variants.filter(v => PATTERN_VARIANT_SET.has(v.vc)),
+        key: '__mb__', label: 'Master Ball', icon: '⬤',
+        picker: card => card.variants.filter(v => v.vc === 'MB'),
       });
+    }
+
+    // Michael: "Master set all avaialble with Illustrations" -- the set's
+    // own top chase rarity (Illustration Rare/Secret Rare/Mega Hyper
+    // Rare/Futuristic Rare/etc, whichever this particular set actually
+    // uses -- see MASTER_SET_CHASE_RARITIES) gets its own button on Master
+    // Set/Full Master/Complete Set, the only tiers whose scope ever
+    // includes an unnumbered chase-rarity card at all.
+    if (lbTier === 'master_set' || lbTier === 'full_master' || lbTier === 'complete_set') {
+      if (has(c => MASTER_SET_CHASE_RARITIES.includes(c.rarity))) {
+        groups.push({
+          key: '__illustrations__', label: 'Illustrations', icon: '✨',
+          picker: card => (MASTER_SET_CHASE_RARITIES.includes(card.rarity) ? card.variants : []),
+        });
+      }
     }
 
     return groups;

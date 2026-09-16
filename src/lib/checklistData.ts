@@ -57,7 +57,7 @@ export const BASE_SET_VARIANTS: string[] = ["N", "H", "RH"];
 export const BALL_VARIANTS: string[] = ["PB", "MB", "LB", "FB", "QB", "UB", "DB"];
 export const OTHER_TRACKED_VARIANTS: string[] = ["TT"];
 export const PATTERN_VARIANTS: string[] = ["ESH"];
-export const SPECIAL_SET_BASE_VARIANTS: string[] = [...BASE_SET_VARIANTS, ...BALL_VARIANTS];
+export const SPECIAL_SET_BASE_VARIANTS: string[] = [...BASE_SET_VARIANTS, ...BALL_VARIANTS, ...PATTERN_VARIANTS];
 // Master Set explicitly excludes Pokeball/Masterball variants (Michael,
 // 2026-09-11) -- same N/H/RH scope as Base Set/Special Set Base, just
 // with Illustration Rares admitted on top via MASTER_SET_CHASE_RARITIES.
