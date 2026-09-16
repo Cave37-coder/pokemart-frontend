@@ -3,113 +3,16 @@ import { useState, useEffect, useCallback, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { authFetch, SessionExpiredError } from '@/lib/api';
 import { buildPullSheetHtml, openPullSheet, type PullSheetRow } from '@/lib/pullSheet';
-
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'https://pokemart-api-production.up.railway.app';
+import {
+  API_BASE, normalizeEraName, loadChecks, saveChecks, ensureChecklistData,
+  isChecklistCacheReady, getProgress, fmt, eraToSlug,
+} from '@/lib/checklistShared';
 
 import {
   SETS, SET_INDEX, ERA_COLORS, TIER_COLORS, TIER_LABELS_FE, ERA_ORDER, RSYM,
   TIER_VARIANT_SCOPE, TIER_NUMBERED_ONLY, MASTER_SET_CHASE_RARITIES, FULL_VARIANTS,
 } from '@/lib/checklistData';
 import type { Variant, Card, SetData, SetMeta } from '@/lib/checklistData';
-
-// Michael, 2026-08-08: the Era table (products/models.py) has legacy
-// duplicate rows per era and inconsistent naming -- some end in "Era"
-// ("Sword & Shield Era"), some don't ("HG&SS"), and this page's own labels
-// don't consistently match either convention. Normalizing both sides before
-// comparing (trim, lowercase, drop a trailing " era") means a saved logo_url
-// shows up regardless of which of the duplicate rows or naming style it was
-// set on, instead of requiring a byte-for-byte string match.
-function normalizeEraName(s: string): string {
-  return s.trim().toLowerCase().replace(/\s+era$/, '').replace(/\s+/g, ' ');
-}
-
-// Checklist progress now lives in the customer's account (ChecklistEntry
-// rows on the backend), not the browser -- localStorage['pb_cl_'+code] used
-// to be the only copy, which meant it vanished the moment a customer's
-// login token went stale or they opened the site on a different device.
-//
-// checklistCache is a simple in-memory mirror of the account's checked
-// cards, fetched once per page load via ensureChecklistData() and kept in
-// sync as the customer ticks boxes. loadChecks/saveChecks keep their old
-// names and signatures so the rest of this file (Overview's getProgress,
-// Checklist's initial state, the toggle handler) didn't need to change.
-let checklistCache: Record<string, Record<string, boolean>> = {};
-let checklistCacheReady = false;
-
-function loadChecks(code: string): Record<string, boolean> {
-  return checklistCache[code] || {};
-}
-function saveChecks(code: string, checks: Record<string, boolean>) {
-  checklistCache[code] = checks;
-}
-
-// One-time upload of any pre-existing localStorage checklist data into the
-// account, so nobody's progress from before this change appears to vanish.
-// Safe to call more than once -- the backend ignores duplicates, and this
-// only ever runs once per browser thanks to the 'pb_cl_migrated' flag.
-async function migrateLocalChecklistData(): Promise<void> {
-  if (typeof window === 'undefined') return;
-  if (localStorage.getItem('pb_cl_migrated')) return;
-  const entries: { card_set: string; card_key: string }[] = [];
-  for (let i = 0; i < localStorage.length; i++) {
-    const k = localStorage.key(i);
-    if (!k || !k.startsWith('pb_cl_') || k === 'pb_cl_migrated') continue;
-    try {
-      const local = JSON.parse(localStorage.getItem(k) || '{}');
-      const code = k.slice('pb_cl_'.length);
-      Object.keys(local).forEach(key => { if (local[key]) entries.push({ card_set: code, card_key: key }); });
-    } catch {}
-  }
-  try {
-    if (entries.length > 0) {
-      await authFetch('/api/checklists/import/', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ entries }),
-      });
-    }
-    localStorage.setItem('pb_cl_migrated', '1');
-  } catch {
-    // Session wasn't valid enough to migrate right now -- try again next visit.
-  }
-}
-
-// Fetches every checked card for the logged-in customer, once per page load.
-// Guests (no access_token) just get an empty checklist -- toggling prompts
-// them to log in, same pattern as My Pile.
-async function ensureChecklistData(): Promise<void> {
-  if (checklistCacheReady) return;
-  const token = typeof window !== 'undefined' ? localStorage.getItem('access_token') : null;
-  if (!token) { checklistCacheReady = true; return; }
-
-  await migrateLocalChecklistData();
-
-  try {
-    const res = await authFetch('/api/checklists/entries/');
-    const data: Record<string, string[]> = await res.json();
-    const grouped: Record<string, Record<string, boolean>> = {};
-    Object.keys(data).forEach(code => {
-      grouped[code] = {};
-      data[code].forEach(key => { grouped[code][key] = true; });
-    });
-    checklistCache = grouped;
-  } catch {
-    checklistCache = {};
-  }
-  checklistCacheReady = true;
-}
-function getProgress(code: string) {
-  const set = SETS[code]; if (!set) return { owned: 0, total: 0, pct: 0, collectionZar: 0 };
-  const checks = loadChecks(code);
-  let owned = 0, total = 0, collectionZar = 0;
-  set.cards.forEach(c => c.variants.forEach(v => {
-    total++;
-    if (checks[c.num + '_' + v.vc]) { owned++; collectionZar += v.zar; }
-  }));
-  return { owned, total, pct: total ? Math.round(owned / total * 100) : 0, collectionZar };
-}
-
-function fmt(zar: number) { return 'R ' + zar.toFixed(2); }
 
 // ── CSV export (Michael, 2026-09-02: Checklists CSV export -- a full list
 // with highlighted/owned status, and a "needed" pull list of just what's
@@ -153,20 +56,67 @@ function downloadCsv(filename: string, header: string[], rows: string[][], preRo
 // reasoning behind the layout. Imported at the top of this file.
 
 // ── OVERVIEW ─────────────────────────────────────────────────────────────────
-function Overview({ onOpen }: { onOpen: (code: string) => void }) {
+// Card-image-forward set tile, shared by the search-results list on the home
+// screen and (via the same visual language) the era drill-down page. Not the
+// era-page's own set list -- that one lives in app/checklists/[era]/page.tsx
+// and needs its own data fetching -- but kept here so a search match looks
+// and feels the same as opening it via its era.
+function SetSearchCard({ s, color, logos, myCompletions, onOpen }: {
+  s: SetMeta; color: string;
+  logos: Record<string, { logo_url: string; symbol_url: string; release_date?: string }>;
+  myCompletions: Record<string, string>;
+  onOpen: (code: string) => void;
+}) {
+  const prog = getProgress(s.code);
+  const completedTier = myCompletions[s.code];
+  const tierColor = completedTier ? (TIER_COLORS[completedTier] || color) : null;
+  return (
+    <div onClick={() => onOpen(s.code)}
+      style={{
+        background: '#1e1e2a',
+        border: `${tierColor ? 2 : 1}px solid ${tierColor || (prog.owned > 0 ? color : '#2a2a3a')}`,
+        boxShadow: tierColor ? `0 0 0 1px ${tierColor}40` : undefined,
+        borderRadius: '10px', padding: '10px', cursor: 'pointer', position: 'relative', overflow: 'hidden',
+        display: 'flex', flexDirection: 'column', gap: '8px',
+      }}>
+      <div style={{ height: '64px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#12121a', borderRadius: '7px', overflow: 'hidden' }}>
+        {logos[s.code]?.logo_url ? (
+          <img src={logos[s.code].logo_url} alt={s.name} style={{ maxHeight: '80%', maxWidth: '85%', objectFit: 'contain' }} />
+        ) : (
+          <span style={{ fontSize: '10px', color: '#555', fontWeight: 700 }}>{s.code}</span>
+        )}
+      </div>
+      <div>
+        <div style={{ fontSize: '11px', fontWeight: 600, color: '#e0e0e0', lineHeight: 1.3 }}>{s.name}</div>
+        <div style={{ fontSize: '9px', color: '#555', marginTop: '2px' }}>{s.code} · {s.cards} cards</div>
+      </div>
+      {tierColor && (
+        <div title={`${TIER_LABELS_FE[completedTier] || completedTier} complete`} style={{ position: 'absolute', top: '8px', right: '8px', fontSize: '13px', lineHeight: 1 }}>🏆</div>
+      )}
+      {prog.owned > 0 && (
+        <div style={{ height: '3px', background: '#12121a', borderRadius: '2px', overflow: 'hidden' }}>
+          <div style={{ height: '100%', width: `${prog.pct}%`, background: tierColor || color, borderRadius: '2px' }} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── ERA HOME (My Collection landing page) ──────────────────────────────────
+// Rebuilt 2026-09-16 per Michael: "I want to change 'My Collection' page
+// structure, people are using mostly on their phones, so i want it to show
+// up as images ... Even if it means running more pages to achieve the look!"
+// -- replaces the old collapsible-accordion Overview with a mobile-first
+// drill-down: this screen is now JUST full-width era logo cards (level 1 of
+// 3, matching his reference screenshots' home screen), each one tapping
+// through to /checklists/[era] (level 2 -- that page lists sets, with real
+// logo images and progress bars). Opening a specific set still goes to the
+// existing, feature-rich Checklist screen below (leaderboard, exports,
+// image grid with the "Caught" badges) via ?set=code -- unchanged, per
+// Michael's call to keep that screen as-is rather than rebuild it too.
+function EraHome({ onOpen }: { onOpen: (code: string) => void }) {
+  const router = useRouter();
   const [query, setQuery] = useState('');
-  const [eraFilter, setEraFilter] = useState('');
-  // Collapsible era sections -- closed by default so the landing page reads
-  // like pkmn.gg's sidebar (pick a category, see just that category) rather
-  // than a single scroll past 149 set tiles. A search or era-filter always
-  // forces matching sections open regardless of this state, so results are
-  // never hidden behind a collapsed header.
-  const [expandedEras, setExpandedEras] = useState<Set<string>>(new Set());
-  const toggleEra = (era: string) => setExpandedEras(prev => {
-    const next = new Set(prev);
-    if (next.has(era)) next.delete(era); else next.add(era);
-    return next;
-  });
   const [, forceUpdate] = useState(0);
   const [logos, setLogos] = useState<Record<string, { logo_url: string; symbol_url: string; release_date?: string }>>({});
 
@@ -243,163 +193,96 @@ function Overview({ onOpen }: { onOpen: (code: string) => void }) {
   }, []);
   useEffect(() => { forceUpdate(n => n + 1); }, []);
 
-  const filtered = SET_INDEX.filter(s => {
-    if (eraFilter && s.era !== eraFilter) return false;
-    if (query && !s.name.toLowerCase().includes(query.toLowerCase()) && !s.code.toLowerCase().includes(query.toLowerCase())) return false;
-    return true;
-  });
-
-  const byEra: Record<string, SetMeta[]> = {};
-  filtered.forEach(s => { if (!byEra[s.era]) byEra[s.era] = []; byEra[s.era].push(s); });
-
   // "Special - X" eras (Trick or Trade, Prize Pack, and any future one-off
   // product line like McDonald's/Rumble/POP) don't belong to any single
-  // generation, so instead of each getting its own top-level section next
-  // to real eras like "Sword & Shield", they're gathered under one shared
-  // "Special Sets" shelf at the bottom -- still sub-labeled by product line
-  // so they stay distinguishable. Genuine era-tied side products (Trainer
-  // Gallery, Galarian Gallery, Champion's Path, etc.) are NOT part of this
-  // -- those keep living as siblings inside their real era section, per
-  // Michael's call on 2026-07-30.
+  // generation -- gathered under one shared "Special Sets" card at the
+  // bottom of the era list rather than each getting its own top-level era
+  // card. Genuine era-tied side products (Trainer Gallery, Galarian
+  // Gallery, Champion's Path, etc.) are NOT part of this -- those keep
+  // living as siblings inside their real era, per Michael's call on
+  // 2026-07-30.
   const MAIN_ERAS = ERA_ORDER.filter(e => !e.startsWith('Special - '));
   const SPECIAL_ERAS = ERA_ORDER.filter(e => e.startsWith('Special - '));
-
-  const renderGrid = (sets: SetMeta[], color: string) => (
-    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(185px,1fr))', gap: '7px' }}>
-      {sets.slice().sort((a,b) => {
-        const dA = logos[a.code]?.release_date;
-        const dB = logos[b.code]?.release_date;
-        if (dA && dB) return dB.localeCompare(dA);
-        if (dA) return -1;
-        if (dB) return 1;
-        return a.code.localeCompare(b.code);
-      }).map(s => {
-        const prog = getProgress(s.code);
-        const logoCode = s.code;
-        // Michael, 2026-08-01: "highlight on Checklist page the same way if
-        // customer completes the set" -- same tier colours as Wall of
-        // Honour, so a glance at the grid shows exactly which sets (and
-        // which tier) you've already conquered, not just which ones you've
-        // merely started.
-        const completedTier = myCompletions[s.code];
-        const tierColor = completedTier ? (TIER_COLORS[completedTier] || color) : null;
-        const tileColor = tierColor || color;
-        return (
-          <div key={s.code} onClick={() => onOpen(s.code)}
-            style={{
-              background: '#1e1e2a',
-              border: `${tierColor ? 2 : 1}px solid ${tierColor || (prog.owned > 0 ? color : '#2a2a3a')}`,
-              boxShadow: tierColor ? `0 0 0 1px ${tierColor}40` : undefined,
-              borderRadius: '8px', padding: '10px 12px', cursor: 'pointer', position: 'relative', overflow: 'hidden',
-            }}
-            onMouseEnter={e => (e.currentTarget.style.transform = 'translateY(-1px)')}
-            onMouseLeave={e => (e.currentTarget.style.transform = '')}>
-            {logos[logoCode]?.logo_url && (
-              <img src={logos[logoCode].logo_url} alt="" style={{ position: 'absolute', right: '-8px', top: '50%', transform: 'translateY(-50%)', height: '52px', opacity: 0.12, pointerEvents: 'none', maxWidth: '110px', objectFit: 'contain' }} />
-            )}
-            {tierColor && (
-              <div title={`${TIER_LABELS_FE[completedTier] || completedTier} complete`} style={{
-                position: 'absolute', top: '8px', right: '8px', fontSize: '13px', lineHeight: 1,
-              }}>🏆</div>
-            )}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '3px' }}>
-              {logos[logoCode]?.symbol_url && (
-                <img src={logos[logoCode].symbol_url} alt="" style={{ height: '14px', width: '14px', objectFit: 'contain', opacity: 0.8 }} />
-              )}
-              <div style={{ fontSize: '9px', fontWeight: 700, letterSpacing: '1px', textTransform: 'uppercase', color: prog.owned > 0 ? tileColor : '#555' }}>{s.code}</div>
-            </div>
-            <div style={{ fontSize: '12px', fontWeight: 600, color: '#e0e0e0', lineHeight: 1.3, marginBottom: '4px' }}>{s.name}</div>
-            <div style={{ fontSize: '10px', color: '#555', marginBottom: '3px' }}>{s.cards} cards · {fmt(s.set_zar)} full set</div>
-            {tierColor && (
-              <div style={{
-                display: 'inline-block', fontSize: '9px', fontWeight: 700, textTransform: 'uppercase',
-                letterSpacing: '0.03em', color: tierColor, background: `${tierColor}20`,
-                padding: '1px 6px', borderRadius: '4px', marginBottom: '3px',
-              }}>{TIER_LABELS_FE[completedTier] || completedTier} complete</div>
-            )}
-            {prog.owned > 0 && (
-              <>
-                <div style={{ height: '3px', background: '#12121a', borderRadius: '2px', marginTop: '6px', overflow: 'hidden' }}>
-                  <div style={{ height: '100%', width: `${prog.pct}%`, background: color, borderRadius: '2px' }} />
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '9px', color: '#555', marginTop: '3px' }}>
-                  <span>{prog.pct}% complete</span>
-                  <span style={{ color: '#ff6b35' }}>{fmt(prog.collectionZar)}</span>
-                </div>
-              </>
-            )}
-          </div>
-        );
-      })}
-    </div>
-  );
-
-  const hasSpecial = SPECIAL_ERAS.some(e => byEra[e]?.length);
-  // A search or explicit era-filter always wins over the manual
-  // collapsed/expanded state -- otherwise typing into the search box could
-  // "find" a set whose section is still visually collapsed.
-  const isOpen = (era: string) => !!query || !!eraFilter || expandedEras.has(era);
+  const hasSpecial = SPECIAL_ERAS.some(e => SET_INDEX.some(s => s.era === e));
 
   // Renders the era's actual logo when one's been set via admin, otherwise
   // falls back to the original coloured text pill -- same visual slot
   // either way so nothing else about the layout needs to change per-era.
-  const eraBadge = (label: string, color: string) => {
+  const eraBadge = (label: string, color: string, big = false) => {
     const logoUrl = eraLogos[normalizeEraName(label)];
     if (logoUrl && !failedEraLogos.has(logoUrl)) {
-      return <img src={logoUrl} alt={label} title={label} style={{ height: '20px', maxWidth: '120px', objectFit: 'contain' }}
+      return <img src={logoUrl} alt={label} title={label} style={{ height: big ? '46px' : '20px', maxWidth: big ? '80%' : '120px', objectFit: 'contain' }}
         onError={() => setFailedEraLogos(prev => new Set(prev).add(logoUrl))} />;
     }
     return (
-      <div style={{ background: color, color: '#fff', fontSize: '10px', fontWeight: 700, letterSpacing: '1px', textTransform: 'uppercase', padding: '3px 10px', borderRadius: '4px' }}>{label}</div>
+      <div style={{ background: color, color: '#fff', fontSize: big ? '18px' : '10px', fontWeight: 700, letterSpacing: '1px', textTransform: 'uppercase', padding: big ? '10px 20px' : '3px 10px', borderRadius: '6px' }}>{label}</div>
     );
   };
 
-  const sectionHeader = (label: string, color: string, count: number, era: string, style: Record<string, string | number> = {}) => (
-    <div onClick={() => toggleEra(era)}
-      style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', userSelect: 'none', marginBottom: isOpen(era) ? '8px' : '0px', ...style }}>
-      {eraBadge(label, color)}
-      <span style={{ fontSize: '11px', color: '#555' }}>{count} set{count === 1 ? '' : 's'}</span>
-      <span style={{ fontSize: '10px', color: '#555', transform: isOpen(era) ? 'rotate(90deg)' : 'none', transition: 'transform 0.15s' }}>▶</span>
+  // Search spans every set across every era (not just era names) -- typing
+  // "Celebrations" or a set code should surface that set directly, without
+  // making the customer figure out which era card to tap through first.
+  const searchMatches = query.trim()
+    ? SET_INDEX.filter(s =>
+        s.name.toLowerCase().includes(query.toLowerCase()) || s.code.toLowerCase().includes(query.toLowerCase())
+      )
+    : [];
+
+  const eraCard = (era: string, color: string, count: number, special = false) => (
+    <div key={era}
+      onClick={() => (special ? router.push('/checklists/special') : router.push(`/checklists/${eraToSlug(era)}`))}
+      style={{
+        background: '#1a1a24', border: '1px solid #2a2a3a', borderRadius: '14px',
+        padding: '22px 16px', cursor: 'pointer', textAlign: 'center',
+        display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px',
+        transition: 'transform 0.12s ease, border-color 0.12s ease',
+      }}
+      className="pb-era-card">
+      <div style={{ minHeight: '46px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        {eraBadge(special ? 'Special Sets' : era, color, true)}
+      </div>
+      <div style={{ fontSize: '15px', fontWeight: 700, color: '#fff' }}>{special ? 'Special Sets' : era}</div>
+      <div style={{ fontSize: '11px', color: '#555' }}>{count} set{count === 1 ? '' : 's'}</div>
     </div>
   );
 
   return (
-    <div style={{ padding: '20px' }}>
-      <div style={{ display: 'flex', gap: '10px', marginBottom: '16px', flexWrap: 'wrap', alignItems: 'center' }}>
-        <input value={query} onChange={e => setQuery(e.target.value)} placeholder="Search sets..."
-          style={{ flex: 1, minWidth: '180px', padding: '8px 12px', background: '#1e1e2a', border: '1px solid #2a2a3a', borderRadius: '8px', color: '#fff', fontSize: '14px' }} />
-        <select value={eraFilter} onChange={e => setEraFilter(e.target.value)}
-          style={{ padding: '8px 10px', background: '#1e1e2a', border: '1px solid #2a2a3a', borderRadius: '8px', color: '#a0a0b0', fontSize: '13px' }}>
-          <option value="">All eras</option>
-          {ERA_ORDER.filter(e => byEra[e]).map(e => (
-            <option key={e} value={e}>{e.startsWith('Special - ') ? 'Special Sets: ' + e.replace('Special - ', '') : e}</option>
-          ))}
-        </select>
-        <span style={{ fontSize: '12px', color: '#555' }}>{filtered.length} sets</span>
+    <div style={{ padding: '16px' }}>
+      <div style={{ marginBottom: '16px' }}>
+        <input value={query} onChange={e => setQuery(e.target.value)} placeholder="Search any set..."
+          style={{ width: '100%', boxSizing: 'border-box', padding: '11px 14px', background: '#1e1e2a', border: '1px solid #2a2a3a', borderRadius: '10px', color: '#fff', fontSize: '15px' }} />
       </div>
 
-      {/* Era menu (left) + Wall of Honour (right) side by side on wide
-          screens -- wraps to stacked on narrow ones via flexWrap. Only the
-          clickable headers live here; the actual set-tile grids render
-          full-width further down once an era is expanded, since a grid of
-          set tiles crammed into a narrow sidebar column would be useless. */}
-      <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap', alignItems: 'flex-start', marginBottom: '10px' }}>
-        <div style={{ flex: '0 0 260px', minWidth: '240px' }}>
-          {MAIN_ERAS.map(era => {
-            const sets = byEra[era]; if (!sets?.length) return null;
-            const color = ERA_COLORS[era] || '#555';
-            return <div key={era} style={{ marginBottom: '8px' }}>{sectionHeader(era, color, sets.length, era)}</div>;
-          })}
-          {hasSpecial && (
-            <div style={{ marginBottom: '8px' }}>
-              {sectionHeader('Special Sets', '#37474F', SPECIAL_ERAS.reduce((n, e) => n + (byEra[e]?.length || 0), 0), '__special__')}
+      {query.trim() ? (
+        // ── Search results -- flat, image-forward set cards regardless of era ──
+        <div>
+          <div style={{ fontSize: '11px', color: '#555', marginBottom: '10px' }}>{searchMatches.length} set{searchMatches.length === 1 ? '' : 's'} match &quot;{query}&quot;</div>
+          {searchMatches.length === 0 ? (
+            <div style={{ color: '#555', fontSize: '13px', padding: '40px 0', textAlign: 'center' }}>No sets found.</div>
+          ) : (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(150px,1fr))', gap: '10px' }}>
+              {searchMatches.map(s => (
+                <SetSearchCard key={s.code} s={s} color={ERA_COLORS[s.era] || '#ff6b35'} logos={logos} myCompletions={myCompletions} onOpen={onOpen} />
+              ))}
             </div>
           )}
         </div>
+      ) : (
+        <>
+          {/* Level 1 of the drill-down: one big full-width (stacks 2-up on
+              wider screens) tappable card per era -- tap through to
+              /checklists/[era] for that era's sets. */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(260px,1fr))', gap: '12px', marginBottom: '20px' }}>
+            {MAIN_ERAS.map(era => {
+              const count = SET_INDEX.filter(s => s.era === era).length;
+              if (!count) return null;
+              return eraCard(era, ERA_COLORS[era] || '#555', count);
+            })}
+            {hasSpecial && eraCard('__special__', '#37474F', SPECIAL_ERAS.reduce((n, e) => n + SET_INDEX.filter(s => s.era === e).length, 0), true)}
+          </div>
 
-        <div style={{ flex: '1 1 320px', minWidth: '260px' }}>
           {wallEvents.length > 0 && (
-            <div style={{ background: '#1e1e2a', border: '1px solid #2a2a3a', borderRadius: '8px', padding: '10px 14px' }}>
+            <div style={{ background: '#1e1e2a', border: '1px solid #2a2a3a', borderRadius: '10px', padding: '12px 14px' }}>
               <div style={{ fontSize: '10px', fontWeight: 700, letterSpacing: '1px', textTransform: 'uppercase', color: '#a0a0b0', marginBottom: '8px' }}>🏆 Wall of Honour</div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '320px', overflowY: 'auto' }}>
                 {wallEvents.map((e, i) => {
@@ -427,32 +310,12 @@ function Overview({ onOpen }: { onOpen: (code: string) => void }) {
               </div>
             </div>
           )}
-        </div>
-      </div>
+        </>
+      )}
 
-      {/* Expanded era set-tile grids, full width */}
-      {MAIN_ERAS.map(era => {
-        const sets = byEra[era]; if (!sets?.length || !isOpen(era)) return null;
-        const color = ERA_COLORS[era] || '#555';
-        return (
-          <div key={era} style={{ marginBottom: '20px' }}>
-            <div style={{ marginBottom: '8px' }}>{eraBadge(era, color)}</div>
-            {renderGrid(sets, color)}
-          </div>
-        );
-      })}
-
-      {hasSpecial && (!!query || !!eraFilter || expandedEras.has('__special__')) && SPECIAL_ERAS.map(era => {
-        const sets = byEra[era]; if (!sets?.length) return null;
-        const color = ERA_COLORS[era] || '#555';
-        const label = era.replace('Special - ', '');
-        return (
-          <div key={era} style={{ marginBottom: '20px' }}>
-            <div style={{ fontSize: '11px', fontWeight: 600, color: '#a0a0b0', marginBottom: '6px' }}>{label}</div>
-            {renderGrid(sets, color)}
-          </div>
-        );
-      })}
+      <style>{`
+        .pb-era-card:hover { border-color: #ff6b35 !important; transform: translateY(-2px); }
+      `}</style>
     </div>
   );
 }
@@ -732,6 +595,52 @@ function Checklist({ code, onBack }: { code: string; onBack: () => void }) {
     })
     .map(card => ({ ...card, variants: card.variants.filter(v => tierScope.has(v.vc)) }))
     .filter(card => card.variants.length > 0);
+
+  // "Select All" bulk actions (Michael, 2026-09-16 -- his reference app's
+  // Select All row: check / lightning-bolt / star icons). Adapted for
+  // PokeBulk's multi-variant cards -- a Pokedex-style app has one print per
+  // card; here a card can have Normal/Holo/Reverse Holo/etc side by side --
+  // per Michael's call: check = every card's Normal print, lightning = every
+  // Reverse Holo, star = whichever print of each card is the "chase" one.
+  // Each action only MARKS owned (never un-marks), scoped to whichever tier
+  // tab is currently selected, so running one after ticking a few by hand
+  // never loses progress -- safe to tap more than once.
+  const markAllByPicker = useCallback((vcPicker: (card: Card) => Variant | null) => {
+    const token = localStorage.getItem('access_token');
+    if (!token) { router.push('/auth/login'); return; }
+    const newlyMarked: string[] = [];
+    setChecks(prev => {
+      const next = { ...prev };
+      tierFilteredSorted.forEach(card => {
+        const v = vcPicker(card);
+        if (!v) return;
+        const key = card.num + '_' + v.vc;
+        if (!next[key]) { next[key] = true; newlyMarked.push(key); }
+      });
+      saveChecks(code, next);
+      return next;
+    });
+    // Fire-and-forget, same one-POST-per-card pattern `toggle` already uses
+    // for a single card -- just for many at once, so a batch of 100+ can't
+    // block the UI. An occasional dropped request just needs a re-tap.
+    newlyMarked.forEach(key => {
+      authFetch('/api/checklists/toggle/', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ card_set: code, card_key: key }),
+      }).catch(() => {});
+    });
+  }, [code, router, tierFilteredSorted]);
+
+  const markAllNormal = () => markAllByPicker(card => card.variants.find(v => v.vc === 'N') || null);
+  const markAllReverseHolo = () => markAllByPicker(card => card.variants.find(v => v.vc === 'RH') || null);
+  // No single variant code means "chase" across every set (the priciest
+  // print of a given card might be an RH, an H, an ESH, a ball variant,
+  // etc) -- so instead of hard-coding one code, pick whichever variant of
+  // each card is worth the most.
+  const markAllChase = () => markAllByPicker(card =>
+    card.variants.reduce((best: Variant | null, v) => (!best || v.zar > best.zar ? v : best), null)
+  );
 
   // ── CSV export handlers ──────────────────────────────────────────────
   // Resolves the logged-in customer's display name + email once (cached in
@@ -1042,6 +951,22 @@ function Checklist({ code, onBack }: { code: string; onBack: () => void }) {
 
       {/* Card grid IMAGE view */}
       {viewMode === 'grid' && (
+      <>
+        {/* "Select All" bulk row -- Michael, 2026-09-16, from his reference
+            app's Select All icons: check/lightning/star. Marks owned across
+            every card currently shown by the tier tab above (Normal /
+            Reverse Holo / chase print respectively) -- never un-marks, so
+            it's safe to tap more than once. Logged-out visitors get sent to
+            login, same as tapping any other checkbox. */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px', flexWrap: 'wrap' }}>
+          <span style={{ fontSize: '11px', color: '#777', fontWeight: 600 }}>Select All:</span>
+          <button onClick={markAllNormal} title="Mark every Normal print owned"
+            style={{ width: '30px', height: '30px', borderRadius: '50%', background: '#1e1e2a', border: '1.5px solid #2196f3', color: '#2196f3', fontSize: '14px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✓</button>
+          <button onClick={markAllReverseHolo} title="Mark every Reverse Holo print owned"
+            style={{ width: '30px', height: '30px', borderRadius: '50%', background: '#1e1e2a', border: '1.5px solid #7c4dff', color: '#7c4dff', fontSize: '14px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>⚡</button>
+          <button onClick={markAllChase} title="Mark each card's rarest/priciest print owned"
+            style={{ width: '30px', height: '30px', borderRadius: '50%', background: '#1e1e2a', border: '1.5px solid #ffd700', color: '#ffd700', fontSize: '14px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>★</button>
+        </div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))', gap: '10px', marginBottom: '16px' }}>
           {tierFilteredSorted.map(card => {
             const allOwned = card.variants.every(v => checks[card.num + '_' + v.vc]);
@@ -1049,12 +974,24 @@ function Checklist({ code, onBack }: { code: string; onBack: () => void }) {
             if (filter === 'missing' && allOwned) return null;
             if (filter === 'owned' && noneOwned) return null;
             const imgUrl = card.variants.reduce((found: string, v) => found || cardImages[v.pid] || '', '');
+            // "Caught" symbol (Michael, 2026-09-16: "the same as Pokedex, if
+            // customer click that they have it, place the 'Caught' symbol")
+            // -- tapping the card image itself catches its base (Normal)
+            // print, same single-tap feel as the Pokedex page's Catch
+            // button, while the variant chips below still handle
+            // Holo/Reverse Holo/etc for cards with more than one valuable
+            // print. Falls back to the card's first variant for the rare
+            // case a card has no plain Normal print at all.
+            const baseVariant = card.variants.find(v => v.vc === 'N') || card.variants[0];
+            const baseKey = card.num + '_' + baseVariant.vc;
+            const isCaught = !!checks[baseKey];
             return (
               <div key={card.num} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
                 {/* Card image */}
                 <div style={{ position: 'relative', width: '100%' }}>
                   {imgUrl ? (
                     <img src={imgUrl} alt={card.name} loading="lazy"
+                      onClick={() => toggle(baseKey, baseVariant.zar)}
                       onError={(e) => {
                         const img = e.currentTarget;
                         const retries = parseInt(img.dataset.retries || '0', 10);
@@ -1065,13 +1002,27 @@ function Checklist({ code, onBack }: { code: string; onBack: () => void }) {
                       }}
                       style={{ width: '100%', borderRadius: '8px', opacity: allOwned ? 0.35 : 1,
                         border: allOwned ? `2px solid ${eraColor}` : '2px solid transparent',
-                        transition: 'opacity 0.2s', display: 'block' }} />
+                        transition: 'opacity 0.2s', display: 'block', cursor: 'pointer' }} />
                   ) : (
-                    <div style={{ width: '100%', paddingBottom: '140%', background: '#1e1e2a', borderRadius: '8px',
-                      border: '1px solid #2a2a3a', position: 'relative' }}>
+                    <div onClick={() => toggle(baseKey, baseVariant.zar)}
+                      style={{ width: '100%', paddingBottom: '140%', background: '#1e1e2a', borderRadius: '8px',
+                      border: '1px solid #2a2a3a', position: 'relative', cursor: 'pointer' }}>
                       <span style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%,-50%)',
                         fontSize: '10px', color: '#555', textAlign: 'center', padding: '4px', width: '100%' }}>{card.name}</span>
                     </div>
+                  )}
+                  {/* Pokedex-style green "Caught!" badge -- shown the moment
+                      the base print is owned, same visual language as
+                      /pokedex's ✓ badge (PokedexGrid.tsx) so this feels like
+                      the same feature. Kept separate from the orange
+                      allOwned ring/dimming above (that one means "every
+                      print of this card", this one means "you told us you
+                      have it"). */}
+                  {isCaught && !allOwned && (
+                    <div style={{ position: 'absolute', top: '4px', right: '4px', background: '#22c55e',
+                      borderRadius: '50%', width: '18px', height: '18px', display: 'flex',
+                      alignItems: 'center', justifyContent: 'center', fontSize: '10px', fontWeight: 700, color: '#fff',
+                      boxShadow: '0 0 0 1.5px #12121a' }}>✓</div>
                   )}
                   {allOwned && (
                     <div style={{ position: 'absolute', top: '4px', right: '4px', background: eraColor,
@@ -1144,6 +1095,7 @@ function Checklist({ code, onBack }: { code: string; onBack: () => void }) {
             );
           })}
         </div>
+      </>
       )}
 
       {/* Card LIST view */}
@@ -1250,7 +1202,7 @@ function ChecklistsPageInner() {
   // fall back to the Overview instead of handing Checklist a code it can't
   // resolve.
   const activeSet = requestedSet && SETS[requestedSet] ? requestedSet : null;
-  const [ready, setReady] = useState(checklistCacheReady);
+  const [ready, setReady] = useState(isChecklistCacheReady());
 
   useEffect(() => {
     ensureChecklistData().then(() => setReady(true));
@@ -1283,7 +1235,7 @@ function ChecklistsPageInner() {
         ) : activeSet ? (
           <Checklist code={activeSet} onBack={closeSet} />
         ) : (
-          <Overview onOpen={openSet} />
+          <EraHome onOpen={openSet} />
         )}
       </div>
     </div>
