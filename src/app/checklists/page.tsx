@@ -1273,6 +1273,46 @@ function Checklist({ code, onBack }: { code: string; onBack: () => void }) {
                     })}
                   </div>
                 </div>
+                {/* Pricing + Buy row -- Michael, 2026-09-16: "add pricing
+                    under the image with a buy if available next to it!
+                    keep the Caught button as is!" -- a clearer, larger
+                    price readout below the artwork, separate from the tiny
+                    on-image variant chips above (which keep doing exactly
+                    what they did: toggle Caught, untouched by this). Every
+                    priced variant gets its price shown here for reference;
+                    only ones still available to buy (in stock, not yet
+                    owned) get the orange Buy button next to their price. */}
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', justifyContent: 'center', width: '100%', marginTop: '4px' }}>
+                  {card.variants.map(v => {
+                    const key = card.num + '_' + v.vc;
+                    const owned = !!checks[key];
+                    const canBuy = !owned && inStock.has(`${v.pid}_${v.vc}`);
+                    if (v.zar <= 0 && !canBuy) return null;
+                    return (
+                      <div key={v.vc} style={{
+                        display: 'flex', alignItems: 'center', gap: '4px',
+                        background: '#1e1e2a', border: '1px solid #2a2a3a', borderRadius: '6px',
+                        padding: '2px 6px 2px 7px', fontSize: '10px',
+                      }}>
+                        <span style={{ color: '#777', fontWeight: 700 }}>{v.vc}</span>
+                        {v.zar > 0 && <span style={{ color: '#ccc' }}>R{v.zar.toFixed(2)}</span>}
+                        {canBuy && (
+                          <button
+                            onClick={(e) => { e.preventDefault(); e.stopPropagation(); buyCard(v.pid, v.vc, key, v.zar, card.name); }}
+                            disabled={buying.has(key)}
+                            title="Add to pile"
+                            style={{
+                              fontSize: '10px', fontWeight: 800, color: '#fff', background: '#ff6b35',
+                              border: 'none', borderRadius: '4px', padding: '1px 7px', lineHeight: 1.5,
+                              cursor: buying.has(key) ? 'default' : 'pointer', opacity: buying.has(key) ? 0.6 : 1,
+                            }}>
+                            {buying.has(key) ? '…' : 'Buy'}
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
                 {/* Card name */}
                 <div style={{ fontSize: '9px', color: '#666', textAlign: 'center', margin: '3px 0 4px',
                   whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', width: '100%' }}>
