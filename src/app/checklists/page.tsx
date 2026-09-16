@@ -134,18 +134,27 @@ function EraHome({ onOpen }: { onOpen: (code: string) => void }) {
   // just falls back to the existing coloured text pill, so this is safe to
   // ship before every era has a logo filled in via admin.
   const [eraLogos, setEraLogos] = useState<Record<string, string>>({});
+  // Michael, 2026-09-16: "the era symbols... so we can add them to the page
+  // for era selection" -- a new, separate small ICON per era (Era.symbol_url,
+  // parallel to CardSet.symbol_url), distinct from the wider wordmark
+  // logo_url above. The compact home cards read better with the small icon,
+  // so eraBadge() below prefers a symbol and only falls back to the logo
+  // (then the plain coloured text pill) when no symbol is set for that era.
+  const [eraSymbols, setEraSymbols] = useState<Record<string, string>>({});
   // Michael, 2026-09-02: "we need to fix the images for the era's, evn if
   // we just go back to simple name labels" -- a dead/broken logo_url (404,
   // wrong R2 path, etc.) was rendering the browser's broken-image icon
   // instead of falling back to the coloured text pill below. Tracking which
   // URLs actually failed to load lets eraBadge() treat "failed" the same
-  // as "never set" and fall back cleanly.
+  // as "never set" and fall back cleanly. Shared between logos and symbols
+  // -- either kind of broken URL should fail over the same way.
   const [failedEraLogos, setFailedEraLogos] = useState<Set<string>>(new Set());
   useEffect(() => {
     fetch(`${API_BASE}/api/eras/`)
       .then(r => r.json())
       .then(data => {
-        const map: Record<string, string> = {};
+        const logoMap: Record<string, string> = {};
+        const symbolMap: Record<string, string> = {};
         // Michael, 2026-08-08: the Era table has legacy duplicate rows per
         // era (multiple codes, same conceptual era) and inconsistent naming
         // -- some end in "Era", some don't ("Sword & Shield Era" vs this
@@ -153,10 +162,12 @@ function EraHome({ onOpen }: { onOpen: (code: string) => void }) {
         // failed for most of them even with a valid logo_url saved, so this
         // normalizes both sides (trim, lowercase, drop a trailing " Era")
         // before comparing instead of requiring a byte-for-byte match.
-        (data.results || []).forEach((e: { name: string; logo_url: string }) => {
-          if (e.logo_url) map[normalizeEraName(e.name)] = e.logo_url;
+        (data.results || []).forEach((e: { name: string; logo_url: string; symbol_url?: string }) => {
+          if (e.logo_url) logoMap[normalizeEraName(e.name)] = e.logo_url;
+          if (e.symbol_url) symbolMap[normalizeEraName(e.name)] = e.symbol_url;
         });
-        setEraLogos(map);
+        setEraLogos(logoMap);
+        setEraSymbols(symbolMap);
       })
       .catch(() => {});
   }, []);
@@ -216,10 +227,14 @@ function EraHome({ onOpen }: { onOpen: (code: string) => void }) {
   // falls back to the original coloured text pill -- same visual slot
   // either way so nothing else about the layout needs to change per-era.
   const eraBadge = (label: string, color: string, big = false) => {
+    const symbolUrl = eraSymbols[normalizeEraName(label)];
     const logoUrl = eraLogos[normalizeEraName(label)];
-    if (logoUrl && !failedEraLogos.has(logoUrl)) {
-      return <img src={logoUrl} alt={label} title={label} style={{ height: big ? '46px' : '20px', maxWidth: big ? '80%' : '120px', objectFit: 'contain' }}
-        onError={() => setFailedEraLogos(prev => new Set(prev).add(logoUrl))} />;
+    const imgUrl = (symbolUrl && !failedEraLogos.has(symbolUrl)) ? symbolUrl
+      : (logoUrl && !failedEraLogos.has(logoUrl)) ? logoUrl
+      : null;
+    if (imgUrl) {
+      return <img src={imgUrl} alt={label} title={label} style={{ height: big ? '46px' : '20px', maxWidth: big ? '80%' : '120px', objectFit: 'contain' }}
+        onError={() => setFailedEraLogos(prev => new Set(prev).add(imgUrl))} />;
     }
     return (
       <div style={{ background: color, color: '#fff', fontSize: big ? '18px' : '10px', fontWeight: 700, letterSpacing: '1px', textTransform: 'uppercase', padding: big ? '10px 20px' : '3px 10px', borderRadius: '6px' }}>{label}</div>
