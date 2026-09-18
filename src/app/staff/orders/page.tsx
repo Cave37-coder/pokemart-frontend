@@ -352,6 +352,7 @@ function OrdersTab() {
                         <button style={btn} onClick={() => setExpanded(expanded === o.id ? null : o.id)}>{expanded === o.id ? "Close" : "Manage"}</button>
                         <a style={btn} href={`${API_URL}/api/print/order/${o.id}/`} target="_blank" rel="noreferrer">🖨 Pull Sheet</a>
                         <a style={btn} href={`${API_URL}/api/print/invoice/${o.id}/`} target="_blank" rel="noreferrer">📄 Invoice</a>
+                        <a style={btn} href={`${API_URL}/api/print/label/${o.id}/`} target="_blank" rel="noreferrer">🏷 Label</a>
                         <button style={btn} onClick={() => emailInvoice(o.id)}>✉️ Email</button>
                       </div>
                     </td>
