@@ -116,9 +116,16 @@ export default function OrderDetailPage() {
     const guardKey = `ga4_purchase_tracked_${order.id}`;
     if (sessionStorage.getItem(guardKey)) return;
 
-    const itemsSubtotal = order.items.reduce((sum, item) => sum + parseFloat(item.subtotal), 0);
+    // 2026-09-18: was deriving shipping as (total - itemsSubtotal), which
+    // silently baked the community discount INTO the reported shipping
+    // figure -- total already has the discount subtracted, so
+    // total - itemsSubtotal worked out to (real shipping - discount), not
+    // the real shipping cost. Purely an analytics/GA4 reporting bug (never
+    // affected what anyone was actually charged -- see order.shipping_cost
+    // below, always the real undiscounted figure), but read the real field
+    // directly instead of re-deriving it.
     const total = parseFloat(order.total_price);
-    const shippingCost = Math.max(0, total - itemsSubtotal);
+    const shippingCost = parseFloat(order.shipping_cost || "0");
 
     trackPurchase(
       String(order.id),

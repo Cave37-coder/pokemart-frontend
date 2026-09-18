@@ -14,7 +14,7 @@ const DELIVERY_OPTIONS = [
   { id: "pudo_kiosk",        label: "Pudo — Locker to Kiosk (XSmall)",    price: 85,  desc: "1-4 business days. Collect from your nearest Pudo kiosk.", courier: true },
   { id: "pudo_medium",       label: "Pudo — Medium/Tins (Kiosk)",         price: 95,  desc: "For tins or larger items. Collect from your nearest Pudo kiosk.", courier: true },
   { id: "pudo_door",         label: "Pudo — Locker to Door (XSmall)",     price: 105, desc: "2-4 business days. Delivered to your door.", courier: true },
-  { id: "postnet",           label: "Postnet to Postnet",                  price: 130, desc: "2-5 business days. Collect from your nearest PostNet branch.", courier: true },
+  // Postnet removed 2026-09-18 per Michael -- no longer offered at checkout.
 ];
 
 const COLLECTION_PAYMENT = [
@@ -111,7 +111,7 @@ export default function CheckoutPage() {
   );
   const hasUnavailableItems = (cart?.items?.length || 0) > items.length;
 
-  const needsAddress  = ["pudo_door","postnet"].includes(shipping);
+  const needsAddress  = ["pudo_door"].includes(shipping);
   const needsLocker   = ["pudo_locker","pudo_kiosk","pudo_medium"].includes(shipping);
 
   const inp = (style?: React.CSSProperties): React.CSSProperties => ({
@@ -294,7 +294,7 @@ export default function CheckoutPage() {
             </div>
           )}
 
-          {/* Door / Postnet address */}
+          {/* Door delivery address */}
           {needsAddress && (
             <div style={card()}>
               <h2 style={{ fontSize:15, fontWeight:700, color:"#fff", margin:"0 0 14px" }}>Delivery address</h2>
