@@ -156,9 +156,13 @@ export default function PilePage() {
                   <div style={{ fontWeight: 700, color: "#ff6b35", fontSize: 15, marginBottom: 6 }}>
                     R {parseFloat(item.subtotal).toFixed(2)}
                   </div>
+                  {/* 2026-09-18, Michael: Remove now takes off ONE card per
+                      click, not the whole line -- see CartRemoveView. Label
+                      says "Remove 1" whenever there's more than one, so it's
+                      obvious a double-click won't wipe out the full stack. */}
                   <button onClick={() => removeItem(item.id)} disabled={removing === item.id}
                     style={{ background: "transparent", border: "1px solid #2a2a3a", color: "#555", borderRadius: 6, padding: "3px 10px", fontSize: 11, cursor: "pointer" }}>
-                    {removing === item.id ? "..." : "Remove"}
+                    {removing === item.id ? "..." : item.quantity > 1 ? "Remove 1" : "Remove"}
                   </button>
                 </div>
               </div>
