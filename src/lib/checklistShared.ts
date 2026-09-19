@@ -107,12 +107,78 @@ export function getProgress(code: string) {
   let owned = 0, total = 0, collectionZar = 0;
   set.cards.forEach(c => c.variants.forEach(v => {
     total++;
-    if (checks[c.num + '_' + v.vc]) { owned++; collectionZar += v.zar; }
+    if (checks[c.num + '_' + v.vc]) { owned++; collectionZar += getLivePrice(v.pid, v.vc, v.zar); }
   }));
   return { owned, total, pct: total ? Math.round(owned / total * 100) : 0, collectionZar };
 }
 
 export function fmt(zar: number) { return 'R ' + zar.toFixed(2); }
+
+// ── Live pricing overlay ─────────────────────────────────────────────────
+// New 2026-09-19, Michael: "we need to have the 'My Collection' syncing, the
+// site 'Browse Cards' is correct" -- checklistData.ts's per-card `zar` values
+// are a static snapshot baked in at whatever moment generate_checklist_data
+// was last run locally and pushed (see that command's own header comment),
+// while Browse Cards reads PokemonProduct.price live from the DB on every
+// request and never goes stale. Rather than re-running/automating that local
+// regeneration (chosen explicitly over that option), these helpers overlay
+// CURRENT prices from the new backend endpoint
+// (GET /api/checklists/price-check/?sets=CODE1,CODE2) onto the static
+// card/variant structure at render time, keyed identically to how that
+// endpoint (and generate_checklist_data.py) derive pid: the numeric TCGCSV id
+// extracted from PokemonProduct.pb_id via "TCGCSV-(\d+)", falling back to
+// PokemonProduct.id. Falls back to the static v.zar when a live price hasn't
+// been fetched yet (or the fetch failed) so nothing ever shows R0.00.
+let livePrices: Record<string, number> = {};
+let livePriceFetchedSets: Set<string> = new Set();
+let livePriceFetchesInFlight: Record<string, Promise<void>> = {};
+
+export function setLivePrice(pid: number, vc: string, price: number) {
+  livePrices[`${pid}_${vc}`] = price;
+}
+
+export function getLivePrice(pid: number, vc: string, fallback: number): number {
+  const v = livePrices[`${pid}_${vc}`];
+  return v === undefined ? fallback : v;
+}
+
+// Fetches live prices for any of the given set codes not already fetched
+// this session, and merges them into the shared livePrices map. Safe to call
+// repeatedly (e.g. on every page mount) -- already-fetched codes are skipped,
+// and concurrent calls for the same code share one in-flight request rather
+// than firing duplicates.
+export async function ensureLivePrices(codes: string[]): Promise<void> {
+  const missing = codes.filter(c => !livePriceFetchedSets.has(c) && !livePriceFetchesInFlight[c]);
+  if (missing.length) {
+    const req = (async () => {
+      try {
+        const res = await fetch(`${API_BASE}/api/checklists/price-check/?sets=${missing.join(',')}`);
+        const data: Record<string, number> = await res.json();
+        Object.assign(livePrices, data);
+        missing.forEach(c => livePriceFetchedSets.add(c));
+      } catch {
+        // Live fetch failed (offline, API hiccup) -- callers fall back to the
+        // static v.zar values, so just leave these codes unmarked and let a
+        // later call retry.
+      } finally {
+        missing.forEach(c => { delete livePriceFetchesInFlight[c]; });
+      }
+    })();
+    missing.forEach(c => { livePriceFetchesInFlight[c] = req; });
+  }
+  const pending = codes.map(c => livePriceFetchesInFlight[c]).filter(Boolean);
+  if (pending.length) await Promise.all(pending);
+}
+
+// Live-priced total value of a full set (all cards/variants, regardless of
+// what the customer owns) -- overlays getLivePrice the same way getProgress
+// does, for the "R X full set" figure shown on the era drill-down page.
+export function getSetValue(code: string): number {
+  const set = SETS[code]; if (!set) return 0;
+  let total = 0;
+  set.cards.forEach(c => c.variants.forEach(v => { total += getLivePrice(v.pid, v.vc, v.zar); }));
+  return total;
+}
 
 // ── Era <-> URL slug ─────────────────────────────────────────────────────
 // New 2026-09-16, for the /checklists/[era] drill-down route. Slugs are

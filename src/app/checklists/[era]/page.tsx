@@ -14,6 +14,7 @@ import { SET_INDEX, ERA_COLORS, ERA_ORDER, TIER_COLORS, TIER_LABELS_FE } from '@
 import type { SetMeta } from '@/lib/checklistData';
 import {
   API_BASE, normalizeEraName, ensureChecklistData, getProgress, fmt, eraFromSlug,
+  ensureLivePrices, getSetValue,
 } from '@/lib/checklistShared';
 
 const SPECIAL_SLUG = 'special';
@@ -63,6 +64,35 @@ export default function EraPage() {
       .catch(() => setMyCompletions({}));
   }, []);
 
+  // For "Special Sets" the underlying data still splits by product line
+  // (Trick or Trade, Prize Pack, etc, e.g. era = "Special - Trick or Trade")
+  // -- group those as sub-sections on this one page instead of giving each
+  // its own top-level era on the home screen. Computed unconditionally (ahead
+  // of the "couldn't find that era" early return below) so the live-price
+  // effect right after it can always see the full set-code list without
+  // breaking the rules of hooks.
+  const groups: { heading: string | null; sets: SetMeta[] }[] = isSpecial
+    ? ERA_ORDER.filter(e => e.startsWith('Special - ')).map(e => ({
+        heading: e.replace('Special - ', ''),
+        sets: SET_INDEX.filter(s => s.era === e),
+      })).filter(g => g.sets.length > 0)
+    : eraName
+      ? [{ heading: null, sets: SET_INDEX.filter(s => s.era === eraName) }]
+      : [];
+
+  // 2026-09-19, Michael: "we need to have the 'My Collection' syncing" --
+  // overlays live prices (see checklistShared.ts) onto the static set_zar /
+  // per-card zar figures used below, instead of the stale baked-in snapshot.
+  // priceTick just forces a re-render once the fetch resolves, since
+  // getSetValue/getProgress read a module-level cache rather than props/state.
+  const [priceTick, setPriceTick] = useState(0);
+  useEffect(() => {
+    const codes = groups.flatMap(g => g.sets.map(s => s.code));
+    if (!codes.length) return;
+    ensureLivePrices(codes).then(() => setPriceTick(t => t + 1));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [eraName, isSpecial]);
+
   if (!isSpecial && !eraName) {
     return (
       <div style={{ minHeight: '100vh', background: '#12121a', color: '#e0e0e0', padding: '40px 20px', textAlign: 'center' }}>
@@ -76,17 +106,6 @@ export default function EraPage() {
   const color = isSpecial ? '#37474F' : (ERA_COLORS[eraName as string] || '#555');
   const label = isSpecial ? 'Special Sets' : (eraName as string);
 
-  // For "Special Sets" the underlying data still splits by product line
-  // (Trick or Trade, Prize Pack, etc, e.g. era = "Special - Trick or Trade")
-  // -- group those as sub-sections on this one page instead of giving each
-  // its own top-level era on the home screen.
-  const groups: { heading: string | null; sets: SetMeta[] }[] = isSpecial
-    ? ERA_ORDER.filter(e => e.startsWith('Special - ')).map(e => ({
-        heading: e.replace('Special - ', ''),
-        sets: SET_INDEX.filter(s => s.era === e),
-      })).filter(g => g.sets.length > 0)
-    : [{ heading: null, sets: SET_INDEX.filter(s => s.era === eraName) }];
-
   const sortSets = (sets: SetMeta[]) => sets.slice().sort((a, b) => {
     const dA = logos[a.code]?.release_date;
     const dB = logos[b.code]?.release_date;
@@ -98,7 +117,7 @@ export default function EraPage() {
 
   return (
     <div style={{ minHeight: '100vh', background: '#12121a', color: '#e0e0e0' }}>
-      <div style={{ maxWidth: '900px', margin: '0 auto', padding: '16px' }}>
+      <div key={priceTick} style={{ maxWidth: '900px', margin: '0 auto', padding: '16px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '18px' }}>
           <button onClick={() => router.push('/checklists')}
             style={{ background: '#1e1e2a', color: '#a0a0b0', border: '1px solid #2a2a3a', padding: '7px 12px', borderRadius: '7px', fontSize: '15px', cursor: 'pointer', lineHeight: 1 }}>←</button>
@@ -140,7 +159,7 @@ export default function EraPage() {
                           <div style={{ fontSize: '14px', fontWeight: 600, color: '#fff', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{s.name}</div>
                           {tierColor && <span title={`${TIER_LABELS_FE[completedTier] || completedTier} complete`} style={{ fontSize: '13px', flexShrink: 0 }}>🏆</span>}
                         </div>
-                        <div style={{ fontSize: '10px', color: '#555', marginBottom: '6px' }}>{s.code} · {s.cards} cards · {fmt(s.set_zar)} full set</div>
+                        <div style={{ fontSize: '10px', color: '#555', marginBottom: '6px' }}>{s.code} · {s.cards} cards · {fmt(getSetValue(s.code))} full set</div>
                         <div style={{ height: '6px', background: '#12121a', borderRadius: '3px', overflow: 'hidden' }}>
                           <div style={{ height: '100%', width: `${prog.pct}%`, background: tierColor || color, borderRadius: '3px', transition: 'width .3s' }} />
                         </div>

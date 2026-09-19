@@ -5,7 +5,7 @@ import { authFetch, SessionExpiredError } from '@/lib/api';
 import { buildPullSheetHtml, openPullSheet, type PullSheetRow } from '@/lib/pullSheet';
 import {
   API_BASE, normalizeEraName, loadChecks, saveChecks, ensureChecklistData,
-  isChecklistCacheReady, getProgress, fmt, eraToSlug,
+  isChecklistCacheReady, getProgress, fmt, eraToSlug, setLivePrice, getLivePrice,
 } from '@/lib/checklistShared';
 
 import {
@@ -397,6 +397,16 @@ function Checklist({ code, onBack }: { code: string; onBack: () => void }) {
   // tracked/checkable variant codes to begin with, so this client-side check
   // reliably matches what the backend decides without needing an extra call.
   const isSimpleSet = set.cards.every(c => c.variants.length <= 1);
+  // 2026-09-19, Michael: "we need to have the 'My Collection' syncing, the
+  // site 'Browse Cards' is correct" -- checklistData.ts's v.zar is a static
+  // snapshot from whenever generate_checklist_data was last run+pushed
+  // locally, while this page's own product fetch below already pulls live
+  // PokemonProduct.price for every card in this set on every load. zarOf
+  // overlays that live price (via the shared cache in checklistShared.ts,
+  // populated as that fetch resolves) over the static v.zar, everywhere a
+  // price is displayed or used, falling back to v.zar only if a live price
+  // hasn't come in yet (or the fetch failed).
+  const zarOf = (v: Variant) => getLivePrice(v.pid, v.vc, v.zar);
   const tierTabs: { key: string; label: string }[] = isSimpleSet
     ? [{ key: 'complete_set', label: 'Complete Set' }]
     : [
@@ -453,7 +463,7 @@ function Checklist({ code, onBack }: { code: string; onBack: () => void }) {
       fetch(url)
         .then(r => r.json())
         .then(data => {
-          (data.results || []).forEach((p: { pb_id: string; id: number; image_url: string; tcgplayer_id?: number; variant_override?: string; in_stock?: boolean }) => {
+          (data.results || []).forEach((p: { pb_id: string; id: number; image_url: string; tcgplayer_id?: number; variant_override?: string; in_stock?: boolean; price?: number | string | null }) => {
             // BUG FIXED 2026-08-01 (Michael: Buy button on checklist redirects
             // to a search page instead of adding to Pile): pidToId used to be
             // keyed by p.tcgplayer_id, which is blank ("") on essentially
@@ -484,6 +494,18 @@ function Checklist({ code, onBack }: { code: string; onBack: () => void }) {
             else if (p.tcgplayer_id) idAcc[`${p.tcgplayer_id}_${variant}`] = p.id;
             const stockPid = match ? parseInt(match[1], 10) : p.tcgplayer_id;
             if (stockPid && p.in_stock) stockAcc.add(`${stockPid}_${variant}`);
+            // Live price overlay (see zarOf above) -- this same row already
+            // carries the DB's current price, so no extra network call is
+            // needed to keep this set's prices in sync with Browse Cards.
+            // pid fallback must match how checklistData.ts's own v.pid values
+            // were derived (generate_checklist_data.py / checklist_price_check:
+            // TCGCSV id from pb_id, else PokemonProduct.id) -- NOT tcgplayer_id,
+            // which is a different, mostly-blank field used only for pidToId
+            // above.
+            const pricePid = match ? parseInt(match[1], 10) : p.id;
+            if (p.price !== undefined && p.price !== null) {
+              setLivePrice(pricePid, variant, parseFloat(String(p.price)));
+            }
           });
           if (data.next) fetchPage(data.next, imgAcc, idAcc, stockAcc);
           else {
@@ -574,8 +596,8 @@ function Checklist({ code, onBack }: { code: string; onBack: () => void }) {
   let setTotalZar = 0, collectionZar = 0;
   set.cards.forEach(c => {
     c.variants.forEach(v => {
-      totalVariants++; setTotalZar += v.zar;
-      if (checks[c.num + '_' + v.vc]) { ownedVariants++; collectionZar += v.zar; }
+      totalVariants++; setTotalZar += zarOf(v);
+      if (checks[c.num + '_' + v.vc]) { ownedVariants++; collectionZar += zarOf(v); }
     });
   });
   // Michael, 2026-08-02: the top stat bar used to compute owned/missing/%
@@ -1179,7 +1201,7 @@ function Checklist({ code, onBack }: { code: string; onBack: () => void }) {
                 <div style={{ position: 'relative', width: '100%' }}>
                   {imgUrl ? (
                     <img src={imgUrl} alt={card.name} loading="lazy"
-                      onClick={() => toggle(baseKey, baseVariant.zar)}
+                      onClick={() => toggle(baseKey, zarOf(baseVariant))}
                       onError={(e) => {
                         const img = e.currentTarget;
                         const retries = parseInt(img.dataset.retries || '0', 10);
@@ -1192,7 +1214,7 @@ function Checklist({ code, onBack }: { code: string; onBack: () => void }) {
                         border: allOwned ? `2px solid ${eraColor}` : '2px solid transparent',
                         transition: 'opacity 0.2s', display: 'block', cursor: 'pointer' }} />
                   ) : (
-                    <div onClick={() => toggle(baseKey, baseVariant.zar)}
+                    <div onClick={() => toggle(baseKey, zarOf(baseVariant))}
                       style={{ width: '100%', paddingBottom: '140%', background: '#1e1e2a', borderRadius: '8px',
                       border: '1px solid #2a2a3a', position: 'relative', cursor: 'pointer' }}>
                       <span style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%,-50%)',
@@ -1241,7 +1263,7 @@ function Checklist({ code, onBack }: { code: string; onBack: () => void }) {
                       const canBuy = !owned && inStock.has(`${v.pid}_${v.vc}`);
                       return (
                         <div key={v.vc}
-                          onClick={(e) => { e.preventDefault(); e.stopPropagation(); toggle(key, v.zar); }}
+                          onClick={(e) => { e.preventDefault(); e.stopPropagation(); toggle(key, zarOf(v)); }}
                           title={owned ? `Caught -- ${v.vc} (tap to un-mark)` : `Mark ${v.vc} owned`}
                           style={{
                             display: 'flex', alignItems: 'center', gap: '3px', cursor: 'pointer',
@@ -1253,12 +1275,12 @@ function Checklist({ code, onBack }: { code: string; onBack: () => void }) {
                           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', lineHeight: 1.1 }}>
                             <span style={{ fontSize: '8px', fontWeight: 800, color: owned ? '#eafff1' : col }}>{owned ? '✓' : v.vc}</span>
                             <span style={{ fontSize: '6px', color: owned ? '#c8f7d8' : '#888' }}>
-                              {owned ? 'Caught' : (canBuy ? 'Buy' : (v.zar > 0 ? 'R' + v.zar.toFixed(0) : ''))}
+                              {owned ? 'Caught' : (canBuy ? 'Buy' : (zarOf(v) > 0 ? 'R' + zarOf(v).toFixed(0) : ''))}
                             </span>
                           </div>
                           {canBuy && (
                             <button
-                              onClick={(e) => { e.preventDefault(); e.stopPropagation(); buyCard(v.pid, v.vc, key, v.zar, card.name); }}
+                              onClick={(e) => { e.preventDefault(); e.stopPropagation(); buyCard(v.pid, v.vc, key, zarOf(v), card.name); }}
                               disabled={buying.has(key)}
                               title="Add to pile"
                               style={{ fontSize: '10px', fontWeight: 800, color: '#ff6b35', background: 'transparent', border: 'none', padding: 0, lineHeight: 1, cursor: buying.has(key) ? 'default' : 'pointer', opacity: buying.has(key) ? 0.5 : 1 }}>
@@ -1287,7 +1309,7 @@ function Checklist({ code, onBack }: { code: string; onBack: () => void }) {
                     const key = card.num + '_' + v.vc;
                     const owned = !!checks[key];
                     const canBuy = !owned && inStock.has(`${v.pid}_${v.vc}`);
-                    if (v.zar <= 0 && !canBuy) return null;
+                    if (zarOf(v) <= 0 && !canBuy) return null;
                     return (
                       <div key={v.vc} style={{
                         display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px',
@@ -1295,10 +1317,10 @@ function Checklist({ code, onBack }: { code: string; onBack: () => void }) {
                         padding: '2px 6px 2px 7px', fontSize: '10px', width: '100%',
                       }}>
                         <span style={{ color: '#777', fontWeight: 700 }}>{v.vc}</span>
-                        {v.zar > 0 && <span style={{ color: '#ccc' }}>R{v.zar.toFixed(2)}</span>}
+                        {zarOf(v) > 0 && <span style={{ color: '#ccc' }}>R{zarOf(v).toFixed(2)}</span>}
                         {canBuy && (
                           <button
-                            onClick={(e) => { e.preventDefault(); e.stopPropagation(); buyCard(v.pid, v.vc, key, v.zar, card.name); }}
+                            onClick={(e) => { e.preventDefault(); e.stopPropagation(); buyCard(v.pid, v.vc, key, zarOf(v), card.name); }}
                             disabled={buying.has(key)}
                             title="Add to pile"
                             style={{
@@ -1355,7 +1377,7 @@ function Checklist({ code, onBack }: { code: string; onBack: () => void }) {
                       const col = vcColor[v.vc] || eraColor;
                       return (
                         <div key={v.vc} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1px' }}>
-                          <div onClick={() => toggle(key, v.zar)} style={{
+                          <div onClick={() => toggle(key, zarOf(v))} style={{
                             background: checks[key] ? col : 'transparent',
                             border: `1px solid ${checks[key] ? col : '#333'}`,
                             borderRadius: '3px', padding: '1px 4px',
@@ -1364,14 +1386,14 @@ function Checklist({ code, onBack }: { code: string; onBack: () => void }) {
                           }}>{v.vc}</div>
                           {!checks[key] && inStock.has(`${v.pid}_${v.vc}`) && (
                             <button
-                              onClick={() => buyCard(v.pid, v.vc, key, v.zar, card.name)}
+                              onClick={() => buyCard(v.pid, v.vc, key, zarOf(v), card.name)}
                               disabled={buying.has(key)}
                               style={{ fontSize: '7px', color: '#ff6b35', background: 'transparent', textDecoration: 'none', border: '1px solid #ff6b35', borderRadius: '3px', padding: '0px 3px', fontWeight: 700, lineHeight: 1.4, cursor: buying.has(key) ? 'default' : 'pointer', opacity: buying.has(key) ? 0.5 : 1 }}>
                               {buying.has(key) ? '…' : 'Buy'}
                             </button>
                           )}
                           {!inStock.has(`${v.pid}_${v.vc}`) && (
-                            <span style={{ fontSize: '7px', color: '#333', lineHeight: 1.2 }}>{v.zar > 0 ? 'R'+v.zar.toFixed(0) : ''}</span>
+                            <span style={{ fontSize: '7px', color: '#333', lineHeight: 1.2 }}>{zarOf(v) > 0 ? 'R'+zarOf(v).toFixed(0) : ''}</span>
                           )}
                         </div>
                       );
