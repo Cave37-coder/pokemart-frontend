@@ -386,7 +386,30 @@ function Checklist({ code, sub, onBack }: { code: string; sub?: 'pikachu' | null
   // is that ticking a card in one view must NOT tick it in the other.
   const PIKACHU_SUBSET_STORAGE_CODE = '30C-PIKA';
   const isPikachuSubset = sub === 'pikachu';
-  const baseCards = isPikachuSubset ? set.cards.filter(c => c.rarity === PIKACHU_SUBSET_RARITY) : set.cards;
+  // Michael, 2026-09-29 round 3: "please renumber to the Pika Number not
+  // set number, 1-30" -- the real 30C data numbers these cards by their
+  // position in the 161-card set (e.g. "023/154"), which is what the full
+  // set view still needs to show. The sub-set instead relabels each card
+  // "01/30".."30/30" -- its own position among just the 30 chase Pikachu,
+  // in the same chronological order the real numbers already sort them in
+  // (set.cards comes pre-sorted ascending, so filtering preserves that
+  // order -- no separate sort needed before indexing). Builds NEW card
+  // objects rather than mutating the filtered ones: `set.cards` is the
+  // shared, imported SETS data (checklistData.ts), reused on every render
+  // and by the full-set view too -- mutating it in place would leak the
+  // Pikachu numbering into the real 30C grid.
+  //
+  // This does change what gets sent as card_key (num + '_' + variant) for
+  // the sub-set's toggle calls -- "01/30_H" instead of "023/154_H" -- since
+  // storageCode ("30C-PIKA") already made this its own independent key
+  // space (see the comment above), any cards already checked here under
+  // the old numbering will show as unchecked once this ships; nothing to
+  // clean up server-side, just re-tick them.
+  const baseCards = isPikachuSubset
+    ? set.cards
+        .filter(c => c.rarity === PIKACHU_SUBSET_RARITY)
+        .map((c, i) => ({ ...c, num: `${String(i + 1).padStart(2, '0')}/30` }))
+    : set.cards;
   const displayName = isPikachuSubset ? `${set.name} — Chase Pikachu` : set.name;
   // Everywhere checklist OWNERSHIP is read or written (toggle, clear-set,
   // progress, leaderboard, the local checks cache) uses storageCode, not
