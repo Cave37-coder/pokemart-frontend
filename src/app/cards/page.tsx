@@ -155,9 +155,23 @@ const RARITIES = [
     { value: "hyper_rare", label: "Hyper Rare" },
 ];
 
+// Michael, 2026-09-29: "Sword & Shield sets are disaster" -- his
+// screenshot of era=SWSH sorted "Card # (low to high)" showed CRZ (base
+// set) and CRZGG (its Trainer Gallery subset, same release_date) cards
+// interleaved card-by-card, because a bare `card_number` ordering has no
+// per-set grouping at all -- CRZ's "001" and CRZGG's "GG01" (parsed down
+// to a bare 1) collide directly. Changed these two options to the same
+// compound ordering as the Pokedex/Collections pages -- release date,
+// then card_set__code (the actual tiebreaker for same-day sibling sets,
+// see PokemonProductViewSet.ordering in products/views.py), then card
+// number, then variant -- so browsing "by card number" across a whole era
+// still reads as one set at a time, binder-style, instead of a shuffle.
+// Only these two options changed: Pokedex #/Price/Name sorts are
+// deliberately cross-set already (that's the point of sorting by dex
+// number or price), so they're left as single-field orderings.
 const SORT_OPTIONS = [
-    { value: "card_number", label: "Card # (low to high)" },
-    { value: "-card_number", label: "Card # (high to low)" },
+    { value: "card_set__release_date,card_set__code,card_number,variant_sort", label: "Card # (low to high)" },
+    { value: "card_set__release_date,card_set__code,-card_number,-variant_sort", label: "Card # (high to low)" },
     { value: "pokedex_number", label: "Pokedex # (low to high)" },
     { value: "-pokedex_number", label: "Pokedex # (high to low)" },
     { value: "price", label: "Price (low to high)" },
@@ -473,7 +487,7 @@ export default async function CardsPage({ searchParams }: { searchParams: Promis
                 <select name="rarity" defaultValue={params.rarity || ""} style={{ background: "#1a1a24", border: "1px solid #2a2a3a", borderRadius: "6px", padding: "8px 12px", color: "#fff", fontSize: "13px" }}>
                     {RARITIES.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}
                 </select>
-                <select name="ordering" defaultValue={params.ordering || "card_number"} style={{ background: "#1a1a24", border: "1px solid #2a2a3a", borderRadius: "6px", padding: "8px 12px", color: "#fff", fontSize: "13px" }}>
+                <select name="ordering" defaultValue={params.ordering || SORT_OPTIONS[0].value} style={{ background: "#1a1a24", border: "1px solid #2a2a3a", borderRadius: "6px", padding: "8px 12px", color: "#fff", fontSize: "13px" }}>
                     {SORT_OPTIONS.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
                 </select>
                 <select name="legality" defaultValue={effectiveLegality} style={{ background: "#1a1a24", border: "1px solid #2a2a3a", borderRadius: "6px", padding: "8px 12px", color: "#fff", fontSize: "13px" }}>

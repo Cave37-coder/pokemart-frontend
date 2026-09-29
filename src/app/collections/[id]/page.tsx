@@ -16,10 +16,16 @@ const API_URL = process.env.API_URL || process.env.NEXT_PUBLIC_API_URL || "https
 // applied earlier the same session), but the two pages are otherwise
 // unrelated: this one tracks ownership completely separately (see
 // useSingleCollection).
+//
+// 2026-09-29, round 2: added card_set__code right after release_date, same
+// fix as pokedex/[id]/page.tsx -- a same-day Trainer Gallery/Shiny Vault
+// subset ties with its parent set on release_date alone, so card_set__code
+// breaks the tie and keeps the two from interleaving (full explanation on
+// PokemonProductViewSet.ordering in products/views.py).
 async function getAllCardsForPokedex(id: string): Promise<Card[]> {
     const results: Card[] = [];
     let url: string | null =
-        `${API_URL}/api/products/?pokedex=${encodeURIComponent(id)}&min_price=0.01&page_size=200&ordering=card_set__release_date,card_number,variant_sort`;
+        `${API_URL}/api/products/?pokedex=${encodeURIComponent(id)}&min_price=0.01&page_size=200&ordering=card_set__release_date,card_set__code,card_number,variant_sort`;
     let guard = 0;
     while (url && guard < 25) {
         const res: Response = await fetch(url, { cache: "no-store" });

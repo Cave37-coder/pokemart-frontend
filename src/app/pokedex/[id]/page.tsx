@@ -17,10 +17,17 @@ const API_URL = process.env.API_URL || process.env.NEXT_PUBLIC_API_URL || "https
 // shop-browsing order). Dropped the leading "-" so the catch list reads
 // like an actual collecting journey: oldest print of this Pokemon first,
 // newest last.
+//
+// 2026-09-29, round 2: added card_set__code right after release_date --
+// a Trainer Gallery/Shiny Vault/Classic Collection subset ships the SAME
+// DAY as its parent set, so release_date alone can't separate a species'
+// base-set print from its same-day subset print; card_set__code breaks
+// that tie so the two don't interleave (see the matching fix + full
+// explanation on PokemonProductViewSet.ordering in products/views.py).
 async function getAllCardsForPokedex(id: string): Promise<Card[]> {
     const results: Card[] = [];
     let url: string | null =
-        `${API_URL}/api/products/?pokedex=${encodeURIComponent(id)}&min_price=0.01&page_size=200&ordering=card_set__release_date,card_number,variant_sort`;
+        `${API_URL}/api/products/?pokedex=${encodeURIComponent(id)}&min_price=0.01&page_size=200&ordering=card_set__release_date,card_set__code,card_number,variant_sort`;
     let guard = 0;
     while (url && guard < 25) {
         const res: Response = await fetch(url, { cache: "no-store" });
