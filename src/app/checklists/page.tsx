@@ -350,17 +350,23 @@ function EraHome({ onOpen }: { onOpen: (code: string) => void }) {
 
 // ── CHECKLIST ─────────────────────────────────────────────────────────────────
 // `sub` (2026-09-29, Michael: "Can we build a sub set to 30th Collection, the
-// 30 numbered Pikachu's"): an optional client-side-only view filter, NOT a
-// separate set. Deliberately does NOT introduce a new set code anywhere --
-// ChecklistEntry rows (see checklist_toggle in products/views.py) are keyed
-// by the literal card_set string sent from this page, so a synthetic
-// "30C-PIKA"-style code would create a second, desynced completion record
-// for the exact same physical cards the moment someone checked one from
-// both views. Instead `code` stays "30C" everywhere (toggle/clear-set/
-// progress/leaderboard calls, the product fetch, the local checks cache),
-// and `sub` only narrows which of that SAME set's already-loaded cards get
-// displayed/counted on screen -- so ticking a Pikachu card here and ticking
-// the same card from the full 30C grid are the same checkbox.
+// 30 numbered Pikachu's"): shows just the 30 chase Pikachu cards from 30C.
+//
+// ROUND 2 (same day), Michael: "the full set and the sub set must be
+// seperate, so i'm going to build both sets seperately! so anything select
+// on 1 set must not reflect on the other!" -- reverses the first cut of this
+// feature, which deliberately SHARED completion state with "30C" (ticking a
+// card in either view ticked the same underlying ChecklistEntry). Now the
+// two are independent on purpose: the sub-set gets its own storage identity
+// (`storageCode`, below) for everything that persists or reads back a
+// customer's checked state -- toggle/clear-set/progress/leaderboard calls
+// and the local checks cache -- so checking a card here has zero effect on
+// its state in the full 158-card 30C view, and vice versa. `code` itself
+// stays "30C" for everything that isn't about checklist storage (the real
+// product fetch for images/stock/Buy, the `/api/sets/` logo lookup, and the
+// pull-sheet/CSV/email exports, which should still reference the real set
+// staff actually stock cards under) -- only WHICH ChecklistEntry rows get
+// read/written is what's now split.
 function Checklist({ code, sub, onBack }: { code: string; sub?: 'pikachu' | null; onBack: () => void }) {
   const router = useRouter();
   const set = SETS[code];
@@ -372,10 +378,25 @@ function Checklist({ code, sub, onBack }: { code: string; sub?: 'pikachu' | null
   // each a single-variant "H" print. No backend change needed to filter to
   // just them.
   const PIKACHU_SUBSET_RARITY = 'Pikachu Rare';
+  // A separate, made-up card_set identity, used ONLY for reading/writing
+  // checklist ownership (ChecklistEntry.card_set is a plain CharField, max
+  // 20 chars, no FK to a real CardSet -- confirmed in products/models.py --
+  // so any string works, no backend change needed). Independent of the real
+  // "30C" CardSet on purpose: the whole point of this round of the feature
+  // is that ticking a card in one view must NOT tick it in the other.
+  const PIKACHU_SUBSET_STORAGE_CODE = '30C-PIKA';
   const isPikachuSubset = sub === 'pikachu';
   const baseCards = isPikachuSubset ? set.cards.filter(c => c.rarity === PIKACHU_SUBSET_RARITY) : set.cards;
   const displayName = isPikachuSubset ? `${set.name} — Chase Pikachu` : set.name;
-  const [checks, setChecks] = useState<Record<string, boolean>>(() => loadChecks(code));
+  // Everywhere checklist OWNERSHIP is read or written (toggle, clear-set,
+  // progress, leaderboard, the local checks cache) uses storageCode, not
+  // code -- see the component-level comment above. Everything that's about
+  // the real product catalog (images, stock, Buy buttons, the set logo, and
+  // the pull-sheet/CSV/email exports staff use to pull physical stock)
+  // keeps using the real `code` ("30C"), since those aren't about ownership
+  // storage and the cards physically only exist under the real set.
+  const storageCode = isPikachuSubset ? PIKACHU_SUBSET_STORAGE_CODE : code;
+  const [checks, setChecks] = useState<Record<string, boolean>>(() => loadChecks(storageCode));
   const [logoUrl, setLogoUrl] = useState('');
   const [symbolUrl, setSymbolUrl] = useState('');
   const [buying, setBuying] = useState<Set<string>>(new Set());
@@ -461,21 +482,21 @@ function Checklist({ code, sub, onBack }: { code: string; sub?: 'pikachu' | null
   // fall back to a plain tier-coloured outline with no %/fill in that case.
   const [myTierProgress, setMyTierProgress] = useState<Record<string, { owned: number; required: number; pct: number; complete: boolean }> | null>(null);
 
-  useEffect(() => { setLbTier(fullTierKey); }, [code]);
+  useEffect(() => { setLbTier(fullTierKey); }, [storageCode]);
 
   useEffect(() => {
     setLbLoading(true);
-    fetch(`${API_BASE}/api/checklists/leaderboard/?set=${code}&tier=${lbTier}`)
+    fetch(`${API_BASE}/api/checklists/leaderboard/?set=${storageCode}&tier=${lbTier}`)
       .then(r => r.json())
       .then(data => setLeaderboard(data.leaderboard || []))
       .catch(() => setLeaderboard([]))
       .finally(() => setLbLoading(false));
-  }, [code, lbTier]);
+  }, [storageCode, lbTier]);
 
   useEffect(() => {
     setMyTierProgress(null);
     if (typeof window === 'undefined' || !localStorage.getItem('access_token')) return;
-    authFetch(`/api/checklists/progress/?set=${code}`)
+    authFetch(`/api/checklists/progress/?set=${storageCode}`)
       .then(r => (r.ok ? r.json() : null))
       .then(data => setMyTierProgress(data?.tiers || null))
       .catch(() => setMyTierProgress(null));
@@ -587,7 +608,7 @@ function Checklist({ code, sub, onBack }: { code: string; sub?: 'pikachu' | null
     const flip = () => setChecks(prev => {
       const next = { ...prev };
       if (next[key]) delete next[key]; else next[key] = true;
-      saveChecks(code, next);
+      saveChecks(storageCode, next);
       return next;
     });
 
@@ -595,51 +616,31 @@ function Checklist({ code, sub, onBack }: { code: string; sub?: 'pikachu' | null
     authFetch('/api/checklists/toggle/', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ card_set: code, card_key: key }),
+      body: JSON.stringify({ card_set: storageCode, card_key: key }),
     }).catch(() => {
       // Genuinely couldn't save (session really did expire) -- flip back so
       // the checkbox reflects what's actually saved on the account.
       flip();
     });
-  }, [code, router]);
+  }, [storageCode, router]);
 
   const resetSet = () => {
     if (!confirm('Reset all checks for ' + displayName + '?')) return;
-    // Subset mode must NOT call clear-set -- that endpoint (checklist_clear_set,
-    // products/views.py) deletes every ChecklistEntry row for card_set=code,
-    // i.e. the WHOLE 161-card 30C set, not just these 30 Pikachu cards. Since
-    // `code` here is deliberately always the real set ("30C"), the subset has
-    // to clear only its own cards' keys itself, one toggle-off per already-
-    // checked card -- same fire-and-forget per-card pattern toggleAllByPicker
-    // uses below.
-    if (isPikachuSubset) {
-      const keysToClear: string[] = [];
-      baseCards.forEach(c => c.variants.forEach(v => {
-        const key = c.num + '_' + v.vc;
-        if (checks[key]) keysToClear.push(key);
-      }));
-      if (keysToClear.length === 0) return;
-      setChecks(prev => {
-        const next = { ...prev };
-        keysToClear.forEach(k => delete next[k]);
-        saveChecks(code, next);
-        return next;
-      });
-      keysToClear.forEach(key => {
-        authFetch('/api/checklists/toggle/', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ card_set: code, card_key: key }),
-        }).catch(() => {});
-      });
-      return;
-    }
+    // Safe to always use the blanket clear-set endpoint now (round 2 of this
+    // feature, Michael: "the full set and the sub set must be seperate...
+    // anything select on 1 set must not reflect on the other!") --
+    // clear-set (checklist_clear_set, products/views.py) deletes every
+    // ChecklistEntry row for card_set=storageCode, and storageCode is the
+    // subset's own independent identity ("30C-PIKA") when viewing the
+    // sub-set, never the real "30C" -- so this can no longer reach into the
+    // full set's 161 cards by accident the way it could when the two shared
+    // one identity.
     setChecks({});
-    saveChecks(code, {});
+    saveChecks(storageCode, {});
     authFetch('/api/checklists/clear-set/', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ card_set: code }),
+      body: JSON.stringify({ card_set: storageCode }),
     }).catch(() => {});
   };
 
@@ -752,7 +753,7 @@ function Checklist({ code, sub, onBack }: { code: string; sub?: 'pikachu' | null
           if (!next[key]) { next[key] = true; changed.push(key); }
         }
       });
-      saveChecks(code, next);
+      saveChecks(storageCode, next);
       return next;
     });
     // Fire-and-forget, same one-POST-per-card pattern `toggle` already uses
@@ -762,10 +763,10 @@ function Checklist({ code, sub, onBack }: { code: string; sub?: 'pikachu' | null
       authFetch('/api/checklists/toggle/', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ card_set: code, card_key: key }),
+        body: JSON.stringify({ card_set: storageCode, card_key: key }),
       }).catch(() => {});
     });
-  }, [code, router, tierFilteredSorted, checks]);
+  }, [storageCode, router, tierFilteredSorted, checks]);
 
   // Michael, 2026-09-16 (round 3/4): "Select all is broken down to Commons
   // and Holo's / Rev Holo's / EX - Double Rares / Illustration Rares...
@@ -1571,7 +1572,16 @@ function ChecklistsPageInner() {
         {!ready ? (
           <div style={{ padding: '60px 20px', textAlign: 'center', color: '#555', fontSize: '13px' }}>Loading your collection progress...</div>
         ) : activeSet ? (
-          <Checklist code={activeSet} sub={activeSub} onBack={closeSet} />
+          // Michael, 2026-09-29 round 2: the full set and the Chase Pikachu
+          // sub-set are now independently tracked (see Checklist's own
+          // comment). A `key` that changes with `sub` forces React to fully
+          // remount the component when switching between the two views --
+          // without it, clicking the sub-set toggle would just re-render the
+          // SAME component instance with a new `sub` prop, and `checks`
+          // (initialized once via useState(() => loadChecks(...)) at mount)
+          // would keep showing the full set's checked state instead of
+          // reloading the sub-set's own.
+          <Checklist key={activeSet + (activeSub ? `:${activeSub}` : '')} code={activeSet} sub={activeSub} onBack={closeSet} />
         ) : (
           <EraHome onOpen={openSet} />
         )}
