@@ -349,9 +349,32 @@ function EraHome({ onOpen }: { onOpen: (code: string) => void }) {
 }
 
 // ── CHECKLIST ─────────────────────────────────────────────────────────────────
-function Checklist({ code, onBack }: { code: string; onBack: () => void }) {
+// `sub` (2026-09-29, Michael: "Can we build a sub set to 30th Collection, the
+// 30 numbered Pikachu's"): an optional client-side-only view filter, NOT a
+// separate set. Deliberately does NOT introduce a new set code anywhere --
+// ChecklistEntry rows (see checklist_toggle in products/views.py) are keyed
+// by the literal card_set string sent from this page, so a synthetic
+// "30C-PIKA"-style code would create a second, desynced completion record
+// for the exact same physical cards the moment someone checked one from
+// both views. Instead `code` stays "30C" everywhere (toggle/clear-set/
+// progress/leaderboard calls, the product fetch, the local checks cache),
+// and `sub` only narrows which of that SAME set's already-loaded cards get
+// displayed/counted on screen -- so ticking a Pikachu card here and ticking
+// the same card from the full 30C grid are the same checkbox.
+function Checklist({ code, sub, onBack }: { code: string; sub?: 'pikachu' | null; onBack: () => void }) {
   const router = useRouter();
   const set = SETS[code];
+  // The 30 unique-illustration "chase" Pikachu cards (023-052/128) already
+  // carry their own rarity bucket end to end (products/models.py
+  // RARITY_CHOICES "pikachu_rare" -> generate_checklist_data.py's
+  // rarity_display -> this card's `rarity` field is literally "Pikachu
+  // Rare") -- confirmed live against the current 30C data: exactly 30 cards,
+  // each a single-variant "H" print. No backend change needed to filter to
+  // just them.
+  const PIKACHU_SUBSET_RARITY = 'Pikachu Rare';
+  const isPikachuSubset = sub === 'pikachu';
+  const baseCards = isPikachuSubset ? set.cards.filter(c => c.rarity === PIKACHU_SUBSET_RARITY) : set.cards;
+  const displayName = isPikachuSubset ? `${set.name} — Chase Pikachu` : set.name;
   const [checks, setChecks] = useState<Record<string, boolean>>(() => loadChecks(code));
   const [logoUrl, setLogoUrl] = useState('');
   const [symbolUrl, setSymbolUrl] = useState('');
@@ -396,7 +419,7 @@ function Checklist({ code, onBack }: { code: string; onBack: () => void }) {
   // in products/completion.py. The static SETS data here only ever contains
   // tracked/checkable variant codes to begin with, so this client-side check
   // reliably matches what the backend decides without needing an extra call.
-  const isSimpleSet = set.cards.every(c => c.variants.length <= 1);
+  const isSimpleSet = baseCards.every(c => c.variants.length <= 1);
   // 2026-09-19, Michael: "we need to have the 'My Collection' syncing, the
   // site 'Browse Cards' is correct" -- checklistData.ts's v.zar is a static
   // snapshot from whenever generate_checklist_data was last run+pushed
@@ -581,7 +604,36 @@ function Checklist({ code, onBack }: { code: string; onBack: () => void }) {
   }, [code, router]);
 
   const resetSet = () => {
-    if (!confirm('Reset all checks for ' + set.name + '?')) return;
+    if (!confirm('Reset all checks for ' + displayName + '?')) return;
+    // Subset mode must NOT call clear-set -- that endpoint (checklist_clear_set,
+    // products/views.py) deletes every ChecklistEntry row for card_set=code,
+    // i.e. the WHOLE 161-card 30C set, not just these 30 Pikachu cards. Since
+    // `code` here is deliberately always the real set ("30C"), the subset has
+    // to clear only its own cards' keys itself, one toggle-off per already-
+    // checked card -- same fire-and-forget per-card pattern toggleAllByPicker
+    // uses below.
+    if (isPikachuSubset) {
+      const keysToClear: string[] = [];
+      baseCards.forEach(c => c.variants.forEach(v => {
+        const key = c.num + '_' + v.vc;
+        if (checks[key]) keysToClear.push(key);
+      }));
+      if (keysToClear.length === 0) return;
+      setChecks(prev => {
+        const next = { ...prev };
+        keysToClear.forEach(k => delete next[k]);
+        saveChecks(code, next);
+        return next;
+      });
+      keysToClear.forEach(key => {
+        authFetch('/api/checklists/toggle/', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ card_set: code, card_key: key }),
+        }).catch(() => {});
+      });
+      return;
+    }
     setChecks({});
     saveChecks(code, {});
     authFetch('/api/checklists/clear-set/', {
@@ -594,7 +646,7 @@ function Checklist({ code, onBack }: { code: string; onBack: () => void }) {
   // Stats
   let totalVariants = 0, ownedVariants = 0;
   let setTotalZar = 0, collectionZar = 0;
-  set.cards.forEach(c => {
+  baseCards.forEach(c => {
     c.variants.forEach(v => {
       totalVariants++; setTotalZar += zarOf(v);
       if (checks[c.num + '_' + v.vc]) { ownedVariants++; collectionZar += zarOf(v); }
@@ -618,7 +670,7 @@ function Checklist({ code, onBack }: { code: string; onBack: () => void }) {
   const totalDisplay = topTier ? topTier.required : totalVariants;
   const pct = topTier ? topTier.pct : (totalDisplay ? Math.round(ownedDisplay / totalDisplay * 100) : 0);
   const eraColor = ERA_COLORS[set.era] || '#ff6b35';
-  const sorted = [...set.cards].sort((a, b) => (parseInt(a.num) || 9999) - (parseInt(b.num) || 9999));
+  const sorted = [...baseCards].sort((a, b) => (parseInt(a.num) || 9999) - (parseInt(b.num) || 9999));
 
   // Michael, 2026-09-11: "the checklists are broken up into different
   // types, can we make the type selectable and the screen then reflects
@@ -885,7 +937,7 @@ function Checklist({ code, onBack }: { code: string; onBack: () => void }) {
         rows.push([card.num, card.name, card.rarity, VARIANT_LABEL_FULL[v.vc] || v.vc, checks[key] ? 'Yes' : 'No']);
       });
     });
-    const meta = [['Customer', email ? `${name} (${email})` : name], ['Set', `${set.name} (${code})`], ['Tier', tierLabel], []];
+    const meta = [['Customer', email ? `${name} (${email})` : name], ['Set', `${displayName} (${code})`], ['Tier', tierLabel], []];
     const tierSlug = lbTier.replace(/[^a-z0-9]+/gi, '_');
     downloadCsv(`${code}_${tierSlug}_collection.csv`, ['Card #', 'Name', 'Rarity', 'Variant', 'Highlighted'], rows, meta);
   };
@@ -923,7 +975,7 @@ function Checklist({ code, onBack }: { code: string; onBack: () => void }) {
     const needed = buildNeededRows();
     if (needed.length === 0) { alert("You're not missing anything from this set!"); return; }
     const { name, email } = await getCustomerInfo();
-    openPullSheet(buildPullSheetHtml({ title: `Needed List — ${tierLabel}`, setName: set.name, setCode: code, customerName: name, customerEmail: email, rows: needed, showHighlighted: false }));
+    openPullSheet(buildPullSheetHtml({ title: `Needed List — ${tierLabel}`, setName: displayName, setCode: code, customerName: name, customerEmail: email, rows: needed, showHighlighted: false }));
   };
 
   // Same pull sheet, but the WHOLE set with a Have/Missing column instead of
@@ -932,7 +984,7 @@ function Checklist({ code, onBack }: { code: string; onBack: () => void }) {
   const printFullListPullSheet = async () => {
     const all = buildFullRows();
     const { name, email } = await getCustomerInfo();
-    openPullSheet(buildPullSheetHtml({ title: `Full List — ${tierLabel}`, setName: set.name, setCode: code, customerName: name, customerEmail: email, rows: all, showHighlighted: true }));
+    openPullSheet(buildPullSheetHtml({ title: `Full List — ${tierLabel}`, setName: displayName, setCode: code, customerName: name, customerEmail: email, rows: all, showHighlighted: true }));
   };
 
   const emailNeededList = async () => {
@@ -945,14 +997,14 @@ function Checklist({ code, onBack }: { code: string; onBack: () => void }) {
       const res = await authFetch('/api/checklists/email-pull-list/', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ card_set: code, set_name: set.name, rows: needed }),
+        body: JSON.stringify({ card_set: code, set_name: displayName, rows: needed }),
       });
       if (!res.ok) {
         const err = await res.json().catch(() => ({} as { error?: string }));
         alert(err.error || 'Could not email the pull list — please try again.');
         return;
       }
-      alert(`Your needed list for ${set.name} was emailed to Poke Bulk.`);
+      alert(`Your needed list for ${displayName} was emailed to Poke Bulk.`);
     } catch (e) {
       if (e instanceof SessionExpiredError) {
         router.push('/auth/login');
@@ -970,16 +1022,35 @@ function Checklist({ code, onBack }: { code: string; onBack: () => void }) {
         <button onClick={onBack} style={{ background: '#1e1e2a', color: '#a0a0b0', border: '1px solid #2a2a3a', padding: '7px 14px', borderRadius: '7px', fontSize: '13px', cursor: 'pointer' }}>← All Sets</button>
         <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: '12px' }}>
           {logoUrl && (
-            <img src={logoUrl} alt={set.name} style={{ height: '36px', objectFit: 'contain', maxWidth: '120px' }} />
+            <img src={logoUrl} alt={displayName} style={{ height: '36px', objectFit: 'contain', maxWidth: '120px' }} />
           )}
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
               {symbolUrl && <img src={symbolUrl} alt="" style={{ height: '16px', width: '16px', objectFit: 'contain' }} />}
               <div style={{ fontSize: '11px', color: eraColor, fontWeight: 700, letterSpacing: '1px', textTransform: 'uppercase' }}>{code} · {set.era}</div>
             </div>
-            <div style={{ fontSize: '18px', fontWeight: 700, color: '#fff' }}>{set.name}</div>
+            <div style={{ fontSize: '18px', fontWeight: 700, color: '#fff' }}>{displayName}</div>
           </div>
         </div>
+        {/* Chase Pikachu sub-set toggle (Michael, 2026-09-29) -- same set,
+            same "30C" checklist entries, just a narrower on-screen filter
+            (see the Checklist component's own header comment above). Only
+            offered on 30th Celebration itself; router.push so it's a real
+            navigation (own back-button history entry), same pattern as
+            openSet/closeSet use everywhere else on this page. */}
+        {code === '30C' && (
+          <button
+            onClick={() => router.push(isPikachuSubset ? '/checklists?set=30C' : '/checklists?set=30C&sub=pikachu')}
+            style={{
+              background: isPikachuSubset ? eraColor : 'transparent',
+              color: isPikachuSubset ? '#fff' : eraColor,
+              border: `1px solid ${eraColor}`, padding: '7px 13px', borderRadius: '7px',
+              fontSize: '12px', cursor: 'pointer', fontWeight: 600,
+            }}
+          >
+            {isPikachuSubset ? '↩ Full 30th Celebration Set' : '⚡ Chase Pikachu Sub-Set (30)'}
+          </button>
+        )}
         <button onClick={() => setViewMode('list')} style={{ background: viewMode==='list' ? eraColor : '#1e1e2a', color: viewMode==='list' ? '#fff' : '#a0a0b0', border: '1px solid #2a2a3a', padding: '7px 13px', borderRadius: '7px', fontSize: '12px', cursor: 'pointer' }}>☰ List</button>
         <button onClick={() => setViewMode('grid')} style={{ background: viewMode==='grid' ? eraColor : '#1e1e2a', color: viewMode==='grid' ? '#fff' : '#a0a0b0', border: '1px solid #2a2a3a', padding: '7px 13px', borderRadius: '7px', fontSize: '12px', cursor: 'pointer' }}>⊞ Grid</button>
         <button onClick={() => window.print()} style={{ background: '#1e1e2a', color: '#a0a0b0', border: '1px solid #2a2a3a', padding: '7px 13px', borderRadius: '7px', fontSize: '12px', cursor: 'pointer' }}>🖨 Print</button>
@@ -1020,7 +1091,18 @@ function Checklist({ code, onBack }: { code: string; onBack: () => void }) {
         </div>
       </div>
 
-      {/* Leaderboard */}
+      {/* Leaderboard -- skipped for the Chase Pikachu sub-set: the backend's
+          tier system (products/completion.py compute_set_completion) only
+          ever produces a "complete_set" tier for a genuinely simple CardSet
+          (every card single-variant), and 30C itself isn't one -- it just
+          happens that these 30 filtered Pikachu cards each are. Querying
+          the real leaderboard/progress endpoints with tier=complete_set for
+          card_set=30C always comes back empty, so showing that box here
+          would read as "no one's done this yet" forever, which is false,
+          not just quiet -- there's nothing to be first at. A proper
+          Pikachu-scoped leaderboard would need its own backend tier, which
+          is future work, not something to fake client-side. */}
+      {!isPikachuSubset && (
       <div style={{ background: '#1e1e2a', border: '1px solid #2a2a3a', borderRadius: '8px', padding: '12px 16px', marginBottom: '12px' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px', marginBottom: '10px' }}>
           <div style={{ fontSize: '11px', fontWeight: 700, letterSpacing: '1px', textTransform: 'uppercase', color: '#a0a0b0' }}>🏆 Leaderboard</div>
@@ -1118,6 +1200,7 @@ function Checklist({ code, onBack }: { code: string; onBack: () => void }) {
           Want to appear here? Set a display name and enable collection sharing in your <a href="/profile" style={{ color: eraColor }}>Profile</a>.
         </div>
       </div>
+      )}
 
       {/* Legend + filters */}
       <div style={{ display: 'flex', gap: '10px', marginBottom: '10px', flexWrap: 'wrap', alignItems: 'center' }}>
@@ -1451,6 +1534,12 @@ function ChecklistsPageInner() {
   // fall back to the Overview instead of handing Checklist a code it can't
   // resolve.
   const activeSet = requestedSet && SETS[requestedSet] ? requestedSet : null;
+  // ?sub= (2026-09-29, Chase Pikachu sub-set) -- an allowlist, not a passthrough,
+  // so a stale/hand-edited ?sub= on a set that doesn't have one just falls back
+  // to that set's normal full view instead of the Checklist component being
+  // handed a value it doesn't know what to do with.
+  const requestedSub = searchParams.get('sub');
+  const activeSub = activeSet === '30C' && requestedSub === 'pikachu' ? 'pikachu' : null;
   const [ready, setReady] = useState(isChecklistCacheReady());
 
   useEffect(() => {
@@ -1482,7 +1571,7 @@ function ChecklistsPageInner() {
         {!ready ? (
           <div style={{ padding: '60px 20px', textAlign: 'center', color: '#555', fontSize: '13px' }}>Loading your collection progress...</div>
         ) : activeSet ? (
-          <Checklist code={activeSet} onBack={closeSet} />
+          <Checklist code={activeSet} sub={activeSub} onBack={closeSet} />
         ) : (
           <EraHome onOpen={openSet} />
         )}
