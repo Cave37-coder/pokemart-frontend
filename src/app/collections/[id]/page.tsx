@@ -1,22 +1,21 @@
 import type { Card } from "@/lib/api";
 import { getSpeciesName, pokemonArtworkUrl } from "@/lib/pokedex";
-import PokedexCardList from "@/components/PokedexCardList";
+import SingleCollectionCardList from "@/components/SingleCollectionCardList";
 import BackButton from "@/components/BackButton";
 import Link from "next/link";
 
 const API_URL = process.env.API_URL || process.env.NEXT_PUBLIC_API_URL || "https://pokemart-api-production.up.railway.app";
 
-// Pulls every catalogued print (in stock or not -- no in_stock filter) for
-// this pokedex number, following pagination fully rather than capping at
-// one page, same pattern used elsewhere in this app (checklists' product
-// fetch) for exhaustive results.
-//
-// Michael, 2026-09-29: "Once person selects which Pokemon to collect then
-// it brings up all, in order from oldest to newest, for them to catch!" --
-// this used to sort `-card_set__release_date` (newest print first, a
-// shop-browsing order). Dropped the leading "-" so the catch list reads
-// like an actual collecting journey: oldest print of this Pokemon first,
-// newest last.
+// Pulls every catalogued print for this pokedex number, same exhaustive
+// pagination as the Pokedex's own getAllCardsForPokedex. Deliberately
+// ordered oldest print first (Michael, 2026-09-29, the original ask this
+// whole feature grew out of: "Once person selects which Pokemon to collect
+// then it brings up all, in order from oldest to newest, for them to
+// catch!") -- this is the "catching journey" ordering. Note /pokedex/[id]
+// itself was asked to keep this same ordering too (a separate, smaller fix
+// applied earlier the same session), but the two pages are otherwise
+// unrelated: this one tracks ownership completely separately (see
+// useSingleCollection).
 async function getAllCardsForPokedex(id: string): Promise<Card[]> {
     const results: Card[] = [];
     let url: string | null =
@@ -33,7 +32,7 @@ async function getAllCardsForPokedex(id: string): Promise<Card[]> {
     return results;
 }
 
-export default async function PokedexEntryPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function SingleCollectionPage({ params }: { params: Promise<{ id: string }> }) {
     const { id } = await params;
     const dexId = parseInt(id, 10);
 
@@ -41,7 +40,7 @@ export default async function PokedexEntryPage({ params }: { params: Promise<{ i
         return (
             <div style={{ maxWidth: "680px", margin: "60px auto", padding: "0 1.5rem", textAlign: "center" }}>
                 <div style={{ color: "#EF4444", marginBottom: 16 }}>Invalid Pokédex number.</div>
-                <BackButton fallbackHref="/pokedex" style={{ color: "#ff6b35" }}>Back to Pokédex</BackButton>
+                <BackButton fallbackHref="/collections" style={{ color: "#ff6b35" }}>Back to My Collections</BackButton>
             </div>
         );
     }
@@ -55,15 +54,15 @@ export default async function PokedexEntryPage({ params }: { params: Promise<{ i
         return (
             <div style={{ maxWidth: "680px", margin: "60px auto", padding: "0 1.5rem", textAlign: "center" }}>
                 <div style={{ color: "#EF4444", marginBottom: 16 }}>Pokémon not found.</div>
-                <BackButton fallbackHref="/pokedex" style={{ color: "#ff6b35" }}>Back to Pokédex</BackButton>
+                <BackButton fallbackHref="/collections" style={{ color: "#ff6b35" }}>Back to My Collections</BackButton>
             </div>
         );
     }
 
     return (
         <div style={{ maxWidth: "1400px", margin: "0 auto", padding: "20px 1.5rem" }}>
-            <BackButton fallbackHref="/pokedex" style={{ fontSize: "13px", color: "#a0a0b0", display: "inline-block", marginBottom: "16px" }}>
-                ← Back to Pokédex
+            <BackButton fallbackHref="/collections" style={{ fontSize: "13px", color: "#a0a0b0", display: "inline-block", marginBottom: "16px" }}>
+                ← Back to My Collections
             </BackButton>
 
             <div style={{ display: "flex", alignItems: "center", gap: "18px", marginBottom: "24px", flexWrap: "wrap" }}>
@@ -74,19 +73,14 @@ export default async function PokedexEntryPage({ params }: { params: Promise<{ i
                 />
                 <div>
                     <div style={{ fontSize: "12px", color: "#ff6b35", fontWeight: 700, letterSpacing: "0.05em" }}>
-                        #{String(dexId).padStart(3, "0")}
+                        #{String(dexId).padStart(3, "0")} · My Collection
                     </div>
                     <div style={{ fontSize: "26px", fontWeight: 700, color: "#fff" }}>{name}</div>
                     <div style={{ fontSize: "13px", color: "#a0a0b0" }}>
-                        {cards.length} card{cards.length === 1 ? "" : "s"} in our catalog
+                        {cards.length} card{cards.length === 1 ? "" : "s"} in our catalog, oldest first
+                        {" — "}
+                        <Link href={`/pokedex/${dexId}`} style={{ color: "#ff6b35" }}>view in Pokédex</Link>
                     </div>
-                    {/* Michael, 2026-09-29: "My Collections" + link on each Pokedex
-                        page -- a separate, independently-tracked single-species
-                        collection (see useSingleCollection). This link doesn't
-                        carry any ownership state across -- it's just navigation. */}
-                    <Link href={`/collections/${dexId}`} style={{ fontSize: "12px", color: "#ff6b35", textDecoration: "none", fontWeight: 600 }}>
-                        Track {name} as its own Collection →
-                    </Link>
                 </div>
             </div>
 
@@ -95,7 +89,7 @@ export default async function PokedexEntryPage({ params }: { params: Promise<{ i
                     We don&apos;t have any {name} cards catalogued yet.
                 </div>
             ) : (
-                <PokedexCardList cards={cards} speciesId={dexId} />
+                <SingleCollectionCardList cards={cards} speciesId={dexId} />
             )}
 
             <div style={{ marginTop: "32px", padding: "16px 20px", background: "#1a1a24", borderRadius: "8px", border: "1px solid #2a2a3a", fontSize: "13px", color: "#a0a0b0" }}>

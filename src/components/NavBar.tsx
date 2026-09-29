@@ -161,6 +161,13 @@ export default function NavBar() {
 
   const moreLinks = [
     { href: "/decklist", label: "Deck Builder", beta: true },
+    // 2026-09-29, Michael: "My Collections" + link on each Pokedex page --
+    // track one Pokemon at a time, separate from the Pokedex itself (which
+    // stays right where it is in primaryLinks above). Grouped under "More"
+    // rather than promoted to primaryLinks, matching the 2026-08-17
+    // decluttering decision (moreLinks is for links people don't need on
+    // every visit).
+    { href: "/collections", label: "My Collections" },
     { href: "/accessories", label: "Accessories" },
     { href: "/bundles", label: "Bundles" },
     { href: "/sell", label: "Sell Cards" },
