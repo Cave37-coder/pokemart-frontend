@@ -9,10 +9,17 @@ const API_URL = process.env.API_URL || process.env.NEXT_PUBLIC_API_URL || "https
 // this pokedex number, following pagination fully rather than capping at
 // one page, same pattern used elsewhere in this app (checklists' product
 // fetch) for exhaustive results.
+//
+// Michael, 2026-09-29: "Once person selects which Pokemon to collect then
+// it brings up all, in order from oldest to newest, for them to catch!" --
+// this used to sort `-card_set__release_date` (newest print first, a
+// shop-browsing order). Dropped the leading "-" so the catch list reads
+// like an actual collecting journey: oldest print of this Pokemon first,
+// newest last.
 async function getAllCardsForPokedex(id: string): Promise<Card[]> {
     const results: Card[] = [];
     let url: string | null =
-        `${API_URL}/api/products/?pokedex=${encodeURIComponent(id)}&min_price=0.01&page_size=200&ordering=-card_set__release_date,card_number,variant_sort`;
+        `${API_URL}/api/products/?pokedex=${encodeURIComponent(id)}&min_price=0.01&page_size=200&ordering=card_set__release_date,card_number,variant_sort`;
     let guard = 0;
     while (url && guard < 25) {
         const res: Response = await fetch(url, { cache: "no-store" });
