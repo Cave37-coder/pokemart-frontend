@@ -38,6 +38,30 @@ const VARIANT_LABEL_FULL: Record<string, string> = {
   RR: 'Rainbow Rare', RAD: 'Radiant',
 };
 
+// 2026-09-30, Michael, re: WHT/BLK/PRE's "(Poke Ball Pattern)"/"(Master Ball
+// Pattern)" tiles: "you have them as 'H' options only, totally lost, they
+// need to be marked distinctly!" -- these rows are genuinely tagged
+// variant_override='H' in the DB (that shared 'H' is exactly what makes
+// build_set_cards() split them into their own tiles in the first place --
+// see that function's collision comment), so the badge these render with
+// today is indistinguishable from an ordinary Holo print. Retagging the
+// underlying variant_override to the set's existing PB/MB codes was
+// considered and rejected: PB/MB rows that DON'T collide get merged into
+// one multi-variant tile by design (see get_set_card_map()'s "v2 fix" for
+// ASC's Quick Ball prints) -- exactly what Michael just said he does NOT
+// want here. So this only overrides the on-screen badge (color + short
+// code + tooltip), reusing the same PB/MB color scheme already defined for
+// the real PB/MB variant codes elsewhere on this page -- the real v.vc
+// driving owned-state/buy/stock/Master Set scope is untouched.
+const PATTERN_BADGE_RE = /\((Poke Ball|Master Ball) Pattern\)/i;
+function patternBadge(name: string): { code: string; label: string; color: string } | null {
+  const m = name.match(PATTERN_BADGE_RE);
+  if (!m) return null;
+  return /poke/i.test(m[1])
+    ? { code: 'PB', label: 'Poke Ball Pattern', color: '#e040fb' }
+    : { code: 'MB', label: 'Master Ball Pattern', color: '#7c4dff' };
+}
+
 function csvCell(value: string): string {
   return /[",\n]/.test(value) ? '"' + value.replace(/"/g, '""') + '"' : value;
 }
@@ -1360,7 +1384,10 @@ function Checklist({ code, sub, onBack }: { code: string; sub?: 'pikachu' | null
                         EX: '#eab308', GX: '#3b82f6', V: '#9ca3af', VMAX: '#f43f5e',
                         VSTAR: '#f59e0b', RR: '#ec4899', RAD: '#f97316',
                       };
-                      const col = vcColor[v.vc] || '#a0a0b0';
+                      const badge = patternBadge(card.name);
+                      const col = badge ? badge.color : (vcColor[v.vc] || '#a0a0b0');
+                      const displayCode = badge ? badge.code : v.vc;
+                      const displayLabel = badge ? badge.label : v.vc;
                       // Buy affordance (2026-08-12, Michael: "went customer
                       // goes to 'Grid View' please add the buy button for
                       // available stock!") -- now a tiny "+" inside the same
@@ -1371,7 +1398,7 @@ function Checklist({ code, sub, onBack }: { code: string; sub?: 'pikachu' | null
                       return (
                         <div key={v.vc}
                           onClick={(e) => { e.preventDefault(); e.stopPropagation(); toggle(key, zarOf(v)); }}
-                          title={owned ? `Caught -- ${v.vc} (tap to un-mark)` : `Mark ${v.vc} owned`}
+                          title={owned ? `Caught -- ${displayLabel} (tap to un-mark)` : `Mark ${displayLabel} owned`}
                           style={{
                             display: 'flex', alignItems: 'center', gap: '3px', cursor: 'pointer',
                             background: owned ? '#16a34a' : 'rgba(10,10,16,0.82)',
@@ -1380,7 +1407,7 @@ function Checklist({ code, sub, onBack }: { code: string; sub?: 'pikachu' | null
                             boxShadow: owned ? '0 0 0 1px #12121a' : undefined,
                           }}>
                           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', lineHeight: 1.1 }}>
-                            <span style={{ fontSize: '8px', fontWeight: 800, color: owned ? '#eafff1' : col }}>{owned ? '✓' : v.vc}</span>
+                            <span style={{ fontSize: '8px', fontWeight: 800, color: owned ? '#eafff1' : col }}>{owned ? '✓' : displayCode}</span>
                             <span style={{ fontSize: '6px', color: owned ? '#c8f7d8' : '#888' }}>
                               {owned ? 'Caught' : (canBuy ? 'Buy' : (zarOf(v) > 0 ? 'R' + zarOf(v).toFixed(0) : ''))}
                             </span>
@@ -1417,13 +1444,14 @@ function Checklist({ code, sub, onBack }: { code: string; sub?: 'pikachu' | null
                     const owned = !!checks[key];
                     const canBuy = !owned && inStock.has(`${v.pid}_${v.vc}`);
                     if (zarOf(v) <= 0 && !canBuy) return null;
+                    const badge = patternBadge(card.name);
                     return (
                       <div key={v.vc} style={{
                         display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px',
                         background: '#1e1e2a', border: '1px solid #2a2a3a', borderRadius: '6px',
                         padding: '2px 6px 2px 7px', fontSize: '10px', width: '100%',
                       }}>
-                        <span style={{ color: '#777', fontWeight: 700 }}>{v.vc}</span>
+                        <span style={{ color: badge ? badge.color : '#777', fontWeight: 700 }} title={badge ? badge.label : undefined}>{badge ? badge.code : v.vc}</span>
                         {zarOf(v) > 0 && <span style={{ color: '#ccc' }}>R{zarOf(v).toFixed(2)}</span>}
                         {canBuy && (
                           <button
@@ -1481,16 +1509,17 @@ function Checklist({ code, sub, onBack }: { code: string; sub?: 'pikachu' | null
                         EX: '#eab308', GX: '#3b82f6', V: '#9ca3af', VMAX: '#f43f5e',
                         VSTAR: '#f59e0b', RR: '#ec4899', RAD: '#f97316',
                       };
-                      const col = vcColor[v.vc] || eraColor;
+                      const badge = patternBadge(card.name);
+                      const col = badge ? badge.color : (vcColor[v.vc] || eraColor);
                       return (
                         <div key={v.vc} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1px' }}>
-                          <div onClick={() => toggle(key, zarOf(v))} style={{
+                          <div onClick={() => toggle(key, zarOf(v))} title={badge ? badge.label : undefined} style={{
                             background: checks[key] ? col : 'transparent',
                             border: `1px solid ${checks[key] ? col : '#333'}`,
                             borderRadius: '3px', padding: '1px 4px',
                             fontSize: '7px', fontWeight: 700, color: checks[key] ? '#fff' : '#555',
                             textTransform: 'uppercase', lineHeight: 1.3, cursor: 'pointer',
-                          }}>{v.vc}</div>
+                          }}>{badge ? badge.code : v.vc}</div>
                           {!checks[key] && inStock.has(`${v.pid}_${v.vc}`) && (
                             <button
                               onClick={() => buyCard(v.pid, v.vc, key, zarOf(v), card.name)}
