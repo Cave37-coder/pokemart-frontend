@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { authFetch } from "@/lib/api";
+import { detachPush } from "@/lib/push";
 
 // The same rainbow already used on HR / ACE SPEC card badges (products/cards_page.tsx
 // aceBorder gradient) — reused here as the site's connective foil-stripe signature.
@@ -138,7 +139,13 @@ export default function NavBar() {
     return () => document.removeEventListener("mousedown", onClick);
   }, [staffOpen]);
 
-  const logout = () => {
+  const logout = async () => {
+    // 2026-10-02: signing out also stops this customer's notifications
+    // reaching this device (done first, while the token is still there to
+    // tell the server) -- otherwise the phone would keep receiving their
+    // order updates after they signed out. It comes back on by itself when
+    // they sign in again. Best effort: never blocks the sign-out itself.
+    try { await detachPush(); } catch {}
     localStorage.removeItem("access_token");
     localStorage.removeItem("refresh_token");
     localStorage.removeItem("user");

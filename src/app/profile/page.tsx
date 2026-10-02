@@ -2,6 +2,7 @@
 // v1.2.0 — Added Pudo locker fields
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import NotificationSettings from "@/components/NotificationSettings";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://pokemart-api-production.up.railway.app";
 
@@ -539,6 +540,9 @@ export default function ProfilePage() {
             </a>
           )}
         </div>
+
+        {/* Push notifications -- saves on its own, not part of Save Changes below */}
+        <NotificationSettings />
 
         {/* Feedback */}
         {error && (

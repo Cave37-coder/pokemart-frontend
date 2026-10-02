@@ -1,12 +1,27 @@
-﻿import type { Metadata } from "next";
+﻿import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import NavBar from "@/components/NavBar";
 import ProfileCompletionPopup from "@/components/ProfileCompletionPopup";
 import GoogleAnalytics from "@/components/GoogleAnalytics";
+import PwaSetup from "@/components/PwaSetup";
 
 export const metadata: Metadata = {
   title: "PokeBulk SA - Premium Pokemon Cards",
   description: "South Africa's premier Pokemon card store - Straight outta Kempton Park",
+  // 2026-10-02: installable-app (PWA) settings for iPhone/iPad -- the name
+  // under the home-screen icon, and running full-screen without Safari's
+  // address bar. Android reads the same things from app/manifest.ts, and
+  // the iPhone icon itself comes from app/apple-icon.png.
+  appleWebApp: {
+    capable: true,
+    title: "PokeBulk",
+    statusBarStyle: "black-translucent",
+  },
+};
+
+// Colours the phone's status bar / browser toolbar to match the navbar.
+export const viewport: Viewport = {
+  themeColor: "#12121a",
 };
 
 // The same rainbow already used on HR / ACE SPEC card badges (products/cards_page.tsx
@@ -39,6 +54,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             components/ProfileCompletionPopup.tsx for the removal note. */}
         <ProfileCompletionPopup />
         <main>{children}</main>
+        <PwaSetup />
         <FoilStripe />
         <footer style={{ background:"#12121a", borderTop:"1px solid #2a2a3a", padding:"40px 2rem", marginTop:"0" }}>
           <div style={{ maxWidth:"1200px", margin:"0 auto", display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(200px, 1fr))", gap:"32px" }}>

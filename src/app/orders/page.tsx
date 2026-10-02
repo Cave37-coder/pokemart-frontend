@@ -1,6 +1,7 @@
 ﻿"use client";
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import NotificationSettings from "@/components/NotificationSettings";
 
 interface OrderTracking { id: number; status: string; status_display: string; note: string; waybill_number: string; created_at: string; }
 interface Order { id: number; status: string; status_display: string; total_price: string; delivery_method: string; waybill_number: string; created_at: string; tracking: OrderTracking[]; }
@@ -40,6 +41,7 @@ export default function OrdersPage() {
         <h1 style={{ fontSize:22, fontWeight:700, margin:"0 0 4px", color:"#fff" }}>My Orders</h1>
         <p style={{ color:"#a0a0b0", fontSize:14, margin:0 }}>{orders.length} order{orders.length !== 1 ? "s" : ""}</p>
       </div>
+      <NotificationSettings compact />
       {orders.length === 0 ? (
         <div style={{ background:"#1a1a24", border:"1px solid #2a2a3a", borderRadius:12, padding:"48px 24px", textAlign:"center" }}>
           <div style={{ fontSize:40, marginBottom:12 }}>🃏</div>
