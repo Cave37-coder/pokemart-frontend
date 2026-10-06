@@ -18,14 +18,14 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://pokemart-api-product
 // inside Django admin itself.
 
 const STATUS_CHOICES: [string, string][] = [
-  ["awaiting_payment", "Awaiting Payment"],
-  ["pending", "Order Received"],
+  ["awaiting_payment", "Awaiting PayFast Payment"],
+  ["pending", "Order Confirmed"],
   ["pending_eft", "Awaiting EFT Payment"],
   ["printed", "Order Printed"],
-  ["packed", "Order Preparing"],
-  ["booked", "Courier Booking"],
+  ["packed", "Order Being Packed"],
+  ["booked", "Courier Booked"],
   ["ready", "Ready for Collection"],
-  ["collected", "Courier Collected"],
+  ["collected", "Deposited at Locker/Postnet"],
   ["invoiced", "Complete"],
   ["cancelled", "Cancelled"],
 ];

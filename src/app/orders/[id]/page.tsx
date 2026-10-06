@@ -26,13 +26,13 @@ interface Order {
 }
 
 const STEPS = [
-  { key:"pending",   label:"Order received" },
+  { key:"pending",   label:"Order confirmed" },
   { key:"printed",   label:"Order printed" },
-  { key:"packed",    label:"Order packed" },
+  { key:"packed",    label:"Order being packed" },
   { key:"booked",    label:"Courier booked" },
   { key:"ready",     label:"Ready for collection" },
-  { key:"collected", label:"Courier collected" },
-  { key:"invoiced",  label:"Final invoice" },
+  { key:"collected", label:"Deposited at locker/Postnet" },
+  { key:"invoiced",  label:"Complete" },
 ];
 
 const STATUS_COLOR: Record<string,string> = {
