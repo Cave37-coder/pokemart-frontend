@@ -111,8 +111,13 @@ function dateFmt(v: string) { return new Date(v).toLocaleString("en-ZA", { day: 
 
 function StatusBadge({ status, label, colors = STATUS_COLOR }: { status: string; label: string; colors?: Record<string, string> }) {
   return (
-    <span style={{ background: colors[status] || "#333", color: "#fff", padding: "2px 8px", borderRadius: 10, fontSize: 10, fontWeight: 700, whiteSpace: "nowrap" }}>
-      {label}
+    // Long pickup wording ("... (24 hours minimum notice for pickup)") is
+    // shortened in the table; the full text still shows on hover.
+    <span
+      title={label}
+      style={{ background: colors[status] || "#333", color: "#fff", padding: "2px 8px", borderRadius: 10, fontSize: 10, fontWeight: 700, display: "inline-block", maxWidth: 150, lineHeight: 1.3, whiteSpace: "normal", textAlign: "center" }}
+    >
+      {label.replace(/\s*\(24 hours.*\)/i, " · Pickup")}
     </span>
   );
 }
