@@ -38,6 +38,23 @@ export interface Card {
   attack_2_name: string;
   attack_2_damage: string;
   attack_2_text: string;
+  // 2026-10-07/08 enrichment gap-fill (all optional: older API responses
+  // and not-yet-enriched cards simply won't have them).
+  attack_1_cost?: string;
+  attack_2_cost?: string;
+  attack_3_name?: string;
+  attack_3_damage?: string;
+  attack_3_text?: string;
+  attack_3_cost?: string;
+  ability_2_name?: string;
+  ability_2_type?: string;
+  ability_2_text?: string;
+  stage?: string;
+  evolves_from?: string;
+  evolves_to?: string;
+  rules_text?: string;
+  ancient_trait?: string;
+  card_level?: string;
   image_url: string;
   image_small_url: string;
   price: string;

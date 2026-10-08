@@ -13,6 +13,46 @@ const TYPE_COLORS: Record<string, string> = {
   Dragon: "#818cf8", Fairy: "#f9a8d4",
 };
 
+// Energy cost as a row of coloured circles ("Grass,Grass,Colorless").
+const ENERGY_STYLE: Record<string, { bg: string; fg: string; label: string }> = {
+  Grass: { bg: "#4ade80", fg: "#052e16", label: "G" },
+  Fire: { bg: "#fb923c", fg: "#431407", label: "R" },
+  Water: { bg: "#60a5fa", fg: "#082f49", label: "W" },
+  Lightning: { bg: "#fbbf24", fg: "#422006", label: "L" },
+  Psychic: { bg: "#c084fc", fg: "#2e1065", label: "P" },
+  Fighting: { bg: "#f97316", fg: "#431407", label: "F" },
+  Darkness: { bg: "#4b5563", fg: "#f3f4f6", label: "D" },
+  Metal: { bg: "#94a3b8", fg: "#0f172a", label: "M" },
+  Dragon: { bg: "#818cf8", fg: "#1e1b4b", label: "N" },
+  Fairy: { bg: "#f9a8d4", fg: "#500724", label: "Y" },
+  Colorless: { bg: "#d1d5db", fg: "#111827", label: "C" },
+};
+
+function EnergyCost({ cost }: { cost?: string }) {
+  const types = (cost || "").split(",").map((s) => s.trim()).filter(Boolean);
+  if (!types.length) return null;
+  return (
+    <span style={{ display: "inline-flex", gap: "3px", marginRight: "8px", verticalAlign: "middle" }}>
+      {types.map((t, i) => {
+        const s = ENERGY_STYLE[t] || { bg: "#d1d5db", fg: "#111827", label: t[0] || "?" };
+        return (
+          <span
+            key={i}
+            title={t}
+            style={{
+              width: "20px", height: "20px", borderRadius: "50%", background: s.bg, color: s.fg,
+              display: "inline-flex", alignItems: "center", justifyContent: "center",
+              fontSize: "10px", fontWeight: 800, border: "1px solid rgba(0,0,0,0.35)",
+            }}
+          >
+            {s.label}
+          </span>
+        );
+      })}
+    </span>
+  );
+}
+
 export default async function CardPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
 
@@ -109,7 +149,16 @@ export default async function CardPage({ params }: { params: Promise<{ id: strin
               <div><span style={{ color: "#a0a0b0" }}>HP: </span><span style={{ fontWeight: 600 }}>{card.hp || "-"}</span></div>
               <div><span style={{ color: "#a0a0b0" }}>Artist: </span><span style={{ fontWeight: 600 }}>{card.artist || "-"}</span></div>
               <div><span style={{ color: "#a0a0b0" }}>Set: </span><span style={{ fontWeight: 600 }}>{card.card_set?.name || "-"}</span></div>
-              <div><span style={{ color: "#a0a0b0" }}>Stage: </span><span style={{ fontWeight: 600 }}>{card.card_subtypes || "-"}</span></div>
+              <div><span style={{ color: "#a0a0b0" }}>Stage: </span><span style={{ fontWeight: 600 }}>{card.stage || card.card_subtypes || "-"}</span></div>
+              {card.evolves_from && (
+                <div><span style={{ color: "#a0a0b0" }}>Evolves from: </span><span style={{ fontWeight: 600 }}>{card.evolves_from}</span></div>
+              )}
+              {card.evolves_to && (
+                <div><span style={{ color: "#a0a0b0" }}>Evolves to: </span><span style={{ fontWeight: 600 }}>{card.evolves_to}</span></div>
+              )}
+              {card.card_level && (
+                <div><span style={{ color: "#a0a0b0" }}>Level: </span><span style={{ fontWeight: 600 }}>{card.card_level}</span></div>
+              )}
               <div><span style={{ color: "#a0a0b0" }}>Weakness: </span><span style={{ fontWeight: 600 }}>{card.weakness_type ? `${card.weakness_type} ${card.weakness_value}` : "-"}</span></div>
               <div><span style={{ color: "#a0a0b0" }}>Resistance: </span><span style={{ fontWeight: 600 }}>{card.resistance_type ? `${card.resistance_type} ${card.resistance_value}` : "-"}</span></div>
               <div><span style={{ color: "#a0a0b0" }}>Retreat: </span><span style={{ fontWeight: 600 }}>{card.retreat_cost ?? "-"}</span></div>
@@ -117,33 +166,47 @@ export default async function CardPage({ params }: { params: Promise<{ id: strin
             </div>
           </div>
 
-          {card.ability_name && (
-            <div style={{ background: "#1a1a24", border: "1px solid #c084fc", borderRadius: "12px", padding: "16px", marginBottom: "16px" }}>
-              <div style={{ color: "#c084fc", fontSize: "11px", fontWeight: 700, letterSpacing: "1px", marginBottom: "4px" }}>{card.ability_type?.toUpperCase()}</div>
-              <div style={{ fontWeight: 700, marginBottom: "6px" }}>{card.ability_name}</div>
-              <div style={{ color: "#a0a0b0", fontSize: "13px", lineHeight: 1.5 }}>{card.ability_text}</div>
+          {card.ancient_trait && (
+            <div style={{ background: "#1a1a24", border: "1px solid #f59e0b", borderRadius: "12px", padding: "16px", marginBottom: "16px" }}>
+              <div style={{ color: "#f59e0b", fontSize: "11px", fontWeight: 700, letterSpacing: "1px", marginBottom: "4px" }}>ANCIENT TRAIT</div>
+              <div style={{ color: "#a0a0b0", fontSize: "13px", lineHeight: 1.5 }}>{card.ancient_trait}</div>
             </div>
           )}
+
+          {[
+            { name: card.ability_name, type: card.ability_type, text: card.ability_text },
+            { name: card.ability_2_name, type: card.ability_2_type, text: card.ability_2_text },
+          ].filter((a) => a.name).map((a, i) => (
+            <div key={`ab${i}`} style={{ background: "#1a1a24", border: "1px solid #c084fc", borderRadius: "12px", padding: "16px", marginBottom: "16px" }}>
+              <div style={{ color: "#c084fc", fontSize: "11px", fontWeight: 700, letterSpacing: "1px", marginBottom: "4px" }}>{(a.type || "Ability").toUpperCase()}</div>
+              <div style={{ fontWeight: 700, marginBottom: "6px" }}>{a.name}</div>
+              <div style={{ color: "#a0a0b0", fontSize: "13px", lineHeight: 1.5 }}>{a.text}</div>
+            </div>
+          ))}
 
           {card.attack_1_name && (
             <div style={{ background: "#1a1a24", border: "1px solid #2a2a3a", borderRadius: "12px", padding: "16px", marginBottom: "16px" }}>
               <h3 style={{ fontSize: "14px", fontWeight: 700, marginBottom: "12px", color: "#a0a0b0", letterSpacing: "1px" }}>ATTACKS</h3>
-              <div style={{ marginBottom: "12px" }}>
-                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "4px" }}>
-                  <span style={{ fontWeight: 700 }}>{card.attack_1_name}</span>
-                  {card.attack_1_damage && <span style={{ color: "#ff6b35", fontWeight: 700 }}>{card.attack_1_damage}</span>}
-                </div>
-                {card.attack_1_text && <div style={{ color: "#a0a0b0", fontSize: "13px", lineHeight: 1.5 }}>{card.attack_1_text}</div>}
-              </div>
-              {card.attack_2_name && (
-                <div>
-                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "4px" }}>
-                    <span style={{ fontWeight: 700 }}>{card.attack_2_name}</span>
-                    {card.attack_2_damage && <span style={{ color: "#ff6b35", fontWeight: 700 }}>{card.attack_2_damage}</span>}
+              {[
+                { name: card.attack_1_name, damage: card.attack_1_damage, text: card.attack_1_text, cost: card.attack_1_cost },
+                { name: card.attack_2_name, damage: card.attack_2_damage, text: card.attack_2_text, cost: card.attack_2_cost },
+                { name: card.attack_3_name, damage: card.attack_3_damage, text: card.attack_3_text, cost: card.attack_3_cost },
+              ].filter((a) => a.name).map((a, i, arr) => (
+                <div key={`atk${i}`} style={{ marginBottom: i < arr.length - 1 ? "12px" : 0 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "4px" }}>
+                    <span><EnergyCost cost={a.cost} /><span style={{ fontWeight: 700 }}>{a.name}</span></span>
+                    {a.damage && <span style={{ color: "#ff6b35", fontWeight: 700 }}>{a.damage}</span>}
                   </div>
-                  {card.attack_2_text && <div style={{ color: "#a0a0b0", fontSize: "13px", lineHeight: 1.5 }}>{card.attack_2_text}</div>}
+                  {a.text && <div style={{ color: "#a0a0b0", fontSize: "13px", lineHeight: 1.5 }}>{a.text}</div>}
                 </div>
-              )}
+              ))}
+            </div>
+          )}
+
+          {card.rules_text && (
+            <div style={{ background: "#1a1a24", border: "1px solid #2a2a3a", borderRadius: "12px", padding: "16px", marginBottom: "16px" }}>
+              <div style={{ color: "#a0a0b0", fontSize: "11px", fontWeight: 700, letterSpacing: "1px", marginBottom: "4px" }}>RULES</div>
+              <div style={{ color: "#a0a0b0", fontSize: "13px", lineHeight: 1.5 }}>{card.rules_text}</div>
             </div>
           )}
 
