@@ -93,7 +93,40 @@ interface BrowseCard {
   id: number; name: string; set_name: string; set_code: string; card_number: string | number;
   variant: string; price: number; stock: number;
 }
-interface SetOpt { code: string; name: string }
+interface SetOpt { code: string; name: string; release_date: string; era_code: string }
+
+// Same era grouping/order as the Manual Invoice POS + Stock Entry screens.
+const ERA_ORDER = ["MEG", "SV", "SWSH", "SM", "XY", "BW", "HGSS", "DP", "EX", "WotCO", "WotCL", "WotCN", "WotC", "OTHER", "PROMO"];
+const ERA_LABELS: Record<string, string> = {
+  MEG: "Mega Evolution", SV: "Scarlet & Violet", SWSH: "Sword & Shield", SM: "Sun & Moon",
+  XY: "XY Era", BW: "Black & White", HGSS: "HG&SS", DP: "D&P / Platinum", EX: "EX Era",
+  WotCO: "e-Card", WotCL: "Legendary", WotCN: "Neo", WotC: "WotC Base",
+  OTHER: "Special / Other", PROMO: "Promos",
+};
+// Same variant list as the POS screen (orders/admin.py VARIANT_CHOICES).
+const VARIANT_OPTIONS: [string, string][] = [
+  ["N", "Normal"], ["H", "Holo"], ["RH", "Reverse Holo"], ["FE", "1st Edition"], ["PB", "Poke Ball"],
+  ["MB", "Master Ball"], ["FB", "Friend Ball"], ["LB", "Love Ball"], ["QB", "Quick Ball"], ["DB", "Dusk Ball"],
+  ["HR-EX", "Illustration Rare"], ["EX", "Double Rare"], ["GX", "GX"], ["V", "V"], ["VMAX", "VMAX"],
+  ["VSTAR", "VSTAR"], ["RR", "Rainbow Rare"], ["RAD", "Radiant"],
+];
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const fmtRelease = (d: string) => {
+  const p = (d || "").split("-");
+  return p.length === 3 ? `${MONTHS[parseInt(p[1], 10) - 1] || ""} ${p[0]}` : d || "";
+};
+function groupSets(sets: SetOpt[]) {
+  const sorted = sets.slice().sort((a, b) => {
+    if (!a.release_date && !b.release_date) return 0;
+    if (!a.release_date) return 1;
+    if (!b.release_date) return -1;
+    return b.release_date.localeCompare(a.release_date);
+  });
+  const byEra: Record<string, SetOpt[]> = {};
+  sorted.forEach((s) => { (byEra[s.era_code || "OTHER"] = byEra[s.era_code || "OTHER"] || []).push(s); });
+  const order = [...ERA_ORDER.filter((e) => byEra[e]), ...Object.keys(byEra).filter((e) => !ERA_ORDER.includes(e)).sort()];
+  return order.map((e) => ({ era: e, label: ERA_LABELS[e] || e, sets: byEra[e] }));
+}
 
 // Same layout idea as the Manual Invoice POS: pick a set to list every card in
 // it (or type 2+ characters to search all sets), then click Add / Add all.
@@ -111,12 +144,12 @@ function CardBrowser({ onAdd, onAddMany, inInvoice }: {
 
   useEffect(() => {
     fetch(`${API_URL}/api/sets/`).then((r) => r.json())
-      .then((d) => setSets((d.results || []).map((s: SetOpt) => ({ code: s.code, name: s.name }))))
+      .then((d) => setSets(d.results || []))
       .catch(() => setSets([]));
   }, []);
 
-  // Set browse loads the whole set once (name filter applies server-side too,
-  // but we filter client-side for snappiness); no set -> free search (2+ chars).
+  // Same logic as the POS screen: every change of set / variant / term
+  // re-queries the server (term debounced). No set -> needs 2+ characters.
   useEffect(() => {
     const q = term.trim();
     if (!setCode && q.length < 2) { setResults([]); setErr(""); return; }
@@ -124,7 +157,9 @@ function CardBrowser({ onAdd, onAddMany, inInvoice }: {
       setLoading(true); setErr("");
       try {
         const qs = new URLSearchParams();
-        if (setCode) qs.set("set_code", setCode); else qs.set("term", q);
+        if (q) qs.set("term", q);
+        if (setCode) qs.set("set_code", setCode);
+        if (variant) qs.set("variant", variant);
         const res = await authFetch(`/api/orders/admin/buy-invoices/browse/?${qs}`);
         if (!res.ok) throw new Error();
         setResults((await res.json()).results || []);
@@ -132,30 +167,33 @@ function CardBrowser({ onAdd, onAddMany, inInvoice }: {
         setErr(e instanceof SessionExpiredError ? "Session expired — please sign in again." : "Could not load cards.");
         setResults([]);
       } finally { setLoading(false); }
-    }, setCode ? 0 : 300);
+    }, 300);
     return () => clearTimeout(t);
-  // when a set is chosen, typing only filters client-side (no refetch)
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [setCode, setCode ? "" : term]);
+  }, [setCode, variant, term]);
 
-  const variants = Array.from(new Set(results.map((r) => r.variant).filter(Boolean))).sort();
-  const q = term.trim().toLowerCase();
-  const shown = results.filter((r) =>
-    (!variant || r.variant === variant) && (!setCode || !q || r.name.toLowerCase().includes(q)));
+  const shown = results;
 
   return (
     <div style={{ background: "#12121a", border: "1px solid #2a2a3a", borderRadius: 10, padding: 12 }}>
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
-        <select style={{ ...inp, flex: 1.6, minWidth: 200 }} value={setCode} onChange={(e) => { setSetCode(e.target.value); setVariant(""); }}>
+        <select style={{ ...inp, flex: 1.6, minWidth: 200 }} value={setCode} onChange={(e) => setSetCode(e.target.value)}>
           <option value="">All sets (free search)</option>
-          {sets.map((s) => <option key={s.code} value={s.code}>{s.name}</option>)}
+          {groupSets(sets).map((g) => (
+            <optgroup key={g.era} label={g.label}>
+              {g.sets.map((s) => (
+                <option key={s.code} value={s.code}>
+                  {s.name} [{s.code}]{s.release_date ? ` — ${fmtRelease(s.release_date)}` : ""}
+                </option>
+              ))}
+            </optgroup>
+          ))}
         </select>
         <select style={{ ...inp, flex: 1, minWidth: 140 }} value={variant} onChange={(e) => setVariant(e.target.value)}>
           <option value="">All variants</option>
-          {variants.map((v) => <option key={v} value={v}>{v}</option>)}
+          {VARIANT_OPTIONS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
         </select>
         <input style={{ ...inp, flex: 2, minWidth: 200 }} value={term} onChange={(e) => setTerm(e.target.value)}
-          placeholder={setCode ? "Filter this set by name…" : "Search cards by name or set (2+ characters), or pick a set"} />
+          placeholder="Search cards by name or set... (2+ characters), or pick a set above to browse it" />
       </div>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8, minHeight: 24 }}>
         <span style={{ fontSize: 11, color: "#888" }}>
