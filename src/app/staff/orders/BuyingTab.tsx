@@ -89,46 +89,104 @@ function Pager({ count, page, setPage, pageSize = 32 }: { count: number; page: n
   );
 }
 
-// Live catalogue search (same public /api/products/?search= the announcements
-// page uses). Clicking a result adds it as a new line.
-function CardSearch({ onPick }: { onPick: (p: ApiProduct) => void }) {
-  const [query, setQuery] = useState("");
-  const [results, setResults] = useState<ApiProduct[]>([]);
-  const [open, setOpen] = useState(false);
-  const debounce = useRef<ReturnType<typeof setTimeout> | null>(null);
+interface BrowseCard {
+  id: number; name: string; set_name: string; set_code: string; card_number: string | number;
+  variant: string; price: number; stock: number;
+}
+interface SetOpt { code: string; name: string }
+
+// Same layout idea as the Manual Invoice POS: pick a set to list every card in
+// it (or type 2+ characters to search all sets), then click Add / Add all.
+// Data: GET /api/orders/admin/buy-invoices/browse/ (staff, JWT).
+function CardBrowser({ onAdd, onAddMany, inInvoice }: {
+  onAdd: (p: BrowseCard) => void; onAddMany: (ps: BrowseCard[]) => void; inInvoice: Record<number, number>;
+}) {
+  const [sets, setSets] = useState<SetOpt[]>([]);
+  const [setCode, setSetCode] = useState("");
+  const [variant, setVariant] = useState("");
+  const [term, setTerm] = useState("");
+  const [results, setResults] = useState<BrowseCard[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [err, setErr] = useState("");
 
   useEffect(() => {
-    if (debounce.current) clearTimeout(debounce.current);
-    const q = query.trim();
-    if (q.length < 2) { setResults([]); return; }
-    debounce.current = setTimeout(() => {
-      fetch(`${API_URL}/api/products/?search=${encodeURIComponent(q)}`)
-        .then((r) => r.json())
-        .then((d) => setResults((d.results || []).slice(0, 12)))
-        .catch(() => setResults([]));
-    }, 300);
-    return () => { if (debounce.current) clearTimeout(debounce.current); };
-  }, [query]);
+    fetch(`${API_URL}/api/sets/`).then((r) => r.json())
+      .then((d) => setSets((d.results || []).map((s: SetOpt) => ({ code: s.code, name: s.name }))))
+      .catch(() => setSets([]));
+  }, []);
+
+  // Set browse loads the whole set once (name filter applies server-side too,
+  // but we filter client-side for snappiness); no set -> free search (2+ chars).
+  useEffect(() => {
+    const q = term.trim();
+    if (!setCode && q.length < 2) { setResults([]); setErr(""); return; }
+    const t = setTimeout(async () => {
+      setLoading(true); setErr("");
+      try {
+        const qs = new URLSearchParams();
+        if (setCode) qs.set("set_code", setCode); else qs.set("term", q);
+        const res = await authFetch(`/api/orders/admin/buy-invoices/browse/?${qs}`);
+        if (!res.ok) throw new Error();
+        setResults((await res.json()).results || []);
+      } catch (e) {
+        setErr(e instanceof SessionExpiredError ? "Session expired — please sign in again." : "Could not load cards.");
+        setResults([]);
+      } finally { setLoading(false); }
+    }, setCode ? 0 : 300);
+    return () => clearTimeout(t);
+  // when a set is chosen, typing only filters client-side (no refetch)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [setCode, setCode ? "" : term]);
+
+  const variants = Array.from(new Set(results.map((r) => r.variant).filter(Boolean))).sort();
+  const q = term.trim().toLowerCase();
+  const shown = results.filter((r) =>
+    (!variant || r.variant === variant) && (!setCode || !q || r.name.toLowerCase().includes(q)));
 
   return (
-    <div style={{ position: "relative", flex: 1, minWidth: 260 }}>
-      <input style={{ ...inp, width: "100%" }} value={query} placeholder="Search a card to add (name, set, number)…"
-        onChange={(e) => { setQuery(e.target.value); setOpen(true); }}
-        onFocus={() => setOpen(true)} onBlur={() => setTimeout(() => setOpen(false), 150)} />
-      {open && results.length > 0 && (
-        <div style={{ position: "absolute", top: "calc(100% + 4px)", left: 0, right: 0, zIndex: 30, background: "#1a1a24", border: "1px solid #2a2a3a", borderRadius: 8, maxHeight: 300, overflowY: "auto", boxShadow: "0 12px 24px rgba(0,0,0,0.4)" }}>
-          {results.map((p) => (
-            <div key={p.id} onMouseDown={() => { onPick(p); setQuery(""); setResults([]); setOpen(false); }}
-              style={{ padding: "8px 10px", fontSize: 12, color: "#ddd", cursor: "pointer", borderBottom: "1px solid #2a2a3a" }}>
-              {p.name}
-              <span style={{ color: "#666" }}>
-                {p.card_set ? ` — ${p.card_set.name}` : ""}{p.card_number ? ` #${p.card_number}` : ""}{p.variant_override ? ` · ${p.variant_override}` : ""}
-                {typeof p.stock === "number" ? ` · stock ${p.stock}` : ""}
-              </span>
+    <div style={{ background: "#12121a", border: "1px solid #2a2a3a", borderRadius: 10, padding: 12 }}>
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
+        <select style={{ ...inp, flex: 1.6, minWidth: 200 }} value={setCode} onChange={(e) => { setSetCode(e.target.value); setVariant(""); }}>
+          <option value="">All sets (free search)</option>
+          {sets.map((s) => <option key={s.code} value={s.code}>{s.name}</option>)}
+        </select>
+        <select style={{ ...inp, flex: 1, minWidth: 140 }} value={variant} onChange={(e) => setVariant(e.target.value)}>
+          <option value="">All variants</option>
+          {variants.map((v) => <option key={v} value={v}>{v}</option>)}
+        </select>
+        <input style={{ ...inp, flex: 2, minWidth: 200 }} value={term} onChange={(e) => setTerm(e.target.value)}
+          placeholder={setCode ? "Filter this set by name…" : "Search cards by name or set (2+ characters), or pick a set"} />
+      </div>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8, minHeight: 24 }}>
+        <span style={{ fontSize: 11, color: "#888" }}>
+          {loading ? "Loading…" : err ? <span style={{ color: "#EF4444" }}>{err}</span> : results.length ? `${shown.length} card(s) shown` : "Pick a set to browse it, or start typing to search."}
+        </span>
+        {shown.length > 0 && (
+          <button style={{ ...btnGreen, background: "#2fbf71", color: "#0d0d12" }} onClick={() => onAddMany(shown)}>
+            + Add all shown ({shown.length})
+          </button>
+        )}
+      </div>
+      <div style={{ maxHeight: 360, overflowY: "auto", display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(190px, 1fr))", gap: 8, alignContent: "start" }}>
+        {shown.map((c) => {
+          const qty = inInvoice[c.id] || 0;
+          return (
+            <div key={c.id} style={{ background: "#1a1a24", border: `1px solid ${qty ? "#2fbf71" : "#2a2a3a"}`, borderRadius: 8, padding: 8 }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: "#fff", marginBottom: 2 }}>{c.name}</div>
+              <div style={{ fontSize: 10, color: "#888", marginBottom: 6 }}>
+                {[!setCode && c.set_name, c.card_number && `#${c.card_number}`, c.variant].filter(Boolean).join(" · ")}
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, marginBottom: 6 }}>
+                <span style={{ color: "#ff6b35", fontWeight: 700 }}>{c.price > 0 ? money(c.price) : "no price"}</span>
+                <span style={{ color: c.stock > 0 ? "#4ade80" : "#666" }}>stock {c.stock}</span>
+              </div>
+              <button style={{ ...btnPrimary, width: "100%" }} onClick={() => onAdd(c)}>
+                {qty ? `+ Add another (${qty} on invoice)` : "+ Add"}
+              </button>
             </div>
-          ))}
-        </div>
-      )}
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -155,15 +213,27 @@ function InvoiceEditor({ initial, onSaved, onCancel }: { initial?: BuyInvoice; o
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
-  const addCard = (p: ApiProduct) => {
-    const tcg = p.price != null && parseFloat(String(p.price)) > 0 ? parseFloat(String(p.price)) : null;
-    setLines((ls) => [...ls, {
-      key: newKey(), product_id: p.id, description: p.name, set_name: p.card_set?.name || "",
-      card_number: p.card_number ? String(p.card_number) : "", variant: p.variant_override || "N",
-      quantity: "1", unit_price: pctToR(defaultPct, tcg), live_stock: typeof p.stock === "number" ? p.stock : null,
+  const makeLine = (p: BrowseCard): BuyLine => {
+    const tcg = p.price > 0 ? p.price : null;
+    return {
+      key: newKey(), product_id: p.id, description: p.name, set_name: p.set_name,
+      card_number: p.card_number ? String(p.card_number) : "", variant: p.variant || "N",
+      quantity: "1", unit_price: pctToR(defaultPct, tcg), live_stock: p.stock,
       tcg_price: tcg, pct: tcg ? defaultPct : "",
-    }]);
+    };
   };
+  // Adding a card already on the invoice bumps its quantity instead of duplicating it.
+  const addCards = (ps: BrowseCard[]) => setLines((ls) => {
+    const out = [...ls];
+    for (const p of ps) {
+      const i = out.findIndex((l) => l.product_id === p.id);
+      if (i >= 0) out[i] = { ...out[i], quantity: String((parseInt(out[i].quantity) || 0) + 1) };
+      else out.push(makeLine(p));
+    }
+    return out;
+  });
+  const inInvoice: Record<number, number> = {};
+  lines.forEach((l) => { if (l.product_id) inInvoice[l.product_id] = parseInt(l.quantity) || 0; });
   const addFree = () => setLines((ls) => [...ls, {
     key: newKey(), product_id: null, description: "", set_name: "", card_number: "", variant: "",
     quantity: "1", unit_price: "", live_stock: null, tcg_price: null, pct: "",
@@ -219,16 +289,18 @@ function InvoiceEditor({ initial, onSaved, onCancel }: { initial?: BuyInvoice; o
       {locked ? (
         <div style={{ fontSize: 11, color: "#e0b050" }}>This invoice is {initial?.status_display}. Lines are locked — use “Back to draft” on the list to change them.</div>
       ) : (
+        <>
+        <CardBrowser onAdd={(c) => addCards([c])} onAddMany={addCards} inInvoice={inInvoice} />
         <div style={{ display: "flex", flexWrap: "wrap", gap: 10, alignItems: "center" }}>
-          <CardSearch onPick={addCard} />
           <button style={btn} onClick={addFree}>+ Off-catalogue line</button>
           <span style={{ fontSize: 11, color: "#888", display: "inline-flex", alignItems: "center", gap: 6 }}>
             Default buy-in
             <input style={{ ...inp, width: 60 }} type="number" min="0" step="0.5" value={defaultPct} onChange={(e) => setDefaultPct(e.target.value)} />
-            % of TCG
+            % of site price
             <button style={btn} onClick={applyPctToAll}>Apply to all</button>
           </span>
         </div>
+        </>
       )}
 
       {lines.length > 0 && (
@@ -236,7 +308,7 @@ function InvoiceEditor({ initial, onSaved, onCancel }: { initial?: BuyInvoice; o
           <table style={{ width: "100%", borderCollapse: "collapse" }}>
             <thead>
               <tr style={{ borderBottom: "2px solid #2a2a3a" }}>
-                {["Card / description", "Set · # · Var", "Stock now", "Qty", "TCG price", "% of TCG", "Price paid (R each)", "Line total", ""].map((h) => (
+                {["Card / description", "Set · # · Var", "Stock now", "Qty", "Site price", "% of price", "Price paid (R each)", "Line total", ""].map((h) => (
                   <th key={h} style={{ textAlign: "left", padding: "6px 8px", fontSize: 10, color: "#888", textTransform: "uppercase" }}>{h}</th>
                 ))}
               </tr>
