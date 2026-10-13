@@ -88,6 +88,9 @@ interface AdminOrder {
   shipping_method: string; delivery_method: string;
   waybill_number: string; courier_name: string; courier_tracking_url: string;
   item_count: number; created_at: string;
+  pudo_locker_name?: string; pudo_locker_address?: string;
+  delivery_address_line1?: string; delivery_address_line2?: string;
+  delivery_city?: string; delivery_province?: string; delivery_postal_code?: string;
 }
 
 interface ManualInvoice {
@@ -130,6 +133,148 @@ function Pager({ count, page, setPage, pageSize = 32 }: { count: number; page: n
       <button style={btn} disabled={page <= 1} onClick={() => setPage(page - 1)}>← Prev</button>
       <span style={{ color: "#555", fontSize: 12 }}>Page {page} of {pages} ({count} total)</span>
       <button style={btn} disabled={page >= pages} onClick={() => setPage(page + 1)}>Next →</button>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// CHANGE DELIVERY (2026-10-13) -- Michael: "customer want to change order from
+// 'Collection' to Pudo can you add the ability to Staff section?"
+// Prices MUST mirror SHIPPING_OPTIONS in app/checkout/page.tsx (and PUDO_RATES
+// in orders/views.py); staff can still type a different price per order.
+// ─────────────────────────────────────────────────────────────────────────
+const DELIVERY_OPTIONS: { id: string; label: string; price: number }[] = [
+  { id: "collection",  label: "Collection (Cash on Collection)",   price: 0 },
+  { id: "pudo_locker", label: "Pudo — Locker to Locker (XSmall)",  price: 75 },
+  { id: "pudo_kiosk",  label: "Pudo — Locker to Kiosk (XSmall)",   price: 85 },
+  { id: "pudo_medium", label: "Pudo — Medium/Tins (Kiosk)",        price: 95 },
+  { id: "pudo_door",   label: "Pudo — Locker to Door (XSmall)",    price: 105 },
+];
+
+function DeliveryEditor({ order, onSaved }: { order: AdminOrder; onSaved: () => void }) {
+  const closed = order.status === "cancelled" || order.status === "invoiced";
+  const [open, setOpen] = useState(false);
+  const [method, setMethod] = useState(order.shipping_method === "collection" ? "pudo_locker" : (order.shipping_method || "pudo_locker"));
+  const [cost, setCost] = useState(String(DELIVERY_OPTIONS.find((o) => o.id === (order.shipping_method === "collection" ? "pudo_locker" : order.shipping_method))?.price ?? 75));
+  const [lockerName, setLockerName] = useState(order.pudo_locker_name || "");
+  const [lockerAddr, setLockerAddr] = useState(order.pudo_locker_address || "");
+  const [addr1, setAddr1] = useState(order.delivery_address_line1 || "");
+  const [addr2, setAddr2] = useState(order.delivery_address_line2 || "");
+  const [city, setCity] = useState(order.delivery_city || "");
+  const [province, setProvince] = useState(order.delivery_province || "");
+  const [postal, setPostal] = useState(order.delivery_postal_code || "");
+  const [payment, setPayment] = useState("eft");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  const needsLocker = ["pudo_locker", "pudo_kiosk", "pudo_medium"].includes(method);
+  const needsAddress = method === "pudo_door";
+  const goingCourier = method !== "collection";
+  const needsPayment = goingCourier && order.payment_method === "coc" && !order.is_paid;
+  const currentLabel = DELIVERY_OPTIONS.find((o) => o.id === order.shipping_method)?.label || order.shipping_method || "—";
+  const oldCost = parseFloat(order.shipping_cost || "0");
+  const newCost = parseFloat(cost || "0") || 0;
+  const newTotal = parseFloat(order.total_price || "0") - oldCost + newCost;
+
+  const pick = (id: string) => {
+    setMethod(id);
+    setCost(String(DELIVERY_OPTIONS.find((o) => o.id === id)?.price ?? 0));
+  };
+
+  const submit = async () => {
+    setSaving(true);
+    setError("");
+    try {
+      const res = await authFetch(`/api/orders/${order.id}/delivery/`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          shipping_method: method, shipping_cost: cost,
+          pudo_locker_name: lockerName, pudo_locker_address: lockerAddr,
+          address_line1: addr1, address_line2: addr2, city, province, postal_code: postal,
+          ...(needsPayment ? { payment_method: payment } : {}),
+        }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) { setError(body.error || "Failed to change delivery."); return; }
+      setOpen(false);
+      onSaved();
+    } catch {
+      setError("Failed to save — check your connection and try again.");
+    } finally { setSaving(false); }
+  };
+
+  const lbl: React.CSSProperties = { fontSize: 10, color: "#888", display: "block", marginBottom: 3 };
+  return (
+    <div style={{ borderTop: "1px solid #2a2a3a", paddingTop: 12, display: "flex", flexDirection: "column", gap: 10 }}>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 10, alignItems: "center" }}>
+        <span style={{ fontSize: 10, color: "#888" }}>
+          Delivery: <strong style={{ color: "#ccc" }}>{currentLabel}</strong>
+          {order.pudo_locker_name ? <> — {order.pudo_locker_name}</> : null}
+          {" "}· Shipping {money(order.shipping_cost)}
+        </span>
+        {!closed && (
+          <button style={btn} onClick={() => setOpen((v) => !v)}>{open ? "Cancel" : "🚚 Change delivery"}</button>
+        )}
+      </div>
+
+      {open && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 10, alignItems: "flex-end" }}>
+            <div>
+              <label style={lbl}>New delivery method</label>
+              <select style={inp} value={method} onChange={(e) => pick(e.target.value)}>
+                {DELIVERY_OPTIONS.map((o) => <option key={o.id} value={o.id}>{o.label}{o.price ? ` — R${o.price}` : ""}</option>)}
+              </select>
+            </div>
+            <div>
+              <label style={lbl}>Shipping cost (R)</label>
+              <input style={{ ...inp, width: 90 }} type="number" min="0" step="0.01" value={cost} onChange={(e) => setCost(e.target.value)} />
+            </div>
+            {needsPayment && (
+              <div>
+                <label style={lbl}>Customer will pay by</label>
+                <select style={inp} value={payment} onChange={(e) => setPayment(e.target.value)}>
+                  <option value="eft">EFT / Bank Transfer</option>
+                  <option value="payfast">PayFast</option>
+                </select>
+              </div>
+            )}
+          </div>
+
+          {needsLocker && (
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
+              <div style={{ flex: 1, minWidth: 200 }}>
+                <label style={lbl}>Pudo locker / kiosk name</label>
+                <input style={{ ...inp, width: "100%" }} value={lockerName} onChange={(e) => setLockerName(e.target.value)} placeholder="e.g. Birchleigh North Mall" />
+              </div>
+              <div style={{ flex: 1, minWidth: 200 }}>
+                <label style={lbl}>Locker address</label>
+                <input style={{ ...inp, width: "100%" }} value={lockerAddr} onChange={(e) => setLockerAddr(e.target.value)} placeholder="e.g. Mooifontein Rd, Birchleigh North" />
+              </div>
+            </div>
+          )}
+
+          {needsAddress && (
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
+              <div style={{ flex: 1, minWidth: 180 }}><label style={lbl}>Address line 1</label><input style={{ ...inp, width: "100%" }} value={addr1} onChange={(e) => setAddr1(e.target.value)} /></div>
+              <div style={{ flex: 1, minWidth: 140 }}><label style={lbl}>Address line 2</label><input style={{ ...inp, width: "100%" }} value={addr2} onChange={(e) => setAddr2(e.target.value)} /></div>
+              <div style={{ minWidth: 120 }}><label style={lbl}>City</label><input style={inp} value={city} onChange={(e) => setCity(e.target.value)} /></div>
+              <div style={{ minWidth: 120 }}><label style={lbl}>Province</label><input style={inp} value={province} onChange={(e) => setProvince(e.target.value)} /></div>
+              <div style={{ width: 90 }}><label style={lbl}>Postal code</label><input style={{ ...inp, width: "100%" }} value={postal} onChange={(e) => setPostal(e.target.value)} /></div>
+            </div>
+          )}
+
+          <div style={{ fontSize: 11, color: "#a0a0b0" }}>
+            Shipping {money(oldCost)} → {money(newCost)} · Order total {money(order.total_price)} → <strong style={{ color: "#fff" }}>{money(newTotal)}</strong>
+            {needsPayment && <><br />This order was Cash on Collection (unpaid). It will move to Awaiting {payment === "eft" ? "EFT" : "PayFast"} Payment and the customer gets the status email.</>}
+          </div>
+          <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+            <button style={btnPrimary} onClick={submit} disabled={saving}>{saving ? "Saving…" : "Apply delivery change"}</button>
+            {error && <span style={{ color: "#EF4444", fontSize: 11 }}>{error}</span>}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -224,6 +369,8 @@ function OrderManageRow({ order, onSaved }: { order: AdminOrder; onSaved: () => 
           </div>
         </div>
       </div>
+
+      <DeliveryEditor order={order} onSaved={onSaved} />
 
       <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
         <button style={btnPrimary} onClick={save} disabled={saving}>{saving ? "Saving…" : "Update Order"}</button>
