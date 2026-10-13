@@ -2,6 +2,7 @@
 import { useEffect, useState, useCallback, Fragment } from "react";
 import Link from "next/link";
 import { authFetch, SessionExpiredError } from "@/lib/api";
+import BuyingTab from "./BuyingTab";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://pokemart-api-production.up.railway.app";
 
@@ -703,7 +704,7 @@ function InvoicesTab() {
 // ─────────────────────────────────────────────────────────────────────────
 
 export default function StaffOrdersPage() {
-  const [tab, setTab] = useState<"orders" | "invoices">("orders");
+  const [tab, setTab] = useState<"orders" | "invoices" | "buying">("orders");
   const [isStaff, setIsStaff] = useState<boolean | null>(null);
 
   useEffect(() => {
@@ -742,19 +743,19 @@ export default function StaffOrdersPage() {
         </div>
 
         <div style={{ display: "flex", gap: 10, marginBottom: 20 }}>
-          {(["orders", "invoices"] as const).map((t) => (
+          {(["orders", "invoices", "buying"] as const).map((t) => (
             <button key={t} onClick={() => setTab(t)} style={{
               background: tab === t ? "#ff6b35" : "transparent",
               border: `1px solid ${tab === t ? "#ff6b35" : "#2a2a3a"}`,
               color: tab === t ? "#fff" : "#a0a0b0",
               padding: "9px 18px", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer",
             }}>
-              {t === "orders" ? "📦 Orders" : "🧾 Manual Invoices"}
+              {t === "orders" ? "📦 Orders" : t === "invoices" ? "🧾 Manual Invoices" : "🛒 Buying Invoices"}
             </button>
           ))}
         </div>
 
-        {tab === "orders" ? <OrdersTab /> : <InvoicesTab />}
+        {tab === "orders" ? <OrdersTab /> : tab === "invoices" ? <InvoicesTab /> : <BuyingTab />}
       </div>
     </div>
   );
