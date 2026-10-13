@@ -26,7 +26,21 @@ interface BuyLine {
   description: string; set_name: string; card_number: string; variant: string;
   quantity: string; unit_price: string;
   live_stock: number | null;
+  tcg_price: number | null; // current site (TCG-derived) price, R each
+  pct: string;              // price paid as % of tcg_price (display/entry aid)
 }
+
+const round2 = (n: number) => (Math.round(n * 100) / 100).toFixed(2);
+// % of TCG -> R value
+const pctToR = (pct: string, tcg: number | null) => {
+  const p = parseFloat(pct);
+  return tcg && !isNaN(p) ? round2((tcg * p) / 100) : "";
+};
+// R value -> % of TCG
+const rToPct = (r: string, tcg: number | null) => {
+  const v = parseFloat(r);
+  return tcg && !isNaN(v) ? String(Math.round((v / tcg) * 1000) / 10) : "";
+};
 
 interface BuyInvoice {
   id: number; buy_number: string; status: string; status_display: string; stock_mode: string;
@@ -35,12 +49,13 @@ interface BuyInvoice {
   payment_made: boolean; payment_method: string; payment_method_display: string;
   total: string; item_count: number; off_catalogue_units: number;
   created_at: string; completed_at: string | null;
-  items: { id: number; product_id: number | null; description: string; set_name: string; card_number: string; variant: string; quantity: number; unit_price: string; line_total: string; live_stock: number | null }[];
+  items: { id: number; product_id: number | null; description: string; set_name: string; card_number: string; variant: string; quantity: number; unit_price: string; line_total: string; live_stock: number | null; tcg_price?: string | null }[];
 }
 
 interface ApiProduct {
   id: number; name: string; card_set?: { name: string; code: string } | null;
   card_number?: string | number | null; variant_override?: string | null; stock?: number;
+  price?: string | number | null;
 }
 
 interface Paginated<T> { count: number; next: string | null; previous: string | null; results: T[]; }
@@ -125,25 +140,36 @@ function InvoiceEditor({ initial, onSaved, onCancel }: { initial?: BuyInvoice; o
   const [sellerPhone, setSellerPhone] = useState(initial?.seller_phone || "");
   const [sellerNote, setSellerNote] = useState(initial?.seller_note || "");
   const [internalNote, setInternalNote] = useState(initial?.internal_note || "");
+  // Default buy-in % applied to each newly added card (editable per line).
+  const [defaultPct, setDefaultPct] = useState("80");
   const [lines, setLines] = useState<BuyLine[]>(
-    (initial?.items || []).map((i) => ({
-      key: newKey(), product_id: i.product_id, description: i.description, set_name: i.set_name,
-      card_number: i.card_number, variant: i.variant, quantity: String(i.quantity), unit_price: String(i.unit_price),
-      live_stock: i.live_stock,
-    }))
+    (initial?.items || []).map((i) => {
+      const tcg = i.tcg_price ? parseFloat(i.tcg_price) : null;
+      return {
+        key: newKey(), product_id: i.product_id, description: i.description, set_name: i.set_name,
+        card_number: i.card_number, variant: i.variant, quantity: String(i.quantity), unit_price: String(i.unit_price),
+        live_stock: i.live_stock, tcg_price: tcg, pct: rToPct(String(i.unit_price), tcg),
+      };
+    })
   );
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
-  const addCard = (p: ApiProduct) => setLines((ls) => [...ls, {
-    key: newKey(), product_id: p.id, description: p.name, set_name: p.card_set?.name || "",
-    card_number: p.card_number ? String(p.card_number) : "", variant: p.variant_override || "N",
-    quantity: "1", unit_price: "", live_stock: typeof p.stock === "number" ? p.stock : null,
-  }]);
+  const addCard = (p: ApiProduct) => {
+    const tcg = p.price != null && parseFloat(String(p.price)) > 0 ? parseFloat(String(p.price)) : null;
+    setLines((ls) => [...ls, {
+      key: newKey(), product_id: p.id, description: p.name, set_name: p.card_set?.name || "",
+      card_number: p.card_number ? String(p.card_number) : "", variant: p.variant_override || "N",
+      quantity: "1", unit_price: pctToR(defaultPct, tcg), live_stock: typeof p.stock === "number" ? p.stock : null,
+      tcg_price: tcg, pct: tcg ? defaultPct : "",
+    }]);
+  };
   const addFree = () => setLines((ls) => [...ls, {
     key: newKey(), product_id: null, description: "", set_name: "", card_number: "", variant: "",
-    quantity: "1", unit_price: "", live_stock: null,
+    quantity: "1", unit_price: "", live_stock: null, tcg_price: null, pct: "",
   }]);
+  const applyPctToAll = () => setLines((ls) => ls.map((l) =>
+    l.product_id && l.tcg_price ? { ...l, pct: defaultPct, unit_price: pctToR(defaultPct, l.tcg_price) } : l));
   const upd = (key: string, patch: Partial<BuyLine>) => setLines((ls) => ls.map((l) => l.key === key ? { ...l, ...patch } : l));
   const del = (key: string) => setLines((ls) => ls.filter((l) => l.key !== key));
 
@@ -196,6 +222,12 @@ function InvoiceEditor({ initial, onSaved, onCancel }: { initial?: BuyInvoice; o
         <div style={{ display: "flex", flexWrap: "wrap", gap: 10, alignItems: "center" }}>
           <CardSearch onPick={addCard} />
           <button style={btn} onClick={addFree}>+ Off-catalogue line</button>
+          <span style={{ fontSize: 11, color: "#888", display: "inline-flex", alignItems: "center", gap: 6 }}>
+            Default buy-in
+            <input style={{ ...inp, width: 60 }} type="number" min="0" step="0.5" value={defaultPct} onChange={(e) => setDefaultPct(e.target.value)} />
+            % of TCG
+            <button style={btn} onClick={applyPctToAll}>Apply to all</button>
+          </span>
         </div>
       )}
 
@@ -204,7 +236,7 @@ function InvoiceEditor({ initial, onSaved, onCancel }: { initial?: BuyInvoice; o
           <table style={{ width: "100%", borderCollapse: "collapse" }}>
             <thead>
               <tr style={{ borderBottom: "2px solid #2a2a3a" }}>
-                {["Card / description", "Set · # · Var", "Stock now", "Qty", "Price paid (each)", "Line total", ""].map((h) => (
+                {["Card / description", "Set · # · Var", "Stock now", "Qty", "TCG price", "% of TCG", "Price paid (R each)", "Line total", ""].map((h) => (
                   <th key={h} style={{ textAlign: "left", padding: "6px 8px", fontSize: 10, color: "#888", textTransform: "uppercase" }}>{h}</th>
                 ))}
               </tr>
@@ -224,7 +256,15 @@ function InvoiceEditor({ initial, onSaved, onCancel }: { initial?: BuyInvoice; o
                     <td style={{ padding: "6px 8px", fontSize: 11, color: "#888" }}>{[l.set_name, l.card_number && `#${l.card_number}`, l.variant].filter(Boolean).join(" · ") || "—"}</td>
                     <td style={{ padding: "6px 8px", fontSize: 11, color: "#888" }}>{l.live_stock ?? "—"}</td>
                     <td style={{ padding: "6px 8px" }}><input style={{ ...inp, width: 60 }} type="number" min="1" value={l.quantity} disabled={locked} onChange={(e) => upd(l.key, { quantity: e.target.value })} /></td>
-                    <td style={{ padding: "6px 8px" }}><input style={{ ...inp, width: 90 }} type="number" min="0" step="0.01" value={l.unit_price} disabled={locked} onChange={(e) => upd(l.key, { unit_price: e.target.value })} placeholder="0.00" /></td>
+                    <td style={{ padding: "6px 8px", fontSize: 12, color: "#ddd", fontWeight: 600 }}>{l.tcg_price ? money(l.tcg_price) : "—"}</td>
+                    <td style={{ padding: "6px 8px" }}>
+                      <input style={{ ...inp, width: 64 }} type="number" min="0" step="0.5" value={l.pct} disabled={locked || !l.tcg_price}
+                        onChange={(e) => upd(l.key, { pct: e.target.value, unit_price: pctToR(e.target.value, l.tcg_price) })} placeholder="%" />
+                    </td>
+                    <td style={{ padding: "6px 8px" }}>
+                      <input style={{ ...inp, width: 90 }} type="number" min="0" step="0.01" value={l.unit_price} disabled={locked}
+                        onChange={(e) => upd(l.key, { unit_price: e.target.value, pct: rToPct(e.target.value, l.tcg_price) })} placeholder="0.00" />
+                    </td>
                     <td style={{ padding: "6px 8px", fontSize: 12, fontWeight: 700, color: "#fff" }}>{money(lt)}</td>
                     <td style={{ padding: "6px 8px" }}>{!locked && <button style={btnDanger} onClick={() => del(l.key)}>✕</button>}</td>
                   </tr>
