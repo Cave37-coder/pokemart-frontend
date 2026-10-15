@@ -26,13 +26,16 @@ interface BuyLine {
   description: string; set_name: string; card_number: string; variant: string;
   quantity: string; unit_price: string;
   live_stock: number | null;
-  tcg_price: number | null; // current site (TCG-derived) price, R each
+  tcg_price: number | null; // condition-adjusted reference price (base_tcg x condition multiplier), R each
+  base_tcg: number | null;  // NM site price, R each
   pct: string;              // price paid as % of tcg_price (display/entry aid)
   condition: string;        // NM / LP / MP / HP / DMG (non-NM stock goes to the played copy)
   sell_price: string;       // price the card is listed at on the site once completed ("" = leave as is)
   sell_pct: string;         // sell_price as % of tcg_price (entry aid)
 }
 
+// Same multipliers as PokemonProduct.CONDITION_MULTIPLIERS on the backend.
+const COND_MULT: Record<string, number> = { NM: 1, LP: 0.8, MP: 0.6, HP: 0.35, DMG: 0.2 };
 const CONDITIONS: [string, string][] = [
   ["NM", "Near Mint"], ["LP", "Lightly Played"], ["MP", "Moderately Played"], ["HP", "Heavily Played"], ["DMG", "Damaged"],
 ];
@@ -256,11 +259,12 @@ function InvoiceEditor({ initial, onSaved, onCancel }: { initial?: BuyInvoice; o
   const [bulkSellPct, setBulkSellPct] = useState("120");
   const [lines, setLines] = useState<BuyLine[]>(
     (initial?.items || []).map((i) => {
-      const tcg = i.tcg_price ? parseFloat(i.tcg_price) : null;
+      const tcg = i.tcg_price ? parseFloat(i.tcg_price) : null; // already condition-adjusted (server snapshot)
+      const base = tcg ? tcg / (COND_MULT[i.condition || "NM"] || 1) : null;
       return {
         key: newKey(), product_id: i.product_id, description: i.description, set_name: i.set_name,
         card_number: i.card_number, variant: i.variant, quantity: String(i.quantity), unit_price: String(i.unit_price),
-        live_stock: i.live_stock, tcg_price: tcg, pct: rToPct(String(i.unit_price), tcg),
+        live_stock: i.live_stock, tcg_price: tcg, base_tcg: base, pct: rToPct(String(i.unit_price), tcg),
         condition: i.condition || "NM", sell_price: i.sell_price ? String(i.sell_price) : "", sell_pct: i.sell_price ? rToPct(String(i.sell_price), tcg) : "",
       };
     })
@@ -274,7 +278,7 @@ function InvoiceEditor({ initial, onSaved, onCancel }: { initial?: BuyInvoice; o
       key: newKey(), product_id: p.id, description: p.name, set_name: p.set_name,
       card_number: p.card_number ? String(p.card_number) : "", variant: p.variant || "N",
       quantity: "1", unit_price: pctToR(defaultPct, tcg), live_stock: p.stock,
-      tcg_price: tcg, pct: tcg ? defaultPct : "",
+      tcg_price: tcg, base_tcg: tcg, pct: tcg ? defaultPct : "",
       condition: "NM", sell_price: "", sell_pct: "",
     };
   };
@@ -292,13 +296,24 @@ function InvoiceEditor({ initial, onSaved, onCancel }: { initial?: BuyInvoice; o
   lines.forEach((l) => { if (l.product_id) inInvoice[l.product_id] = parseInt(l.quantity) || 0; });
   const addFree = () => setLines((ls) => [...ls, {
     key: newKey(), product_id: null, description: "", set_name: "", card_number: "", variant: "",
-    quantity: "1", unit_price: "", live_stock: null, tcg_price: null, pct: "",
+    quantity: "1", unit_price: "", live_stock: null, tcg_price: null, base_tcg: null, pct: "",
     condition: "NM", sell_price: "", sell_pct: "",
   }]);
   const applyPctToAll = () => setLines((ls) => ls.map((l) =>
     l.product_id && l.tcg_price ? { ...l, pct: defaultPct, unit_price: pctToR(defaultPct, l.tcg_price) } : l));
   const applySellPctToAll = () => setLines((ls) => ls.map((l) =>
     l.product_id && l.tcg_price ? { ...l, sell_pct: bulkSellPct, sell_price: pctToR(bulkSellPct, l.tcg_price) } : l));
+  // Changing condition rescales the reference price (NM x multiplier) and
+  // re-prices the line: buy-in R and sell R keep their % of the new price.
+  const setCondition = (key: string, condition: string) => setLines((ls) => ls.map((l) => {
+    if (l.key !== key) return l;
+    const tcg = l.base_tcg ? Math.round(l.base_tcg * (COND_MULT[condition] ?? 1) * 100) / 100 : null;
+    return {
+      ...l, condition, tcg_price: tcg,
+      unit_price: l.pct && tcg ? pctToR(l.pct, tcg) : l.unit_price,
+      sell_price: l.sell_pct && tcg ? pctToR(l.sell_pct, tcg) : l.sell_price,
+    };
+  }));
   const upd = (key: string, patch: Partial<BuyLine>) => setLines((ls) => ls.map((l) => l.key === key ? { ...l, ...patch } : l));
   const del = (key: string) => setLines((ls) => ls.filter((l) => l.key !== key));
 
@@ -374,7 +389,7 @@ function InvoiceEditor({ initial, onSaved, onCancel }: { initial?: BuyInvoice; o
           <table style={{ width: "100%", borderCollapse: "collapse" }}>
             <thead>
               <tr style={{ borderBottom: "2px solid #2a2a3a" }}>
-                {["Card / description", "Set · # · Var", "Stock now", "Qty", "Site price", "% of price", "Price paid (R each)", "Sell % of price", "Sell price (R)", "Profit / card", "Line total", ""].map((h) => (
+                {["Card / description", "Set · # · Var", "Stock now", "Qty", "Cond. price", "% of price", "Price paid (R each)", "Sell % of price", "Sell price (R)", "Profit / card", "Line total", ""].map((h) => (
                   <th key={h} style={{ textAlign: "left", padding: "6px 8px", fontSize: 10, color: "#888", textTransform: "uppercase" }}>{h}</th>
                 ))}
               </tr>
@@ -392,8 +407,8 @@ function InvoiceEditor({ initial, onSaved, onCancel }: { initial?: BuyInvoice; o
                       {!l.product_id && <div style={{ color: "#e0b050", fontSize: 9 }}>off-catalogue — adds no stock</div>}
                       {l.product_id && (
                         <select style={{ ...inp, padding: "3px 6px", fontSize: 11, marginTop: 4 }} value={l.condition} disabled={locked}
-                          onChange={(e) => upd(l.key, { condition: e.target.value })}>
-                          {CONDITIONS.map(([c, n]) => <option key={c} value={c}>{c} — {n}</option>)}
+                          onChange={(e) => setCondition(l.key, e.target.value)}>
+                          {CONDITIONS.map(([c, n]) => <option key={c} value={c}>{c} — {n} ({Math.round(COND_MULT[c] * 100)}%)</option>)}
                         </select>
                       )}
                     </td>
