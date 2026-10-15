@@ -54,7 +54,7 @@ const rToPct = (r: string, tcg: number | null) => {
 };
 
 interface BuyInvoice {
-  id: number; buy_number: string; status: string; status_display: string; stock_mode: string;
+  id: number; buy_number: string; box_number: number | null; status: string; status_display: string; stock_mode: string;
   seller_name: string; seller_email: string; seller_phone: string; user_username: string | null;
   seller_note: string; internal_note: string;
   payment_made: boolean; payment_method: string; payment_method_display: string;
@@ -252,6 +252,7 @@ function InvoiceEditor({ initial, onSaved, onCancel }: { initial?: BuyInvoice; o
   const [sellerName, setSellerName] = useState(initial?.seller_name || "");
   const [sellerEmail, setSellerEmail] = useState(initial?.seller_email || "");
   const [sellerPhone, setSellerPhone] = useState(initial?.seller_phone || "");
+  const [boxNumber, setBoxNumber] = useState(initial?.box_number ? String(initial.box_number) : "");
   const [sellerNote, setSellerNote] = useState(initial?.seller_note || "");
   const [internalNote, setInternalNote] = useState(initial?.internal_note || "");
   // Default buy-in % applied to each newly added card (editable per line).
@@ -341,6 +342,7 @@ function InvoiceEditor({ initial, onSaved, onCancel }: { initial?: BuyInvoice; o
         seller_name: sellerName, seller_email: sellerEmail, seller_phone: sellerPhone,
         seller_note: sellerNote, internal_note: internalNote,
       };
+      if (boxNumber.trim()) body.box_number = boxNumber.trim(); // blank = keep the auto-assigned box
       if (!locked) {
         body.items = lines.map((l) => ({
           product_id: l.product_id, description: l.description, set_name: l.set_name,
@@ -372,6 +374,7 @@ function InvoiceEditor({ initial, onSaved, onCancel }: { initial?: BuyInvoice; o
         <div style={{ flex: 1, minWidth: 180 }}><label style={lbl}>Seller name *</label><input style={{ ...inp, width: "100%" }} value={sellerName} onChange={(e) => setSellerName(e.target.value)} /></div>
         <div style={{ flex: 1, minWidth: 180 }}><label style={lbl}>Email (for the receipt)</label><input style={{ ...inp, width: "100%" }} value={sellerEmail} onChange={(e) => setSellerEmail(e.target.value)} /></div>
         <div style={{ flex: 1, minWidth: 140 }}><label style={lbl}>Phone</label><input style={{ ...inp, width: "100%" }} value={sellerPhone} onChange={(e) => setSellerPhone(e.target.value)} /></div>
+        <div style={{ width: 120 }}><label style={lbl}>Box #</label><input style={{ ...inp, width: "100%" }} type="number" min="1" value={boxNumber} placeholder={initial ? "" : "Auto"} onChange={(e) => setBoxNumber(e.target.value)} /></div>
       </div>
 
       {locked ? (
@@ -547,7 +550,7 @@ export default function BuyingTab() {
           {STATUS_CHOICES.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
         </select>
         <input style={inp} value={searchInput} onChange={(e) => setSearchInput(e.target.value)}
-          onKeyDown={(e) => { if (e.key === "Enter") { setSearch(searchInput); setPage(1); } }} placeholder="Search seller / BUY-#…" />
+          onKeyDown={(e) => { if (e.key === "Enter") { setSearch(searchInput); setPage(1); } }} placeholder="Search seller / BUY-# / box #…" />
         <button style={btn} onClick={() => { setSearch(searchInput); setPage(1); }}>Search</button>
         {(status || search) && <button style={btn} onClick={() => { setStatus(""); setSearch(""); setSearchInput(""); setPage(1); }}>Clear filters</button>}
       </div>
@@ -573,7 +576,7 @@ export default function BuyingTab() {
           <table style={{ width: "100%", borderCollapse: "collapse" }}>
             <thead>
               <tr style={{ borderBottom: "2px solid #2a2a3a" }}>
-                {["Invoice", "Seller", "Status", "Items", "Total", "Payment", "Date", ""].map((h) => (
+                {["Invoice", "Box", "Seller", "Status", "Items", "Total", "Payment", "Date", ""].map((h) => (
                   <th key={h} style={{ textAlign: "left", padding: "6px 8px", fontSize: 10, color: "#888", textTransform: "uppercase" }}>{h}</th>
                 ))}
               </tr>
@@ -588,6 +591,7 @@ export default function BuyingTab() {
                       <a href={`${API_URL}/admin/orders/buyorder/${inv.id}/change/`} target="_blank" rel="noreferrer" style={{ color: "#ff6b35", fontWeight: 700 }}>{inv.buy_number}</a>
                       {legacy && <div style={{ color: "#666", fontSize: 9 }}>legacy POS</div>}
                     </td>
+                    <td style={{ padding: "8px", fontSize: 13, fontWeight: 700, color: "#fff" }}>{inv.box_number ? `📦 ${inv.box_number}` : "—"}</td>
                     <td style={{ padding: "8px", fontSize: 12, color: "#ddd" }}>
                       {inv.seller_name}{inv.user_username && <span style={{ color: "#4ade80", fontSize: 9, marginLeft: 6 }}>🔗 @{inv.user_username}</span>}
                       <div style={{ color: "#555", fontSize: 10 }}>{inv.seller_email || inv.seller_phone}</div>
