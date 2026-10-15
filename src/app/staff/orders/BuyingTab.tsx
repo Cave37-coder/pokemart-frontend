@@ -32,6 +32,7 @@ interface BuyLine {
   condition: string;        // NM / LP / MP / HP / DMG (non-NM stock goes to the played copy)
   sell_price: string;       // price the card is listed at on the site once completed ("" = leave as is)
   sell_pct: string;         // sell_price as % of tcg_price (entry aid)
+  bulk: boolean;            // priced by the flat bulk rule (N / H / RH below the cut-off), not by %
 }
 
 // Same multipliers as PokemonProduct.CONDITION_MULTIPLIERS on the backend.
@@ -257,6 +258,12 @@ function InvoiceEditor({ initial, onSaved, onCancel }: { initial?: BuyInvoice; o
   const [defaultPct, setDefaultPct] = useState("80");
   // Optional sell % applied to every catalogue line on request (e.g. 120 = 1.2 x site price).
   const [bulkSellPct, setBulkSellPct] = useState("120");
+  // Flat bulk buy-in prices (Michael, 2026-10-15): Normal 40c, Holo / Reverse Holo R1,
+  // only for cards whose site price is under the cut-off. Everything else uses the %.
+  const [bulkOn, setBulkOn] = useState(true);
+  const [bulkN, setBulkN] = useState("0.40");
+  const [bulkH, setBulkH] = useState("1.00");
+  const [bulkCutoff, setBulkCutoff] = useState("10");
   const [lines, setLines] = useState<BuyLine[]>(
     (initial?.items || []).map((i) => {
       const tcg = i.tcg_price ? parseFloat(i.tcg_price) : null; // already condition-adjusted (server snapshot)
@@ -265,7 +272,7 @@ function InvoiceEditor({ initial, onSaved, onCancel }: { initial?: BuyInvoice; o
         key: newKey(), product_id: i.product_id, description: i.description, set_name: i.set_name,
         card_number: i.card_number, variant: i.variant, quantity: String(i.quantity), unit_price: String(i.unit_price),
         live_stock: i.live_stock, tcg_price: tcg, base_tcg: base, pct: rToPct(String(i.unit_price), tcg),
-        condition: i.condition || "NM", sell_price: i.sell_price ? String(i.sell_price) : "", sell_pct: i.sell_price ? rToPct(String(i.sell_price), tcg) : "",
+        condition: i.condition || "NM", sell_price: i.sell_price ? String(i.sell_price) : "", sell_pct: i.sell_price ? rToPct(String(i.sell_price), tcg) : "", bulk: false,
       };
     })
   );
@@ -274,12 +281,17 @@ function InvoiceEditor({ initial, onSaved, onCancel }: { initial?: BuyInvoice; o
 
   const makeLine = (p: BrowseCard): BuyLine => {
     const tcg = p.price > 0 ? p.price : null;
+    const variant = p.variant || "N";
+    const bulkPrice = bulkOn && tcg !== null && tcg < (parseFloat(bulkCutoff) || 0)
+      ? (variant === "N" ? bulkN : variant === "H" || variant === "RH" ? bulkH : "") : "";
+    const bulk = bulkPrice !== "" && !isNaN(parseFloat(bulkPrice));
+    const unit = bulk ? round2(parseFloat(bulkPrice)) : pctToR(defaultPct, tcg);
     return {
       key: newKey(), product_id: p.id, description: p.name, set_name: p.set_name,
-      card_number: p.card_number ? String(p.card_number) : "", variant: p.variant || "N",
-      quantity: "1", unit_price: pctToR(defaultPct, tcg), live_stock: p.stock,
-      tcg_price: tcg, base_tcg: tcg, pct: tcg ? defaultPct : "",
-      condition: "NM", sell_price: "", sell_pct: "",
+      card_number: p.card_number ? String(p.card_number) : "", variant,
+      quantity: "1", unit_price: unit, live_stock: p.stock,
+      tcg_price: tcg, base_tcg: tcg, pct: bulk ? rToPct(unit, tcg) : tcg ? defaultPct : "",
+      condition: "NM", sell_price: "", sell_pct: "", bulk,
     };
   };
   // Adding a card already on the invoice bumps its quantity instead of duplicating it.
@@ -297,10 +309,10 @@ function InvoiceEditor({ initial, onSaved, onCancel }: { initial?: BuyInvoice; o
   const addFree = () => setLines((ls) => [...ls, {
     key: newKey(), product_id: null, description: "", set_name: "", card_number: "", variant: "",
     quantity: "1", unit_price: "", live_stock: null, tcg_price: null, base_tcg: null, pct: "",
-    condition: "NM", sell_price: "", sell_pct: "",
+    condition: "NM", sell_price: "", sell_pct: "", bulk: false,
   }]);
   const applyPctToAll = () => setLines((ls) => ls.map((l) =>
-    l.product_id && l.tcg_price ? { ...l, pct: defaultPct, unit_price: pctToR(defaultPct, l.tcg_price) } : l));
+    l.product_id && l.tcg_price && !l.bulk ? { ...l, pct: defaultPct, unit_price: pctToR(defaultPct, l.tcg_price) } : l));
   const applySellPctToAll = () => setLines((ls) => ls.map((l) =>
     l.product_id && l.tcg_price ? { ...l, sell_pct: bulkSellPct, sell_price: pctToR(bulkSellPct, l.tcg_price) } : l));
   // Changing condition rescales the reference price (NM x multiplier) and
@@ -310,7 +322,8 @@ function InvoiceEditor({ initial, onSaved, onCancel }: { initial?: BuyInvoice; o
     const tcg = l.base_tcg ? Math.round(l.base_tcg * (COND_MULT[condition] ?? 1) * 100) / 100 : null;
     return {
       ...l, condition, tcg_price: tcg,
-      unit_price: l.pct && tcg ? pctToR(l.pct, tcg) : l.unit_price,
+      unit_price: l.bulk ? l.unit_price : l.pct && tcg ? pctToR(l.pct, tcg) : l.unit_price,
+      pct: l.bulk ? rToPct(l.unit_price, tcg) : l.pct,
       sell_price: l.sell_pct && tcg ? pctToR(l.sell_pct, tcg) : l.sell_price,
     };
   }));
@@ -374,6 +387,14 @@ function InvoiceEditor({ initial, onSaved, onCancel }: { initial?: BuyInvoice; o
             % of site price
             <button style={btn} onClick={applyPctToAll}>Apply to all</button>
           </span>
+          <span style={{ fontSize: 11, color: "#888", display: "inline-flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+            <label style={{ display: "inline-flex", alignItems: "center", gap: 4, cursor: "pointer" }}>
+              <input type="checkbox" checked={bulkOn} onChange={(e) => setBulkOn(e.target.checked)} /> Bulk prices
+            </label>
+            N R<input style={{ ...inp, width: 56 }} type="number" min="0" step="0.05" value={bulkN} onChange={(e) => setBulkN(e.target.value)} />
+            H / RH R<input style={{ ...inp, width: 56 }} type="number" min="0" step="0.05" value={bulkH} onChange={(e) => setBulkH(e.target.value)} />
+            if site price under R<input style={{ ...inp, width: 56 }} type="number" min="0" step="1" value={bulkCutoff} onChange={(e) => setBulkCutoff(e.target.value)} />
+          </span>
           <span style={{ fontSize: 11, color: "#888", display: "inline-flex", alignItems: "center", gap: 6 }}>
             Sell at
             <input style={{ ...inp, width: 60 }} type="number" min="0" step="1" value={bulkSellPct} onChange={(e) => setBulkSellPct(e.target.value)} />
@@ -405,6 +426,7 @@ function InvoiceEditor({ initial, onSaved, onCancel }: { initial?: BuyInvoice; o
                           onChange={(e) => upd(l.key, { description: e.target.value })} placeholder="e.g. Bulk lot of commons (no stock added)" />
                       )}
                       {!l.product_id && <div style={{ color: "#e0b050", fontSize: 9 }}>off-catalogue — adds no stock</div>}
+                      {l.bulk && <div style={{ color: "#4ade80", fontSize: 9 }}>bulk price</div>}
                       {l.product_id && (
                         <select style={{ ...inp, padding: "3px 6px", fontSize: 11, marginTop: 4 }} value={l.condition} disabled={locked}
                           onChange={(e) => setCondition(l.key, e.target.value)}>
@@ -418,11 +440,11 @@ function InvoiceEditor({ initial, onSaved, onCancel }: { initial?: BuyInvoice; o
                     <td style={{ padding: "6px 8px", fontSize: 12, color: "#ddd", fontWeight: 600 }}>{l.tcg_price ? money(l.tcg_price) : "—"}</td>
                     <td style={{ padding: "6px 8px" }}>
                       <input style={{ ...inp, width: 64 }} type="number" min="0" step="0.5" value={l.pct} disabled={locked || !l.tcg_price}
-                        onChange={(e) => upd(l.key, { pct: e.target.value, unit_price: pctToR(e.target.value, l.tcg_price) })} placeholder="%" />
+                        onChange={(e) => upd(l.key, { pct: e.target.value, unit_price: pctToR(e.target.value, l.tcg_price), bulk: false })} placeholder="%" />
                     </td>
                     <td style={{ padding: "6px 8px" }}>
                       <input style={{ ...inp, width: 90 }} type="number" min="0" step="0.01" value={l.unit_price} disabled={locked}
-                        onChange={(e) => upd(l.key, { unit_price: e.target.value, pct: rToPct(e.target.value, l.tcg_price) })} placeholder="0.00" />
+                        onChange={(e) => upd(l.key, { unit_price: e.target.value, pct: rToPct(e.target.value, l.tcg_price), bulk: false })} placeholder="0.00" />
                     </td>
                     <td style={{ padding: "6px 8px" }}>
                       <input style={{ ...inp, width: 64 }} type="number" min="0" step="1" value={l.sell_pct} disabled={locked || !l.product_id || !l.tcg_price}
