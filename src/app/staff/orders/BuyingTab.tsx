@@ -28,7 +28,14 @@ interface BuyLine {
   live_stock: number | null;
   tcg_price: number | null; // current site (TCG-derived) price, R each
   pct: string;              // price paid as % of tcg_price (display/entry aid)
+  condition: string;        // NM / LP / MP / HP / DMG (non-NM stock goes to the played copy)
+  sell_price: string;       // price the card is listed at on the site once completed ("" = leave as is)
+  sell_pct: string;         // sell_price as % of tcg_price (entry aid)
 }
+
+const CONDITIONS: [string, string][] = [
+  ["NM", "Near Mint"], ["LP", "Lightly Played"], ["MP", "Moderately Played"], ["HP", "Heavily Played"], ["DMG", "Damaged"],
+];
 
 const round2 = (n: number) => (Math.round(n * 100) / 100).toFixed(2);
 // % of TCG -> R value
@@ -49,7 +56,7 @@ interface BuyInvoice {
   payment_made: boolean; payment_method: string; payment_method_display: string;
   total: string; item_count: number; off_catalogue_units: number;
   created_at: string; completed_at: string | null;
-  items: { id: number; product_id: number | null; description: string; set_name: string; card_number: string; variant: string; quantity: number; unit_price: string; line_total: string; live_stock: number | null; tcg_price?: string | null }[];
+  items: { id: number; product_id: number | null; description: string; set_name: string; card_number: string; variant: string; quantity: number; unit_price: string; line_total: string; live_stock: number | null; tcg_price?: string | null; condition?: string; sell_price?: string | null }[];
 }
 
 interface ApiProduct {
@@ -229,6 +236,13 @@ function CardBrowser({ onAdd, onAddMany, inInvoice }: {
   );
 }
 
+const profitOf = (l: BuyLine) => {
+  const sell = parseFloat(l.sell_price), paid = parseFloat(l.unit_price);
+  return !l.product_id || isNaN(sell) || sell <= 0 ? null : sell - (isNaN(paid) ? 0 : paid);
+};
+const profitText = (l: BuyLine) => { const p = profitOf(l); return p === null ? "—" : `${p >= 0 ? "+" : "-"}${money(Math.abs(p))}`; };
+const profitColor = (l: BuyLine) => { const p = profitOf(l); return p === null ? "#666" : p >= 0 ? "#4ade80" : "#EF4444"; };
+
 function InvoiceEditor({ initial, onSaved, onCancel }: { initial?: BuyInvoice; onSaved: () => void; onCancel: () => void }) {
   const locked = !!initial && initial.status !== "draft"; // paid: lines locked, details editable
   const [sellerName, setSellerName] = useState(initial?.seller_name || "");
@@ -238,6 +252,8 @@ function InvoiceEditor({ initial, onSaved, onCancel }: { initial?: BuyInvoice; o
   const [internalNote, setInternalNote] = useState(initial?.internal_note || "");
   // Default buy-in % applied to each newly added card (editable per line).
   const [defaultPct, setDefaultPct] = useState("80");
+  // Optional sell % applied to every catalogue line on request (e.g. 120 = 1.2 x site price).
+  const [bulkSellPct, setBulkSellPct] = useState("120");
   const [lines, setLines] = useState<BuyLine[]>(
     (initial?.items || []).map((i) => {
       const tcg = i.tcg_price ? parseFloat(i.tcg_price) : null;
@@ -245,6 +261,7 @@ function InvoiceEditor({ initial, onSaved, onCancel }: { initial?: BuyInvoice; o
         key: newKey(), product_id: i.product_id, description: i.description, set_name: i.set_name,
         card_number: i.card_number, variant: i.variant, quantity: String(i.quantity), unit_price: String(i.unit_price),
         live_stock: i.live_stock, tcg_price: tcg, pct: rToPct(String(i.unit_price), tcg),
+        condition: i.condition || "NM", sell_price: i.sell_price ? String(i.sell_price) : "", sell_pct: i.sell_price ? rToPct(String(i.sell_price), tcg) : "",
       };
     })
   );
@@ -258,6 +275,7 @@ function InvoiceEditor({ initial, onSaved, onCancel }: { initial?: BuyInvoice; o
       card_number: p.card_number ? String(p.card_number) : "", variant: p.variant || "N",
       quantity: "1", unit_price: pctToR(defaultPct, tcg), live_stock: p.stock,
       tcg_price: tcg, pct: tcg ? defaultPct : "",
+      condition: "NM", sell_price: "", sell_pct: "",
     };
   };
   // Adding a card already on the invoice bumps its quantity instead of duplicating it.
@@ -275,9 +293,12 @@ function InvoiceEditor({ initial, onSaved, onCancel }: { initial?: BuyInvoice; o
   const addFree = () => setLines((ls) => [...ls, {
     key: newKey(), product_id: null, description: "", set_name: "", card_number: "", variant: "",
     quantity: "1", unit_price: "", live_stock: null, tcg_price: null, pct: "",
+    condition: "NM", sell_price: "", sell_pct: "",
   }]);
   const applyPctToAll = () => setLines((ls) => ls.map((l) =>
     l.product_id && l.tcg_price ? { ...l, pct: defaultPct, unit_price: pctToR(defaultPct, l.tcg_price) } : l));
+  const applySellPctToAll = () => setLines((ls) => ls.map((l) =>
+    l.product_id && l.tcg_price ? { ...l, sell_pct: bulkSellPct, sell_price: pctToR(bulkSellPct, l.tcg_price) } : l));
   const upd = (key: string, patch: Partial<BuyLine>) => setLines((ls) => ls.map((l) => l.key === key ? { ...l, ...patch } : l));
   const del = (key: string) => setLines((ls) => ls.filter((l) => l.key !== key));
 
@@ -296,6 +317,7 @@ function InvoiceEditor({ initial, onSaved, onCancel }: { initial?: BuyInvoice; o
         body.items = lines.map((l) => ({
           product_id: l.product_id, description: l.description, set_name: l.set_name,
           card_number: l.card_number, variant: l.variant, quantity: l.quantity, unit_price: l.unit_price || "0",
+          condition: l.condition, sell_price: l.product_id ? l.sell_price : "",
         }));
       }
       const res = await authFetch(initial ? `/api/orders/admin/buy-invoices/${initial.id}/` : "/api/orders/admin/buy-invoices/", {
@@ -337,6 +359,12 @@ function InvoiceEditor({ initial, onSaved, onCancel }: { initial?: BuyInvoice; o
             % of site price
             <button style={btn} onClick={applyPctToAll}>Apply to all</button>
           </span>
+          <span style={{ fontSize: 11, color: "#888", display: "inline-flex", alignItems: "center", gap: 6 }}>
+            Sell at
+            <input style={{ ...inp, width: 60 }} type="number" min="0" step="1" value={bulkSellPct} onChange={(e) => setBulkSellPct(e.target.value)} />
+            % of site price
+            <button style={btn} onClick={applySellPctToAll}>Apply to all</button>
+          </span>
         </div>
         </>
       )}
@@ -346,7 +374,7 @@ function InvoiceEditor({ initial, onSaved, onCancel }: { initial?: BuyInvoice; o
           <table style={{ width: "100%", borderCollapse: "collapse" }}>
             <thead>
               <tr style={{ borderBottom: "2px solid #2a2a3a" }}>
-                {["Card / description", "Set · # · Var", "Stock now", "Qty", "Site price", "% of price", "Price paid (R each)", "Line total", ""].map((h) => (
+                {["Card / description", "Set · # · Var", "Stock now", "Qty", "Site price", "% of price", "Price paid (R each)", "Sell % of price", "Sell price (R)", "Profit / card", "Line total", ""].map((h) => (
                   <th key={h} style={{ textAlign: "left", padding: "6px 8px", fontSize: 10, color: "#888", textTransform: "uppercase" }}>{h}</th>
                 ))}
               </tr>
@@ -362,6 +390,12 @@ function InvoiceEditor({ initial, onSaved, onCancel }: { initial?: BuyInvoice; o
                           onChange={(e) => upd(l.key, { description: e.target.value })} placeholder="e.g. Bulk lot of commons (no stock added)" />
                       )}
                       {!l.product_id && <div style={{ color: "#e0b050", fontSize: 9 }}>off-catalogue — adds no stock</div>}
+                      {l.product_id && (
+                        <select style={{ ...inp, padding: "3px 6px", fontSize: 11, marginTop: 4 }} value={l.condition} disabled={locked}
+                          onChange={(e) => upd(l.key, { condition: e.target.value })}>
+                          {CONDITIONS.map(([c, n]) => <option key={c} value={c}>{c} — {n}</option>)}
+                        </select>
+                      )}
                     </td>
                     <td style={{ padding: "6px 8px", fontSize: 11, color: "#888" }}>{[l.set_name, l.card_number && `#${l.card_number}`, l.variant].filter(Boolean).join(" · ") || "—"}</td>
                     <td style={{ padding: "6px 8px", fontSize: 11, color: "#888" }}>{l.live_stock ?? "—"}</td>
@@ -375,6 +409,15 @@ function InvoiceEditor({ initial, onSaved, onCancel }: { initial?: BuyInvoice; o
                       <input style={{ ...inp, width: 90 }} type="number" min="0" step="0.01" value={l.unit_price} disabled={locked}
                         onChange={(e) => upd(l.key, { unit_price: e.target.value, pct: rToPct(e.target.value, l.tcg_price) })} placeholder="0.00" />
                     </td>
+                    <td style={{ padding: "6px 8px" }}>
+                      <input style={{ ...inp, width: 64 }} type="number" min="0" step="1" value={l.sell_pct} disabled={locked || !l.product_id || !l.tcg_price}
+                        onChange={(e) => upd(l.key, { sell_pct: e.target.value, sell_price: pctToR(e.target.value, l.tcg_price) })} placeholder="%" />
+                    </td>
+                    <td style={{ padding: "6px 8px" }}>
+                      <input style={{ ...inp, width: 90 }} type="number" min="0" step="0.01" value={l.sell_price} disabled={locked || !l.product_id}
+                        onChange={(e) => upd(l.key, { sell_price: e.target.value, sell_pct: rToPct(e.target.value, l.tcg_price) })} placeholder="keep" />
+                    </td>
+                    <td style={{ padding: "6px 8px", fontSize: 11, color: profitColor(l) }}>{profitText(l)}</td>
                     <td style={{ padding: "6px 8px", fontSize: 12, fontWeight: 700, color: "#fff" }}>{money(lt)}</td>
                     <td style={{ padding: "6px 8px" }}>{!locked && <button style={btnDanger} onClick={() => del(l.key)}>✕</button>}</td>
                   </tr>
@@ -388,6 +431,11 @@ function InvoiceEditor({ initial, onSaved, onCancel }: { initial?: BuyInvoice; o
       <div style={{ fontSize: 12, color: "#a0a0b0" }}>
         {units} item(s) · Total to pay seller: <strong style={{ color: "#fff", fontSize: 14 }}>{money(total)}</strong>
         {offCat > 0 && <span style={{ color: "#e0b050" }}> · {offCat} off-catalogue (no stock added)</span>}
+        {lines.some((l) => l.product_id && parseFloat(l.sell_price) > 0) && (
+          <div style={{ color: "#888", fontSize: 11, marginTop: 4 }}>
+            Lines with a sell price will be listed at that price when you Complete the invoice, and locked so the nightly TCG price sync won&apos;t change it. Lines left blank keep the current site price. Non-NM conditions are added to the played copy of the card.
+          </div>
+        )}
       </div>
 
       <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
@@ -449,7 +497,7 @@ export default function BuyingTab() {
   };
 
   const emailReceipt = (inv: BuyInvoice) => {
-    if (!window.confirm(`Email receipt ${inv.buy_number} to ${inv.seller_email || "the seller"}? This sends a real email immediately.`)) return;
+    if (!window.confirm(`Email the client copy of ${inv.buy_number} to ${inv.seller_email || "the seller"}? This sends a real email immediately.`)) return;
     window.open(`${API_URL}/admin/orders/buyorder/${inv.id}/buy-order-email/`, "_blank");
   };
 
@@ -540,9 +588,10 @@ export default function BuyingTab() {
                         {!legacy && (inv.status === "draft" || inv.status === "paid") && (
                           <button style={btnDanger} disabled={busy} onClick={() => act(inv, "cancel", `Cancel ${inv.buy_number}? No stock will be added.`)}>Cancel</button>
                         )}
-                        <a style={btn} href={`${API_URL}/admin/orders/buyorder/${inv.id}/buy-order-print/`} target="_blank" rel="noreferrer">📄 Receipt</a>
-                        <a style={btn} href={`${API_URL}/admin/orders/buyorder/${inv.id}/buy-order-pdf/`} target="_blank" rel="noreferrer">⬇ PDF</a>
-                        <button style={btn} onClick={() => emailReceipt(inv)}>✉️ Email</button>
+                        <a style={btn} title="Seller's copy: TCG price, rate bought at, price paid" href={`${API_URL}/admin/orders/buyorder/${inv.id}/buy-order-client-print/`} target="_blank" rel="noreferrer">🖨 Client copy</a>
+                        <a style={btn} title="Seller's copy as PDF" href={`${API_URL}/admin/orders/buyorder/${inv.id}/buy-order-client-pdf/`} target="_blank" rel="noreferrer">⬇ Client PDF</a>
+                        <a style={btn} title="Internal: condition, rate, sell-at price" href={`${API_URL}/admin/orders/buyorder/${inv.id}/buy-order-print/`} target="_blank" rel="noreferrer">📋 Stock sheet</a>
+                        <button style={btn} title="Emails the client copy (PDF attached)" onClick={() => emailReceipt(inv)}>✉️ Email client</button>
                       </div>
                     </td>
                   </tr>
