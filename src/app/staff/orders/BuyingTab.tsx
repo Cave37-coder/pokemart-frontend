@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState, useCallback, useRef } from "react";
+import { Fragment, useEffect, useState, useCallback, useRef } from "react";
 import { authFetch, SessionExpiredError } from "@/lib/api";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://pokemart-api-production.up.railway.app";
@@ -53,14 +53,20 @@ const rToPct = (r: string, tcg: number | null) => {
   return tcg && !isNaN(v) ? String(Math.round((v / tcg) * 1000) / 10) : "";
 };
 
+interface Analysis {
+  invoice_total: string; actual_paid: string; difference: string; allocation_factor: string;
+  tcg_total: string; nominal_rate: string | null; effective_rate: string | null;
+  expected_sell_total: string; expected_profit: string | null; expected_margin: string | null;
+}
+
 interface BuyInvoice {
-  id: number; buy_number: string; box_number: number | null; status: string; status_display: string; stock_mode: string;
+  id: number; buy_number: string; box_number: number | null; amount_paid: string | null; cost_applied: boolean; analysis: Analysis; status: string; status_display: string; stock_mode: string;
   seller_name: string; seller_email: string; seller_phone: string; user_username: string | null;
   seller_note: string; internal_note: string;
   payment_made: boolean; payment_method: string; payment_method_display: string;
   total: string; item_count: number; off_catalogue_units: number;
   created_at: string; completed_at: string | null;
-  items: { id: number; product_id: number | null; description: string; set_name: string; card_number: string; variant: string; quantity: number; unit_price: string; line_total: string; live_stock: number | null; tcg_price?: string | null; condition?: string; sell_price?: string | null }[];
+  items: { id: number; product_id: number | null; description: string; set_name: string; card_number: string; variant: string; quantity: number; unit_price: string; line_total: string; live_stock: number | null; tcg_price?: string | null; condition?: string; sell_price?: string | null; effective_unit_cost: string; effective_rate: string | null }[];
 }
 
 interface ApiProduct {
@@ -491,6 +497,195 @@ function InvoiceEditor({ initial, onSaved, onCancel }: { initial?: BuyInvoice; o
   );
 }
 
+// ---- Cost panel: actual amount paid, real cost per card, rates, expected profit ----
+function CostPanel({ inv, onChanged }: { inv: BuyInvoice; onChanged: (msg: string) => void }) {
+  const [paid, setPaid] = useState(inv.amount_paid ?? "");
+  const [target, setTarget] = useState("80");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+  const a = inv.analysis;
+  const diff = parseFloat(a.difference);
+  const run = async (action: string, extra: Record<string, unknown> = {}) => {
+    setBusy(true); setErr("");
+    try {
+      const res = await authFetch(`/api/orders/admin/buy-invoices/${inv.id}/action/`, {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action, ...extra }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) { setErr(body.error || "Failed."); return; }
+      onChanged(`${inv.buy_number}: ${body.message}`);
+    } catch (e) {
+      setErr(e instanceof SessionExpiredError ? "Session expired — please sign in again." : "Request failed.");
+    } finally { setBusy(false); }
+  };
+  const tgt = parseFloat(target) || 0;
+  return (
+    <div style={{ background: "#12121a", border: "1px solid #2a2a3a", borderRadius: 10, padding: 12, margin: "4px 0 10px" }}>
+      <div style={{ display: "flex", gap: 14, flexWrap: "wrap", alignItems: "flex-end", marginBottom: 10 }}>
+        <div><label style={lbl}>Invoice total (line prices)</label><div style={{ color: "#fff", fontWeight: 700 }}>{money(a.invoice_total)}</div></div>
+        <div>
+          <label style={lbl}>Actually paid to seller (R)</label>
+          <div style={{ display: "flex", gap: 6 }}>
+            <input style={{ ...inp, width: 110 }} type="number" min="0" step="0.01" value={paid} placeholder={a.invoice_total} onChange={(e) => setPaid(e.target.value)} />
+            <button style={btnPrimary} disabled={busy} onClick={() => run("set_amount_paid", { amount_paid: paid })}>Save</button>
+          </div>
+        </div>
+        <div><label style={lbl}>Difference</label>
+          <div style={{ color: diff > 0 ? "#4ade80" : diff < 0 ? "#EF4444" : "#888", fontWeight: 700 }}>
+            {diff > 0 ? `saved ${money(diff)}` : diff < 0 ? `paid ${money(-diff)} MORE` : "none"}
+          </div></div>
+        <div><label style={lbl}>Rate of TCG: invoice → actual</label>
+          <div style={{ color: "#fff", fontWeight: 700 }}>{a.nominal_rate ?? "—"}% → {a.effective_rate ?? "—"}%</div></div>
+        <div><label style={lbl}>Expected profit (lines with a sell price)</label>
+          <div style={{ color: "#fff", fontWeight: 700 }}>{a.expected_profit !== null ? `${money(a.expected_profit)} (${a.expected_margin}% margin)` : "—"}</div></div>
+        <div><label style={lbl}>Target rate %</label>
+          <input style={{ ...inp, width: 64 }} type="number" min="0" step="1" value={target} onChange={(e) => setTarget(e.target.value)} /></div>
+      </div>
+      <div style={{ fontSize: 11, color: "#888", marginBottom: 8 }}>
+        Each card&apos;s real cost = its line price × {a.allocation_factor} (actual paid ÷ invoice total). Lines whose real rate is above your target are flagged red — that is where we overpaid.
+      </div>
+      <table style={{ width: "100%", borderCollapse: "collapse" }}>
+        <thead><tr style={{ borderBottom: "1px solid #2a2a3a" }}>
+          {["Card", "Cond", "Qty", "TCG price", "Invoice price", "Real cost", "Real rate", "Sell price", "Profit / card"].map((h) => (
+            <th key={h} style={{ textAlign: "left", padding: "4px 8px", fontSize: 10, color: "#888", textTransform: "uppercase" }}>{h}</th>
+          ))}
+        </tr></thead>
+        <tbody>
+          {inv.items.map((i) => {
+            const rate = i.effective_rate !== null ? parseFloat(i.effective_rate) : null;
+            const over = rate !== null && tgt > 0 && rate > tgt;
+            const sell = i.sell_price ? parseFloat(i.sell_price) : null;
+            const profit = sell !== null ? sell - parseFloat(i.effective_unit_cost) : null;
+            return (
+              <tr key={i.id} style={{ borderBottom: "1px solid #1f1f2b" }}>
+                <td style={{ padding: "4px 8px", fontSize: 11, color: "#ddd" }}>{i.description} <span style={{ color: "#666" }}>{[i.card_number && `#${i.card_number}`, i.variant].filter(Boolean).join(" · ")}</span></td>
+                <td style={{ padding: "4px 8px", fontSize: 11, color: "#888" }}>{i.condition || "NM"}</td>
+                <td style={{ padding: "4px 8px", fontSize: 11, color: "#888" }}>{i.quantity}</td>
+                <td style={{ padding: "4px 8px", fontSize: 11, color: "#888" }}>{i.tcg_price ? money(i.tcg_price) : "—"}</td>
+                <td style={{ padding: "4px 8px", fontSize: 11, color: "#888" }}>{money(i.unit_price)}</td>
+                <td style={{ padding: "4px 8px", fontSize: 11, color: "#fff", fontWeight: 700 }}>{money(i.effective_unit_cost)}</td>
+                <td style={{ padding: "4px 8px", fontSize: 11, fontWeight: 700, color: over ? "#EF4444" : "#4ade80" }}>{rate !== null ? `${rate}%` : "—"}</td>
+                <td style={{ padding: "4px 8px", fontSize: 11, color: "#888" }}>{sell !== null ? money(sell) : "—"}</td>
+                <td style={{ padding: "4px 8px", fontSize: 11, color: profit === null ? "#666" : profit >= 0 ? "#4ade80" : "#EF4444" }}>
+                  {profit === null ? "—" : `${profit >= 0 ? "+" : "-"}${money(Math.abs(profit))}`}
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+      <div style={{ display: "flex", gap: 10, alignItems: "center", marginTop: 10 }}>
+        {inv.status === "complete" && !inv.cost_applied && (
+          <button style={btnGreen} disabled={busy}
+            onClick={() => window.confirm("Record this invoice's cost against the units still in stock? (For invoices completed before cost tracking existed. Can be done once.)") && run("apply_cost")}>
+            📒 Record cost against stock
+          </button>
+        )}
+        {inv.status === "complete" && inv.cost_applied && <span style={{ fontSize: 11, color: "#4ade80" }}>✔ Cost recorded against stock — saving a new amount re-prices it.</span>}
+        {err && <span style={{ color: "#EF4444", fontSize: 12 }}>{err}</span>}
+      </div>
+    </div>
+  );
+}
+
+// ---- Trace a card: where stock came from (invoice / box / real cost) and what it sold for ----
+interface Trace {
+  product: { id: number; name: string; set_name: string; card_number: string; variant: string; condition: string; stock: number; price: string; price_locked: boolean; cost_units: number; avg_cost: string | null; cost_on_hand: string };
+  purchases: { buy_number: string; box_number: number | null; seller: string; date: string; quantity: number; condition: string; invoice_price: string; real_cost: string; sell_price: string | null }[];
+  sales: { source: string; date: string; quantity: number; price: string; unit_cost: string | null }[];
+  sales_summary: { units_costed: number; revenue: string; cost: string; profit: string };
+}
+
+function TracePanel() {
+  const [term, setTerm] = useState("");
+  const [hits, setHits] = useState<BrowseCard[]>([]);
+  const [trace, setTrace] = useState<Trace | null>(null);
+  const [err, setErr] = useState("");
+  useEffect(() => {
+    const q = term.trim();
+    if (q.length < 2) { setHits([]); return; }
+    const t = setTimeout(async () => {
+      try {
+        const res = await authFetch(`/api/orders/admin/buy-invoices/browse/?term=${encodeURIComponent(q)}`);
+        if (res.ok) setHits((await res.json()).results || []);
+      } catch { setHits([]); }
+    }, 300);
+    return () => clearTimeout(t);
+  }, [term]);
+  const load = async (id: number) => {
+    setErr(""); setHits([]); setTerm("");
+    try {
+      const res = await authFetch(`/api/orders/admin/buy-invoices/trace/?product_id=${id}`);
+      if (!res.ok) throw new Error();
+      setTrace(await res.json());
+    } catch { setErr("Could not load the trace."); }
+  };
+  const th = (h: string) => <th key={h} style={{ textAlign: "left", padding: "4px 8px", fontSize: 10, color: "#888", textTransform: "uppercase" }}>{h}</th>;
+  return (
+    <div style={{ ...card, marginBottom: 16 }}>
+      <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", position: "relative" }}>
+        <strong style={{ color: "#fff", fontSize: 13 }}>🔎 Trace a card</strong>
+        <input style={{ ...inp, width: 320 }} value={term} placeholder="Search a card (2+ characters)…" onChange={(e) => setTerm(e.target.value)} />
+        {trace && <button style={btn} onClick={() => setTrace(null)}>Clear</button>}
+        {hits.length > 0 && (
+          <div style={{ position: "absolute", top: "100%", left: 120, zIndex: 30, width: 420, maxHeight: 280, overflowY: "auto", background: "#1a1a24", border: "1px solid #2a2a3a", borderRadius: 8 }}>
+            {hits.map((h) => (
+              <div key={h.id} onClick={() => load(h.id)} style={{ padding: "7px 10px", fontSize: 12, color: "#ddd", cursor: "pointer", borderBottom: "1px solid #2a2a3a" }}>
+                {h.name} <span style={{ color: "#666" }}>{h.set_name} #{h.card_number} · {h.variant || "N"} · stock {h.stock}</span>
+              </div>
+            ))}
+          </div>
+        )}
+        {err && <span style={{ color: "#EF4444", fontSize: 12 }}>{err}</span>}
+      </div>
+      {trace && (
+        <div style={{ marginTop: 12 }}>
+          <div style={{ fontSize: 13, color: "#fff", fontWeight: 700, marginBottom: 4 }}>
+            {trace.product.name} <span style={{ color: "#888", fontWeight: 400 }}>{trace.product.set_name} #{trace.product.card_number} · {trace.product.variant} · {trace.product.condition}</span>
+          </div>
+          <div style={{ fontSize: 12, color: "#a0a0b0", marginBottom: 10 }}>
+            In stock: <b style={{ color: "#fff" }}>{trace.product.stock}</b> · Site price: <b style={{ color: "#fff" }}>{money(trace.product.price)}</b>{trace.product.price_locked ? " 🔒" : ""} ·
+            Average cost: <b style={{ color: "#fff" }}>{trace.product.avg_cost ? money(trace.product.avg_cost) : "unknown"}</b> over {trace.product.cost_units} costed unit(s) ({money(trace.product.cost_on_hand)} on hand)
+          </div>
+          <div style={{ fontSize: 11, color: "#888", marginBottom: 4 }}>PURCHASES (completed buying invoices)</div>
+          {trace.purchases.length === 0 ? <div style={{ fontSize: 12, color: "#555", marginBottom: 10 }}>None recorded.</div> : (
+            <table style={{ width: "100%", borderCollapse: "collapse", marginBottom: 10 }}>
+              <thead><tr>{["Invoice", "Box", "Seller", "Date", "Qty", "Cond", "Invoice price", "Real cost", "Sell price"].map(th)}</tr></thead>
+              <tbody>{trace.purchases.map((p, i) => (
+                <tr key={i} style={{ borderTop: "1px solid #2a2a3a", fontSize: 11, color: "#ddd" }}>
+                  <td style={{ padding: "4px 8px" }}>{p.buy_number}</td><td style={{ padding: "4px 8px" }}>{p.box_number ? `📦 ${p.box_number}` : "—"}</td>
+                  <td style={{ padding: "4px 8px" }}>{p.seller}</td><td style={{ padding: "4px 8px" }}>{dateFmt(p.date)}</td>
+                  <td style={{ padding: "4px 8px" }}>{p.quantity}</td><td style={{ padding: "4px 8px" }}>{p.condition}</td>
+                  <td style={{ padding: "4px 8px" }}>{money(p.invoice_price)}</td><td style={{ padding: "4px 8px", fontWeight: 700 }}>{money(p.real_cost)}</td>
+                  <td style={{ padding: "4px 8px" }}>{p.sell_price ? money(p.sell_price) : "—"}</td>
+                </tr>))}</tbody>
+            </table>
+          )}
+          <div style={{ fontSize: 11, color: "#888", marginBottom: 4 }}>
+            SALES — {trace.sales_summary.units_costed} costed unit(s): revenue {money(trace.sales_summary.revenue)}, cost {money(trace.sales_summary.cost)},
+            profit <b style={{ color: parseFloat(trace.sales_summary.profit) >= 0 ? "#4ade80" : "#EF4444" }}>{money(trace.sales_summary.profit)}</b>
+          </div>
+          {trace.sales.length === 0 ? <div style={{ fontSize: 12, color: "#555" }}>No sales yet.</div> : (
+            <table style={{ width: "100%", borderCollapse: "collapse" }}>
+              <thead><tr>{["Sold on", "Date", "Qty", "Sold at", "Cost", "Profit / card"].map(th)}</tr></thead>
+              <tbody>{trace.sales.map((r, i) => {
+                const pf = r.unit_cost !== null ? parseFloat(r.price) - parseFloat(r.unit_cost) : null;
+                return (
+                  <tr key={i} style={{ borderTop: "1px solid #2a2a3a", fontSize: 11, color: "#ddd" }}>
+                    <td style={{ padding: "4px 8px" }}>{r.source}</td><td style={{ padding: "4px 8px" }}>{dateFmt(r.date)}</td>
+                    <td style={{ padding: "4px 8px" }}>{r.quantity}</td><td style={{ padding: "4px 8px" }}>{money(r.price)}</td>
+                    <td style={{ padding: "4px 8px" }}>{r.unit_cost !== null ? money(r.unit_cost) : "unknown"}</td>
+                    <td style={{ padding: "4px 8px", color: pf === null ? "#666" : pf >= 0 ? "#4ade80" : "#EF4444" }}>{pf === null ? "—" : `${pf >= 0 ? "+" : "-"}${money(Math.abs(pf))}`}</td>
+                  </tr>);
+              })}</tbody>
+            </table>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function BuyingTab() {
   const [data, setData] = useState<Paginated<BuyInvoice> | null>(null);
   const [loading, setLoading] = useState(true);
@@ -503,6 +698,7 @@ export default function BuyingTab() {
   const [editing, setEditing] = useState<BuyInvoice | "new" | null>(null);
   const [busyId, setBusyId] = useState<number | null>(null);
   const [payMethod, setPayMethod] = useState<Record<number, string>>({});
+  const [openCost, setOpenCost] = useState<number | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true); setError("");
@@ -543,6 +739,7 @@ export default function BuyingTab() {
 
   return (
     <div>
+      <TracePanel />
       <div style={{ display: "flex", gap: 10, marginBottom: 16, flexWrap: "wrap", alignItems: "center" }}>
         <button style={btnPrimary} onClick={() => setEditing("new")}>+ New Buying Invoice</button>
         <select style={inp} value={status} onChange={(e) => { setStatus(e.target.value); setPage(1); }}>
@@ -586,7 +783,8 @@ export default function BuyingTab() {
                 const legacy = inv.stock_mode !== "site";
                 const busy = busyId === inv.id;
                 return (
-                  <tr key={inv.id} style={{ borderBottom: "1px solid #2a2a3a", verticalAlign: "top" }}>
+                  <Fragment key={inv.id}>
+                  <tr style={{ borderBottom: "1px solid #2a2a3a", verticalAlign: "top" }}>
                     <td style={{ padding: "8px", fontSize: 12 }}>
                       <a href={`${API_URL}/admin/orders/buyorder/${inv.id}/change/`} target="_blank" rel="noreferrer" style={{ color: "#ff6b35", fontWeight: 700 }}>{inv.buy_number}</a>
                       {legacy && <div style={{ color: "#666", fontSize: 9 }}>legacy POS</div>}
@@ -600,7 +798,12 @@ export default function BuyingTab() {
                     <td style={{ padding: "8px", fontSize: 12, color: "#888" }}>
                       {inv.item_count}{inv.off_catalogue_units > 0 && <div style={{ color: "#e0b050", fontSize: 9 }}>{inv.off_catalogue_units} off-cat.</div>}
                     </td>
-                    <td style={{ padding: "8px", fontSize: 12, fontWeight: 700, color: "#fff" }}>{money(inv.total)}</td>
+                    <td style={{ padding: "8px", fontSize: 12, fontWeight: 700, color: "#fff" }}>
+                      {money(inv.total)}
+                      {inv.amount_paid !== null && parseFloat(inv.amount_paid) !== parseFloat(inv.total) && (
+                        <div style={{ color: "#4ade80", fontSize: 10 }}>paid {money(inv.amount_paid)}</div>
+                      )}
+                    </td>
                     <td style={{ padding: "8px", fontSize: 11, color: inv.payment_made ? "#4ade80" : "#888" }}>
                       {inv.payment_made ? `✅ ${inv.payment_method_display || "Paid"}` : "Unpaid"}
                     </td>
@@ -629,6 +832,9 @@ export default function BuyingTab() {
                         {!legacy && (inv.status === "draft" || inv.status === "paid") && (
                           <button style={btnDanger} disabled={busy} onClick={() => act(inv, "cancel", `Cancel ${inv.buy_number}? No stock will be added.`)}>Cancel</button>
                         )}
+                        {!legacy && inv.status !== "cancelled" && (
+                          <button style={btn} title="Actual amount paid, real cost per card, rates, profit" onClick={() => setOpenCost(openCost === inv.id ? null : inv.id)}>📊 Cost</button>
+                        )}
                         <a style={btn} title="Seller's copy: TCG price, rate bought at, price paid" href={`${API_URL}/admin/orders/buyorder/${inv.id}/buy-order-client-print/`} target="_blank" rel="noreferrer">🖨 Client copy</a>
                         <a style={btn} title="Seller's copy as PDF" href={`${API_URL}/admin/orders/buyorder/${inv.id}/buy-order-client-pdf/`} target="_blank" rel="noreferrer">⬇ Client PDF</a>
                         <a style={btn} title="Internal: condition, rate, sell-at price" href={`${API_URL}/admin/orders/buyorder/${inv.id}/buy-order-print/`} target="_blank" rel="noreferrer">📋 Stock sheet</a>
@@ -636,6 +842,12 @@ export default function BuyingTab() {
                       </div>
                     </td>
                   </tr>
+                  {openCost === inv.id && (
+                    <tr><td colSpan={9} style={{ padding: "0 8px" }}>
+                      <CostPanel inv={inv} onChanged={(m) => { setMsg(m); load(); }} />
+                    </td></tr>
+                  )}
+                  </Fragment>
                 );
               })}
             </tbody>
