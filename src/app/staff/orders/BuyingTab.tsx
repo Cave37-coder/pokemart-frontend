@@ -66,7 +66,7 @@ interface BuyInvoice {
   payment_made: boolean; payment_method: string; payment_method_display: string;
   total: string; item_count: number; off_catalogue_units: number;
   created_at: string; completed_at: string | null;
-  items: { id: number; product_id: number | null; description: string; set_name: string; card_number: string; variant: string; quantity: number; unit_price: string; line_total: string; live_stock: number | null; tcg_price?: string | null; condition?: string; sell_price?: string | null; effective_unit_cost: string; effective_rate: string | null }[];
+  items: { id: number; product_id: number | null; description: string; set_name: string; card_number: string; variant: string; quantity: number; unit_price: string; line_total: string; live_stock: number | null; tcg_price?: string | null; condition?: string; sell_price?: string | null; sell_pct?: string | null; live_price?: string | null; effective_unit_cost: string; effective_rate: string | null }[];
 }
 
 interface ApiProduct {
@@ -479,7 +479,7 @@ function InvoiceEditor({ initial, onSaved, onCancel }: { initial?: BuyInvoice; o
         {offCat > 0 && <span style={{ color: "#e0b050" }}> · {offCat} off-catalogue (no stock added)</span>}
         {lines.some((l) => l.product_id && parseFloat(l.sell_price) > 0) && (
           <div style={{ color: "#888", fontSize: 11, marginTop: 4 }}>
-            Lines with a sell price will be listed at that price when you Complete the invoice, and locked so the nightly TCG price sync won&apos;t change it. Lines left blank keep the current site price. Non-NM conditions are added to the played copy of the card.
+            Lines with a sell price are listed at that price when you Complete the invoice and are then kept at that % of TCG (adjusted for condition) by the nightly price update, so they follow TCG and the exchange rate. Lines left blank keep the normal site price. Non-NM conditions are added to the played copy of the card.
           </div>
         )}
       </div>
@@ -546,7 +546,7 @@ function CostPanel({ inv, onChanged }: { inv: BuyInvoice; onChanged: (msg: strin
       </div>
       <table style={{ width: "100%", borderCollapse: "collapse" }}>
         <thead><tr style={{ borderBottom: "1px solid #2a2a3a" }}>
-          {["Card", "Cond", "Qty", "TCG price", "Invoice price", "Real cost", "Real rate", "Sell price", "Profit / card"].map((h) => (
+          {["Card", "Cond", "Qty", "TCG price", "Invoice price", "Real cost", "Real rate", "Sells at (now)", "Profit / card", "Margin"].map((h) => (
             <th key={h} style={{ textAlign: "left", padding: "4px 8px", fontSize: 10, color: "#888", textTransform: "uppercase" }}>{h}</th>
           ))}
         </tr></thead>
@@ -554,7 +554,8 @@ function CostPanel({ inv, onChanged }: { inv: BuyInvoice; onChanged: (msg: strin
           {inv.items.map((i) => {
             const rate = i.effective_rate !== null ? parseFloat(i.effective_rate) : null;
             const over = rate !== null && tgt > 0 && rate > tgt;
-            const sell = i.sell_price ? parseFloat(i.sell_price) : null;
+            // Completed invoices use the live site price (moves with TCG / exchange rate); drafts use the planned price.
+            const sell = i.sell_price ? parseFloat(inv.status === "complete" && i.live_price ? i.live_price : i.sell_price) : null;
             const profit = sell !== null ? sell - parseFloat(i.effective_unit_cost) : null;
             return (
               <tr key={i.id} style={{ borderBottom: "1px solid #1f1f2b" }}>
@@ -568,6 +569,9 @@ function CostPanel({ inv, onChanged }: { inv: BuyInvoice; onChanged: (msg: strin
                 <td style={{ padding: "4px 8px", fontSize: 11, color: "#888" }}>{sell !== null ? money(sell) : "—"}</td>
                 <td style={{ padding: "4px 8px", fontSize: 11, color: profit === null ? "#666" : profit >= 0 ? "#4ade80" : "#EF4444" }}>
                   {profit === null ? "—" : `${profit >= 0 ? "+" : "-"}${money(Math.abs(profit))}`}
+                </td>
+                <td style={{ padding: "4px 8px", fontSize: 11, color: profit === null ? "#666" : profit >= 0 ? "#4ade80" : "#EF4444" }}>
+                  {profit === null || !sell ? "—" : `${Math.round((profit / sell) * 1000) / 10}%`}
                 </td>
               </tr>
             );
