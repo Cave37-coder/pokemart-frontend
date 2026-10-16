@@ -30,7 +30,8 @@ jobs:
             -H "User-Agent: pokebulk-checklist-regen" \
             --data-binary @src/lib/checklistData.ts \
             https://api.pokebulk.co.za/api/checklist-regen/ \
-            -o /tmp/checklistData.new.ts
+            -o /tmp/checklistData.new.ts \
+            || { echo "--- API response body (first 600 chars) ---"; head -c 600 /tmp/checklistData.new.ts; echo; exit 1; }
           # sanity: must look like the real file before we overwrite it
           grep -q "export const SETS" /tmp/checklistData.new.ts
           grep -q "export const SET_INDEX" /tmp/checklistData.new.ts
