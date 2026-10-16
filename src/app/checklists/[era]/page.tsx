@@ -98,7 +98,7 @@ export default function EraPage() {
       <div style={{ minHeight: '100vh', background: '#12121a', color: '#e0e0e0', padding: '40px 20px', textAlign: 'center' }}>
         <div style={{ fontSize: '14px', color: '#a0a0b0', marginBottom: '14px' }}>Couldn&apos;t find that era.</div>
         <button onClick={() => router.push('/checklists')}
-          style={{ background: '#ff6b35', color: '#fff', border: 'none', padding: '9px 18px', borderRadius: '8px', fontSize: '13px', cursor: 'pointer' }}>← Back to My Collection</button>
+          style={{ background: '#ff6b35', color: '#fff', border: 'none', padding: '9px 18px', borderRadius: '8px', fontSize: '13px', cursor: 'pointer' }}>← Back to My Sets</button>
       </div>
     );
   }

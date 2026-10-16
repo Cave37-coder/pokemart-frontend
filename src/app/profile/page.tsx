@@ -466,7 +466,7 @@ export default function ProfilePage() {
               style={{ width: "18px", height: "18px", cursor: "pointer" }}
             />
             <span style={{ color: "#e0e0e0", fontSize: "13px" }}>
-              Show my collection progress on leaderboards and the Wall of Honour
+              Show my sets progress on leaderboards and the Wall of Honour
             </span>
           </label>
         </div>

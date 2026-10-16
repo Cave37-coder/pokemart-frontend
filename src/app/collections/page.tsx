@@ -22,7 +22,7 @@ export default async function CollectionsPage({ searchParams }: { searchParams: 
     return (
         <div style={{ maxWidth: "1400px", margin: "0 auto", padding: "20px 1.5rem" }}>
             <div style={{ marginBottom: "20px" }}>
-                <div style={{ fontSize: "24px", fontWeight: 700, color: "#fff", marginBottom: "4px" }}>My Collections</div>
+                <div style={{ fontSize: "24px", fontWeight: 700, color: "#fff", marginBottom: "4px" }}>My Pokemon</div>
                 <div style={{ fontSize: "13px", color: "#a0a0b0" }}>
                     Track one Pokémon at a time, start to finish — separate from your Pokédex.
                 </div>

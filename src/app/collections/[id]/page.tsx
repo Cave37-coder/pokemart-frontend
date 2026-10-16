@@ -46,7 +46,7 @@ export default async function SingleCollectionPage({ params }: { params: Promise
         return (
             <div style={{ maxWidth: "680px", margin: "60px auto", padding: "0 1.5rem", textAlign: "center" }}>
                 <div style={{ color: "#EF4444", marginBottom: 16 }}>Invalid Pokédex number.</div>
-                <BackButton fallbackHref="/collections" style={{ color: "#ff6b35" }}>Back to My Collections</BackButton>
+                <BackButton fallbackHref="/collections" style={{ color: "#ff6b35" }}>Back to My Pokemon</BackButton>
             </div>
         );
     }
@@ -60,7 +60,7 @@ export default async function SingleCollectionPage({ params }: { params: Promise
         return (
             <div style={{ maxWidth: "680px", margin: "60px auto", padding: "0 1.5rem", textAlign: "center" }}>
                 <div style={{ color: "#EF4444", marginBottom: 16 }}>Pokémon not found.</div>
-                <BackButton fallbackHref="/collections" style={{ color: "#ff6b35" }}>Back to My Collections</BackButton>
+                <BackButton fallbackHref="/collections" style={{ color: "#ff6b35" }}>Back to My Pokemon</BackButton>
             </div>
         );
     }
@@ -68,7 +68,7 @@ export default async function SingleCollectionPage({ params }: { params: Promise
     return (
         <div style={{ maxWidth: "1400px", margin: "0 auto", padding: "20px 1.5rem" }}>
             <BackButton fallbackHref="/collections" style={{ fontSize: "13px", color: "#a0a0b0", display: "inline-block", marginBottom: "16px" }}>
-                ← Back to My Collections
+                ← Back to My Pokemon
             </BackButton>
 
             <div style={{ display: "flex", alignItems: "center", gap: "18px", marginBottom: "24px", flexWrap: "wrap" }}>
@@ -79,7 +79,7 @@ export default async function SingleCollectionPage({ params }: { params: Promise
                 />
                 <div>
                     <div style={{ fontSize: "12px", color: "#ff6b35", fontWeight: 700, letterSpacing: "0.05em" }}>
-                        #{String(dexId).padStart(3, "0")} · My Collection
+                        #{String(dexId).padStart(3, "0")} · My Pokemon
                     </div>
                     <div style={{ fontSize: "26px", fontWeight: 700, color: "#fff" }}>{name}</div>
                     <div style={{ fontSize: "13px", color: "#a0a0b0" }}>

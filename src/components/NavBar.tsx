@@ -162,7 +162,7 @@ export default function NavBar() {
   const primaryLinks = [
     { href: "/cards", label: "Browse Cards" },
     { href: "/pokedex", label: "Pokédex" },
-    { href: "/checklists", label: "My Collection" },
+    { href: "/checklists", label: "My Sets" },
     { href: "/community", label: "Community" },
   ];
 
@@ -174,7 +174,7 @@ export default function NavBar() {
     // rather than promoted to primaryLinks, matching the 2026-08-17
     // decluttering decision (moreLinks is for links people don't need on
     // every visit).
-    { href: "/collections", label: "My Collections" },
+    { href: "/collections", label: "My Pokemon" },
     { href: "/accessories", label: "Accessories" },
     { href: "/bundles", label: "Bundles" },
     { href: "/sell", label: "Sell Cards" },

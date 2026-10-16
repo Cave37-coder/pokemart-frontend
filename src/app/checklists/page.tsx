@@ -1122,7 +1122,7 @@ function Checklist({ code, sub, onBack }: { code: string; sub?: 'pikachu' | null
         <div style={{ width: '1px', height: '40px', background: '#2a2a3a' }} />
         <div style={{ textAlign: 'center' }}>
           <div style={{ fontSize: '20px', fontWeight: 700, color: '#ff6b35' }}>{fmt(collectionZar)}</div>
-          <div style={{ fontSize: '9px', color: '#555', textTransform: 'uppercase' }}>My collection value</div>
+          <div style={{ fontSize: '9px', color: '#555', textTransform: 'uppercase' }}>My sets value</div>
         </div>
         <div style={{ textAlign: 'center' }}>
           <div style={{ fontSize: '20px', fontWeight: 700, color: '#a0a0b0' }}>{fmt(setTotalZar)}</div>
@@ -1618,7 +1618,7 @@ function ChecklistsPageInner() {
     <div style={{ minHeight: '100vh', background: '#12121a', color: '#e0e0e0' }}>
       <div style={{ maxWidth: '1200px', margin: '0 auto' }}>
         <div style={{ padding: '20px 20px 0' }}>
-          <h1 style={{ fontSize: '22px', fontWeight: 700, color: '#fff', marginBottom: '4px' }}>My Collection</h1>
+          <h1 style={{ fontSize: '22px', fontWeight: 700, color: '#fff', marginBottom: '4px' }}>My Sets</h1>
           <p style={{ fontSize: '13px', color: '#555' }}>Track your collection across all 146 sets. Log in to save your progress to your account.</p>
         </div>
         {!ready ? (
