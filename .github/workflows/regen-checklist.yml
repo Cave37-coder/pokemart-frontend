@@ -1,0 +1,49 @@
+name: Regenerate checklist data
+
+# Nightly (and on demand via the Actions tab > Run workflow): asks the API to
+# rebuild src/lib/checklistData.ts from the live database, and commits it if
+# anything changed -- Vercel then redeploys by itself.
+# Needs the repo secret CHECKLIST_REGEN_TOKEN (same value as the Railway
+# variable of the same name on pokemart-api).
+
+on:
+  schedule:
+    - cron: "30 1 * * *"   # 01:30 UTC = 03:30 Johannesburg
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  regen:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Ask the API for a fresh checklistData.ts
+        env:
+          TOKEN: ${{ secrets.CHECKLIST_REGEN_TOKEN }}
+        run: |
+          curl -sS --fail-with-body --max-time 280 -X POST \
+            -H "X-Regen-Token: $TOKEN" \
+            -H "Content-Type: text/plain" \
+            -H "User-Agent: pokebulk-checklist-regen" \
+            --data-binary @src/lib/checklistData.ts \
+            https://api.pokebulk.co.za/api/checklist-regen/ \
+            -o /tmp/checklistData.new.ts
+          # sanity: must look like the real file before we overwrite it
+          grep -q "export const SETS" /tmp/checklistData.new.ts
+          grep -q "export const SET_INDEX" /tmp/checklistData.new.ts
+          cp /tmp/checklistData.new.ts src/lib/checklistData.ts
+
+      - name: Commit if changed
+        run: |
+          if git diff --quiet -- src/lib/checklistData.ts; then
+            echo "No checklist changes."
+          else
+            git config user.name "checklist-bot"
+            git config user.email "checklist-bot@users.noreply.github.com"
+            git add src/lib/checklistData.ts
+            git commit -m "Auto: regenerate checklistData.ts from live DB"
+            git push
+          fi
