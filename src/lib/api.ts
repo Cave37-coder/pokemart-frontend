@@ -64,6 +64,7 @@ export interface Card {
   price_first_edition: string;
   stock: number;
   in_stock: boolean;
+  price_lock?: boolean;
   tcgplayer_id: string;
   gengar_id: string;
   tcgcsv_product_id: number | null;

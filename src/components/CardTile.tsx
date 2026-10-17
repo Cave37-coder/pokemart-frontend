@@ -271,7 +271,12 @@ export default function CardTile({
                     {card.pokedex_number && <div style={{ fontSize: "9px", color: "#a0a0b0", marginBottom: "1px" }}>#{String(card.pokedex_number).padStart(4, "0")}</div>}
                     <div style={{ fontSize: "10px", color: "#555", marginBottom: "5px" }}>{card.rarity?.replace(/_/g, " ").toUpperCase()}</div>
                     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "6px" }}>
-                        <div style={{ fontWeight: 700, color: isPlayed ? "#fbbf24" : "#ff6b35", fontSize: "14px" }}>R {parseFloat(card.price).toFixed(2)}</div>
+                        <div>
+                            <div style={{ fontWeight: 700, color: isPlayed ? "#fbbf24" : "#ff6b35", fontSize: "14px" }}>R {parseFloat(card.price).toFixed(2)}</div>
+                            {card.price_lock && (
+                                <span title="Price held while our stock lasts" style={{ display: "inline-block", marginTop: 2, fontSize: "9px", fontWeight: 700, color: "#38bdf8", border: "1px solid #38bdf8", borderRadius: 4, padding: "1px 5px" }}>🔒 PRICE LOCK</span>
+                            )}
+                        </div>
                         <WishlistHeartButton productId={card.id} variant="tile" />
                     </div>
                 </div>

@@ -60,7 +60,7 @@ interface Analysis {
 }
 
 interface BuyInvoice {
-  id: number; buy_number: string; box_number: number | null; amount_paid: string | null; cost_applied: boolean; analysis: Analysis; status: string; status_display: string; stock_mode: string;
+  id: number; buy_number: string; box_number: number | null; amount_paid: string | null; cost_applied: boolean; premium_accepted?: boolean; analysis: Analysis; status: string; status_display: string; stock_mode: string;
   seller_name: string; seller_email: string; seller_phone: string; user_username: string | null;
   seller_note: string; internal_note: string;
   payment_made: boolean; payment_method: string; payment_method_display: string;
@@ -505,6 +505,7 @@ function CostPanel({ inv, onChanged }: { inv: BuyInvoice; onChanged: (msg: strin
   const [err, setErr] = useState("");
   const a = inv.analysis;
   const diff = parseFloat(a.difference);
+  const premium = !!inv.premium_accepted;
   const run = async (action: string, extra: Record<string, unknown> = {}) => {
     setBusy(true); setErr("");
     try {
@@ -531,9 +532,15 @@ function CostPanel({ inv, onChanged }: { inv: BuyInvoice; onChanged: (msg: strin
           </div>
         </div>
         <div><label style={lbl}>Difference</label>
-          <div style={{ color: diff > 0 ? "#4ade80" : diff < 0 ? "#EF4444" : "#888", fontWeight: 700 }}>
-            {diff > 0 ? `saved ${money(diff)}` : diff < 0 ? `paid ${money(-diff)} MORE` : "none"}
+          <div style={{ color: diff > 0 ? "#4ade80" : diff < 0 ? (premium ? "#38bdf8" : "#EF4444") : "#888", fontWeight: 700 }}>
+            {diff > 0 ? `saved ${money(diff)}` : diff < 0 ? `paid ${money(-diff)} MORE${inv.premium_accepted ? " (premium accepted)" : ""}` : "none"}
           </div></div>
+        <div><label style={lbl}>Premium accepted</label>
+          <label style={{ display: "flex", gap: 6, alignItems: "center", color: "#ddd", fontSize: 12, cursor: "pointer" }}>
+            <input type="checkbox" checked={!!inv.premium_accepted} disabled={busy}
+              onChange={(e) => run("set_premium", { premium_accepted: e.target.checked })} />
+            Paid extra on purpose (secure supply)
+          </label></div>
         <div><label style={lbl}>Rate of TCG: invoice → actual</label>
           <div style={{ color: "#fff", fontWeight: 700 }}>{a.nominal_rate ?? "—"}% → {a.effective_rate ?? "—"}%</div></div>
         <div><label style={lbl}>Expected profit (lines with a sell price)</label>
@@ -542,7 +549,7 @@ function CostPanel({ inv, onChanged }: { inv: BuyInvoice; onChanged: (msg: strin
           <input style={{ ...inp, width: 64 }} type="number" min="0" step="1" value={target} onChange={(e) => setTarget(e.target.value)} /></div>
       </div>
       <div style={{ fontSize: 11, color: "#888", marginBottom: 8 }}>
-        Each card&apos;s real cost = its line price × {a.allocation_factor} (actual paid ÷ invoice total). Lines whose real rate is above your target are flagged red — that is where we overpaid.
+        Each card&apos;s real cost = its line price × {a.allocation_factor} (actual paid ÷ invoice total). Lines whose real rate is above your target are flagged red — that is where we overpaid{premium ? " (premium accepted: shown in blue instead)" : ""}.
       </div>
       <table style={{ width: "100%", borderCollapse: "collapse" }}>
         <thead><tr style={{ borderBottom: "1px solid #2a2a3a" }}>
@@ -553,7 +560,7 @@ function CostPanel({ inv, onChanged }: { inv: BuyInvoice; onChanged: (msg: strin
         <tbody>
           {inv.items.map((i) => {
             const rate = i.effective_rate !== null ? parseFloat(i.effective_rate) : null;
-            const over = rate !== null && tgt > 0 && rate > tgt;
+            const over = !premium && rate !== null && tgt > 0 && rate > tgt;
             // Completed invoices use the live site price (moves with TCG / exchange rate); drafts use the planned price.
             const sell = i.sell_price ? parseFloat(inv.status === "complete" && i.live_price ? i.live_price : i.sell_price) : null;
             const profit = sell !== null ? sell - parseFloat(i.effective_unit_cost) : null;
@@ -565,7 +572,7 @@ function CostPanel({ inv, onChanged }: { inv: BuyInvoice; onChanged: (msg: strin
                 <td style={{ padding: "4px 8px", fontSize: 11, color: "#888" }}>{i.tcg_price ? money(i.tcg_price) : "—"}</td>
                 <td style={{ padding: "4px 8px", fontSize: 11, color: "#888" }}>{money(i.unit_price)}</td>
                 <td style={{ padding: "4px 8px", fontSize: 11, color: "#fff", fontWeight: 700 }}>{money(i.effective_unit_cost)}</td>
-                <td style={{ padding: "4px 8px", fontSize: 11, fontWeight: 700, color: over ? "#EF4444" : "#4ade80" }}>{rate !== null ? `${rate}%` : "—"}</td>
+                <td style={{ padding: "4px 8px", fontSize: 11, fontWeight: 700, color: over ? "#EF4444" : premium && rate !== null && tgt > 0 && rate > tgt ? "#38bdf8" : "#4ade80" }}>{rate !== null ? `${rate}%` : "—"}</td>
                 <td style={{ padding: "4px 8px", fontSize: 11, color: "#888" }}>{sell !== null ? money(sell) : "—"}</td>
                 <td style={{ padding: "4px 8px", fontSize: 11, color: profit === null ? "#666" : profit >= 0 ? "#4ade80" : "#EF4444" }}>
                   {profit === null ? "—" : `${profit >= 0 ? "+" : "-"}${money(Math.abs(profit))}`}

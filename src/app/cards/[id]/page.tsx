@@ -129,6 +129,11 @@ export default async function CardPage({ params }: { params: Promise<{ id: strin
             <div style={{ fontSize: "36px", fontWeight: 800, color: "#ff6b35", marginBottom: "8px" }}>
               R {parseFloat(card.price).toFixed(2)}
             </div>
+            {card.price_lock && (
+              <div style={{ display: "inline-block", marginBottom: "8px", fontSize: "12px", fontWeight: 700, color: "#38bdf8", border: "1px solid #38bdf8", borderRadius: "6px", padding: "2px 8px" }}>
+                🔒 PRICE LOCK — price held while our current stock lasts
+              </div>
+            )}
             {card.price_holo && parseFloat(card.price_holo) > 0 && (
               <div style={{ color: "#a0a0b0", fontSize: "13px" }}>Holo: R {parseFloat(card.price_holo).toFixed(2)}</div>
             )}
