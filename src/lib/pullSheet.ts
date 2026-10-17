@@ -100,7 +100,7 @@ body { font-family:Arial,sans-serif;font-size:11px;color:#000;padding:14px;line-
 .row.missing .name, .row.missing .chk { color:#c0392b }
 .head-row { display:flex; gap:5px; padding:2px 0; border-bottom:2px solid #ccc; margin-bottom:2px; font-size:${tier.head}px; font-weight:bold; text-transform:uppercase; color:#888 }
 .head-row .num { width:${tier.numW}px; flex-shrink:0 } .head-row .name { flex:1 } .head-row .variant { width:${tier.varW}px; flex-shrink:0; text-align:right } .head-row .chk { width:20px; flex-shrink:0; text-align:right }
-@media print { .no-print { display:none } @page { margin:0; size:A4 landscape } body { padding:10mm !important } }
+@media print { .no-print { display:none } @page { margin:10mm; size:A4 landscape } }
 </style>
 </head><body>
 <div class="no-print" style="margin-bottom:14px">
