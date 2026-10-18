@@ -482,7 +482,7 @@ export default async function CardsPage({ searchParams }: { searchParams: Promis
                 {params.subtype && <input type="hidden" name="subtype" value={params.subtype} />}
                 {params.show_out_of_stock && <input type="hidden" name="show_out_of_stock" value={params.show_out_of_stock} />}
                 {params.pokedex && <input type="hidden" name="pokedex" value={params.pokedex} />}
-                <input name="search" defaultValue={params.search} placeholder="Search name, set, artist..." style={{ background: "#1a1a24", border: "1px solid #2a2a3a", borderRadius: "6px", padding: "8px 14px", color: "#fff", fontSize: "13px", flex: 1, minWidth: "180px" }} />
+                <input name="search" defaultValue={params.search} placeholder="Search name, set, artist, attack, ability, or HP 30..." style={{ background: "#1a1a24", border: "1px solid #2a2a3a", borderRadius: "6px", padding: "8px 14px", color: "#fff", fontSize: "13px", flex: 1, minWidth: "180px" }} />
                 <input name="pokedex" defaultValue={params.pokedex} placeholder="Dex # e.g. 25" style={{ background: "#1a1a24", border: "1px solid #2a2a3a", borderRadius: "6px", padding: "8px 12px", color: "#fff", fontSize: "13px", width: "120px" }} />
                 <select name="rarity" defaultValue={params.rarity || ""} style={{ background: "#1a1a24", border: "1px solid #2a2a3a", borderRadius: "6px", padding: "8px 12px", color: "#fff", fontSize: "13px" }}>
                     {RARITIES.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}
