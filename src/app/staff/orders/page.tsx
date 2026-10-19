@@ -81,7 +81,7 @@ const INVOICE_STATUS_COLOR: Record<string, string> = {
 
 interface AdminOrder {
   id: number; status: string; status_display: string;
-  customer_name: string; customer_email: string;
+  customer_name: string; customer_email: string; customer_phone?: string;
   payment_method: string; payment_method_display: string;
   eft_confirmed: boolean; cash_confirmed: boolean; stripe_payment_intent: string; is_paid: boolean;
   paid_via: string | null;
@@ -381,7 +381,60 @@ function OrderManageRow({ order, onSaved }: { order: AdminOrder; onSaved: () => 
   );
 }
 
+// ---- Quick print: "List of Current Orders" (2026-10-19, Michael: "very simple, so I can
+// track everyday where I am" -- status, card qty, cell number, area). Fetches EVERY open
+// order (all pages, ignores the table's filters), sorted along the status pipeline.
+// The area is the delivery city plus the Pudo locker name -- there's no separate suburb field.
+const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
+function orderArea(o: AdminOrder): string {
+  const parts = [o.delivery_city, o.pudo_locker_name].map((x) => (x || "").trim()).filter(Boolean);
+  if (parts.length) return parts.join(" - ");
+  if (o.delivery_method === "collection" || o.shipping_method === "collection") return "Collection";
+  return (o.delivery_province || "").trim() || "—";
+}
+
+async function printCurrentOrders(): Promise<string> {
+  const all: AdminOrder[] = [];
+  let url: string | null = "/api/orders/admin/?page=1";
+  while (url) {
+    const res: Response = await authFetch(url);
+    if (!res.ok) return "Could not load the orders.";
+    const d: Paginated<AdminOrder> = await res.json();
+    all.push(...d.results);
+    url = d.next ? d.next.replace(/^https?:\/\/[^/]+/, "") : null;
+  }
+  if (all.length === 0) return "There are no current orders.";
+  const rank = (s: string) => { const i = STATUS_CHOICES.findIndex(([k]) => k === s); return i < 0 ? 99 : i; };
+  all.sort((a, b) => rank(a.status) - rank(b.status) || a.id - b.id);
+  const totalCards = all.reduce((n, o) => n + (o.item_count || 0), 0);
+  const stamp = new Date().toLocaleString("en-ZA", { timeZone: "Africa/Johannesburg", dateStyle: "medium", timeStyle: "short" });
+  const rows = all.map((o) => `<tr>
+      <td>#${o.id}</td><td>${esc(o.status_display)}</td>
+      <td style="text-align:center">${o.item_count}</td>
+      <td>${esc(o.customer_phone || "—")}</td><td>${esc(orderArea(o))}</td></tr>`).join("");
+  const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>List of Current Orders</title>
+<style>*{box-sizing:border-box} body{font-family:Arial,sans-serif;font-size:13px;color:#000;padding:16px}
+h1{font-size:18px;margin:0 0 2px} .sub{color:#555;font-size:11px;margin-bottom:10px}
+table{width:100%;border-collapse:collapse} th{background:#eee;text-align:left;padding:5px 8px;font-size:11px;border-bottom:2px solid #999}
+td{padding:5px 8px;border-bottom:1px solid #ddd} tfoot td{font-weight:bold;border-top:2px solid #999;border-bottom:none}
+@media print{.np{display:none} @page{size:A4;margin:10mm}}</style></head><body>
+<button class="np" onclick="window.print()" style="margin-bottom:10px;padding:6px 16px">Print</button>
+<h1>List of Current Orders</h1><div class="sub">${esc(stamp)} · ${all.length} orders · ${totalCards} cards</div>
+<table><thead><tr><th>Order</th><th>Status</th><th style="text-align:center">Card Qty</th><th>Cell Phone</th><th>Location</th></tr></thead>
+<tbody>${rows}</tbody>
+<tfoot><tr><td colspan="2">TOTAL (${all.length} orders)</td><td style="text-align:center">${totalCards}</td><td></td><td></td></tr></tfoot></table>
+</body></html>`;
+  const w = window.open("", "_blank");
+  if (!w) return "Pop-up blocked — allow pop-ups for this site and try again.";
+  w.document.open(); w.document.write(html); w.document.close();
+  w.focus(); setTimeout(() => w.print(), 300);
+  return "";
+}
+
 function OrdersTab() {
+  const [printing, setPrinting] = useState(false);
+  const [printMsg, setPrintMsg] = useState("");
   const [data, setData] = useState<Paginated<AdminOrder> | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -452,7 +505,12 @@ function OrdersTab() {
         {(status || paid || search) && (
           <button style={btn} onClick={() => { setStatus(""); setPaid(""); setSearch(""); setSearchInput(""); setPage(1); }}>Clear filters</button>
         )}
+        <button style={{ ...btn, marginLeft: "auto" }} disabled={printing}
+          onClick={async () => { setPrinting(true); setPrintMsg(""); try { setPrintMsg(await printCurrentOrders()); } catch { setPrintMsg("Could not print — please try again."); } finally { setPrinting(false); } }}>
+          {printing ? "Preparing…" : "🖨 Print current orders"}
+        </button>
       </div>
+      {printMsg && <div style={{ color: "#EF4444", fontSize: 12, marginBottom: 10 }}>{printMsg}</div>}
 
       {error && <div style={{ color: "#EF4444", fontSize: 13, marginBottom: 12 }}>{error}</div>}
       {loading ? (
