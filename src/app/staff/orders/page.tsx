@@ -410,20 +410,22 @@ async function printCurrentOrders(): Promise<string> {
   const totalCards = all.reduce((n, o) => n + (o.item_count || 0), 0);
   const stamp = new Date().toLocaleString("en-ZA", { timeZone: "Africa/Johannesburg", dateStyle: "medium", timeStyle: "short" });
   const rows = all.map((o) => `<tr>
-      <td>#${o.id}</td><td>${esc(o.status_display)}</td>
+      <td>#${o.id}</td><td>${esc(o.customer_name || "—")}</td>
+      <td class="st"><span class="pill" style="background:${STATUS_COLOR[o.status] || "#555"}">${esc((o.status_display || "").replace(/\s*\(.*?\)\s*/g, " ").replace(/^Order /, "").trim())}</span></td>
       <td style="text-align:center">${o.item_count}</td>
       <td>${esc(o.customer_phone || "—")}</td><td>${esc(orderArea(o))}</td></tr>`).join("");
   const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>List of Current Orders</title>
 <style>*{box-sizing:border-box} body{font-family:Arial,sans-serif;font-size:13px;color:#000;padding:16px}
 h1{font-size:18px;margin:0 0 2px} .sub{color:#555;font-size:11px;margin-bottom:10px}
 table{width:100%;border-collapse:collapse} th{background:#eee;text-align:left;padding:5px 8px;font-size:11px;border-bottom:2px solid #999}
-td{padding:5px 8px;border-bottom:1px solid #ddd} tfoot td{font-weight:bold;border-top:2px solid #999;border-bottom:none}
+td{padding:5px 8px;border-bottom:1px solid #ddd} td.st{white-space:nowrap;width:1%} .pill{display:inline-block;color:#fff;font-size:10px;font-weight:bold;padding:2px 8px;border-radius:10px;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+body{-webkit-print-color-adjust:exact;print-color-adjust:exact} tfoot td{font-weight:bold;border-top:2px solid #999;border-bottom:none}
 @media print{.np{display:none} @page{size:A4;margin:10mm}}</style></head><body>
 <button class="np" onclick="window.print()" style="margin-bottom:10px;padding:6px 16px">Print</button>
-<h1>List of Current Orders</h1><div class="sub">${esc(stamp)} · ${all.length} orders · ${totalCards} cards</div>
-<table><thead><tr><th>Order</th><th>Status</th><th style="text-align:center">Card Qty</th><th>Cell Phone</th><th>Location</th></tr></thead>
+<h1>List of Current Orders — ${esc(stamp)}</h1><div class="sub">${all.length} orders · ${totalCards} cards</div>
+<table><thead><tr><th>Order</th><th>Client</th><th style="width:1%">Status</th><th style="text-align:center">Card Qty</th><th>Cell Phone</th><th>Location</th></tr></thead>
 <tbody>${rows}</tbody>
-<tfoot><tr><td colspan="2">TOTAL (${all.length} orders)</td><td style="text-align:center">${totalCards}</td><td></td><td></td></tr></tfoot></table>
+<tfoot><tr><td colspan="3">TOTAL (${all.length} orders)</td><td style="text-align:center">${totalCards}</td><td></td><td></td></tr></tfoot></table>
 </body></html>`;
   const w = window.open("", "_blank");
   if (!w) return "Pop-up blocked — allow pop-ups for this site and try again.";
