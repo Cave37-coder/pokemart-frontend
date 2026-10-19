@@ -405,8 +405,7 @@ async function printCurrentOrders(): Promise<string> {
     url = d.next ? d.next.replace(/^https?:\/\/[^/]+/, "") : null;
   }
   if (all.length === 0) return "There are no current orders.";
-  const rank = (s: string) => { const i = STATUS_CHOICES.findIndex(([k]) => k === s); return i < 0 ? 99 : i; };
-  all.sort((a, b) => rank(a.status) - rank(b.status) || a.id - b.id);
+  all.sort((a, b) => a.id - b.id); // plain order-number order (oldest first)
   const totalCards = all.reduce((n, o) => n + (o.item_count || 0), 0);
   const stamp = new Date().toLocaleString("en-ZA", { timeZone: "Africa/Johannesburg", dateStyle: "medium", timeStyle: "short" });
   const rows = all.map((o) => `<tr>
