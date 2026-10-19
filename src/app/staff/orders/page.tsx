@@ -405,7 +405,7 @@ async function printCurrentOrders(): Promise<string> {
     url = d.next ? d.next.replace(/^https?:\/\/[^/]+/, "") : null;
   }
   if (all.length === 0) return "There are no current orders.";
-  all.sort((a, b) => a.id - b.id); // plain order-number order (oldest first)
+  all.sort((a, b) => b.id - a.id); // plain order-number order (newest first)
   const totalCards = all.reduce((n, o) => n + (o.item_count || 0), 0);
   const stamp = new Date().toLocaleString("en-ZA", { timeZone: "Africa/Johannesburg", dateStyle: "medium", timeStyle: "short" });
   const rows = all.map((o) => `<tr>
