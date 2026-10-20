@@ -183,6 +183,7 @@ export default function NavBar() {
     // domain (2026-08-17, Michael: "add to pokebulk.co.za, even add a page
     // or link, whichever is easiest and cleanest").
     { href: "https://safety.pokebulk.co.za", label: "Poke Guardian", external: true },
+    { href: "/condition", label: "Condition Guide" },
     { href: "/about", label: "About" },
   ];
 
