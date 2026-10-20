@@ -101,6 +101,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     { url: `${SITE_URL}/decklist`, changeFrequency: "weekly", priority: 0.5 },
     { url: `${SITE_URL}/sell`, changeFrequency: "weekly", priority: 0.5 },
     { url: `${SITE_URL}/condition`, changeFrequency: "monthly", priority: 0.4 },
+    { url: `${SITE_URL}/fake-cards`, changeFrequency: "monthly", priority: 0.4 },
     { url: `${SITE_URL}/about`, changeFrequency: "monthly", priority: 0.3 },
   ];
 

@@ -184,6 +184,7 @@ export default function NavBar() {
     // or link, whichever is easiest and cleanest").
     { href: "https://safety.pokebulk.co.za", label: "Poke Guardian", external: true },
     { href: "/condition", label: "Condition Guide" },
+    { href: "/fake-cards", label: "Spot Fakes" },
     { href: "/about", label: "About" },
   ];
 
