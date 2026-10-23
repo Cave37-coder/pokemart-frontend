@@ -23,6 +23,7 @@ interface Order {
   delivery_city: string; delivery_province: string; delivery_postal_code: string;
   waybill_number: string; courier_name: string; courier_tracking_url: string;
   customer_note: string; created_at: string;
+  payment_method?: string;
 }
 
 const STEPS = [
@@ -204,6 +205,41 @@ export default function OrderDetailPage() {
             Please make your EFT payment using the details below. Use <strong style={{ color:"#fff" }}>Order #{order.id}</strong> as your reference.
           </div>
           <div style={{ background:"#12121a", borderRadius:8, padding:14 }}>
+            {[
+              ["Account Name", EFT_DETAILS.name],
+              ["Bank", EFT_DETAILS.bank],
+              ["Account Type", EFT_DETAILS.type],
+              ["Account Number", EFT_DETAILS.acc],
+              ["Branch Code", EFT_DETAILS.branch],
+              ["Reference", `Order #${order.id}`],
+            ].map(([lbl, val]) => (
+              <div key={lbl} style={{ display:"flex", justifyContent:"space-between", fontSize:13, marginBottom:8 }}>
+                <span style={{ color:"#a0a0b0" }}>{lbl}</span>
+                <span style={{ color:"#fff", fontWeight: lbl === "Account Number" || lbl === "Reference" ? 700 : 400 }}>{val}</span>
+              </div>
+            ))}
+          </div>
+          <div style={{ marginTop:10, fontSize:12, color:"#a0a0b0", textAlign:"center" }}>
+            Send proof of payment to <strong style={{ color:"#fff" }}>enquiries@pokebulk.co.za</strong>
+          </div>
+        </div>
+      )}
+
+      {/* 2026-10-23 (Michael): banking details on EFT and Collection orders too, so
+          customers can always find them. Skipped while the amber "Awaiting EFT
+          Payment" block above is already showing them, and once the order is
+          complete or cancelled. */}
+      {(order.payment_method === "eft" || order.payment_method === "coc") &&
+        !(paymentResult === "eft" || order.status === "pending_eft") &&
+        order.status !== "invoiced" && order.status !== "cancelled" && (
+        <div style={{ background:"#12121a", border:"1px solid #2a2a3a", borderRadius:12, padding:"16px 20px", marginBottom:16 }}>
+          <div style={{ fontSize:15, fontWeight:700, color:"#fff", marginBottom:6, textAlign:"center" }}>Banking Details</div>
+          <div style={{ color:"#a0a0b0", fontSize:12, marginBottom:12, textAlign:"center" }}>
+            {order.payment_method === "coc"
+              ? "Paying by cash on collection? Nothing to do. Prefer to pay by EFT instead? Use these details and your order number as the reference."
+              : "Use these details and your order number as the reference."}
+          </div>
+          <div style={{ background:"#0e0e16", borderRadius:8, padding:14 }}>
             {[
               ["Account Name", EFT_DETAILS.name],
               ["Bank", EFT_DETAILS.bank],
