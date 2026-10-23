@@ -31,7 +31,7 @@ const STEPS = [
   { key:"packed",    label:"Order being packed" },
   { key:"booked",    label:"Courier booked" },
   { key:"ready",     label:"Ready for collection" },
-  { key:"collected", label:"Deposited at locker/Postnet" },
+  { key:"collected", label:"Deposited at Pudo Locker" },
   { key:"invoiced",  label:"Complete" },
 ];
 

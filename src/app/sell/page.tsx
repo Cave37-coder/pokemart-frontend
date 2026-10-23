@@ -29,7 +29,7 @@ const steps = [
   { n: "1", title: "Sort (if you want)", desc: "Separate by type if possible — Commons / Holos / EX's. Or don't, we can handle it." },
   { n: "2", title: "Contact Us First", desc: "Send us a message via the contact page or WhatsApp before sending anything — we'll confirm whether we're currently buying and how much we can take in." },
   { n: "3", title: "Get a Quote", desc: "We'll confirm current rates and how many cards we can take in right now." },
-  { n: "4", title: "Send or Drop Off", desc: "Ship via PostNet or Pudo, or drop off locally in Kempton Park." },
+  { n: "4", title: "Send or Drop Off", desc: "Ship via Pudo, or drop off locally in Kempton Park." },
   { n: "5", title: "Get Paid", desc: "Choose cash (EFT) or Site Credit — credit gives you even better trade value!" },
 ];
 
