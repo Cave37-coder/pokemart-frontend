@@ -30,7 +30,7 @@ const STEPS = [
   { key:"pending",   label:"Order confirmed" },
   { key:"printed",   label:"Order printed" },
   { key:"packed",    label:"Order being packed" },
-  { key:"booked",    label:"Courier booked" },
+  { key:"booked",    label:"Courier being booked" },
   { key:"ready",     label:"Ready for collection" },
   { key:"collected", label:"Deposited at Pudo Locker" },
   { key:"invoiced",  label:"Complete" },

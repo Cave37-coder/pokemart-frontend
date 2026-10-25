@@ -24,7 +24,7 @@ const STATUS_CHOICES: [string, string][] = [
   ["pending_eft", "Awaiting EFT Payment"],
   ["printed", "Order Printed"],
   ["packed", "Order Being Packed"],
-  ["booked", "Courier Booked"],
+  ["booked", "Courier Being Booked"],
   ["ready", "Ready for Collection"],
   ["collected", "Deposited at Pudo Locker"],
   ["invoiced", "Complete"],
