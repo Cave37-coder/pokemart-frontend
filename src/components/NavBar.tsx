@@ -13,7 +13,10 @@ const FOIL_STRIPE = ["#E24B4A", "#ff6b35", "#EF9F27", "#1D9E75", "#378ADD", "#7F
 // the Staff dropdown was missing the Store Overview link that used to sit
 // on the Orders page header (it still does, this just also surfaces it in
 // the dropdown itself so it's not the only way in).
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://pokemart-api-production.up.railway.app";
+// 2026-10-25: staff tools that use the Django admin login must open on api.pokebulk.co.za.
+// On the railway.app address the login fails (CSRF_COOKIE_DOMAIN is ".pokebulk.co.za", so
+// the browser drops the cookie -- most visible on phones). Override with NEXT_PUBLIC_ADMIN_URL.
+const ADMIN_URL = process.env.NEXT_PUBLIC_ADMIN_URL || "https://api.pokebulk.co.za";
 
 function FoilUnderline() {
   return (
@@ -201,24 +204,34 @@ export default function NavBar() {
       ],
     },
     {
+      title: "Invoicing",
+      links: [
+        { href: `${ADMIN_URL}/admin/orders/manualinvoice/pos/`, label: "New Manual Invoice", icon: "🧾", external: true },
+        { href: `${ADMIN_URL}/admin/orders/manualinvoice/`, label: "Manual Invoices", icon: "📄", external: true },
+        { href: `${ADMIN_URL}/admin/orders/buyorder/`, label: "Buy Orders", icon: "🛒", external: true },
+      ],
+    },
+    {
       title: "Inventory Tools",
       links: [
-        { href: `${API_URL}/api/stock/entry/`, label: "Stock Entry", icon: "📥", external: true },
-        { href: `${API_URL}/api/stock/bundles/`, label: "Bundle Stock Entry", icon: "🎴", external: true },
-        { href: `${API_URL}/api/manage/`, label: "Manage Set", icon: "🗂️", external: true },
+        { href: `${ADMIN_URL}/api/stock/entry/`, label: "Stock Entry", icon: "📥", external: true },
+        { href: `${ADMIN_URL}/api/stock/bundles/`, label: "Bundle Stock Entry", icon: "🎴", external: true },
+        { href: `${ADMIN_URL}/api/manage/`, label: "Manage Set", icon: "🗂️", external: true },
+        { href: `${ADMIN_URL}/admin/products/pokemonproduct/`, label: "Pokémon Products", icon: "🃏", external: true },
+        { href: `${ADMIN_URL}/admin/checklist-regen/`, label: "Checklist Regen", icon: "♻️", external: true },
       ],
     },
     {
       title: "Analytics",
       links: [
-        { href: `${API_URL}/admin/analytics-dashboard/`, label: "Analytics Dashboard", icon: "📈", external: true },
-        { href: `${API_URL}/admin/store-overview/`, label: "Store Overview", icon: "📊", external: true },
+        { href: `${ADMIN_URL}/admin/analytics-dashboard/`, label: "Analytics Dashboard", icon: "📈", external: true },
+        { href: `${ADMIN_URL}/admin/store-overview/`, label: "Store Overview", icon: "📊", external: true },
       ],
     },
     {
       title: "Backend",
       links: [
-        { href: `${API_URL}/admin/`, label: "Django Admin", icon: "⚙️", external: true },
+        { href: `${ADMIN_URL}/admin/`, label: "Django Admin", icon: "⚙️", external: true },
       ],
     },
   ];
