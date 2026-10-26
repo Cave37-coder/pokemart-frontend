@@ -23,6 +23,8 @@ const STATUS_COLOR: Record<string, string> = {
 interface BuyLine {
   key: string;
   product_id: number | null;
+  accessory_id: number | null; // accessory / sealed line (2026-10-26) -- never set together with product_id
+  image_url: string | null;
   description: string; set_name: string; card_number: string; variant: string;
   quantity: string; unit_price: string;
   live_stock: number | null;
@@ -66,7 +68,7 @@ interface BuyInvoice {
   payment_made: boolean; payment_method: string; payment_method_display: string;
   total: string; item_count: number; off_catalogue_units: number;
   created_at: string; completed_at: string | null;
-  items: { id: number; product_id: number | null; description: string; set_name: string; card_number: string; variant: string; quantity: number; unit_price: string; line_total: string; live_stock: number | null; tcg_price?: string | null; condition?: string; sell_price?: string | null; sell_pct?: string | null; live_price?: string | null; effective_unit_cost: string; effective_rate: string | null }[];
+  items: { id: number; product_id: number | null; accessory_id?: number | null; image_url?: string | null; description: string; set_name: string; card_number: string; variant: string; quantity: number; unit_price: string; line_total: string; live_stock: number | null; tcg_price?: string | null; condition?: string; sell_price?: string | null; sell_pct?: string | null; live_price?: string | null; effective_unit_cost: string; effective_rate: string | null }[];
 }
 
 interface ApiProduct {
@@ -246,9 +248,146 @@ function CardBrowser({ onAdd, onAddMany, inInvoice }: {
   );
 }
 
+// ---- Accessories & sealed browser (2026-10-26) ----
+// Michael: "Can we add a Buy-in sheet for Accessories? Also need to be able to
+// [buy in] other products too, how would we add images?" Searches the
+// Accessory catalogue (sync_accessories imports the Pokemon TCGCSV accessory
+// catalogue at stock 0, so most things are already there). Anything missing
+// is added with "+ New product" -- give its TCGplayer product ID and the
+// image is copied from TCGplayer to R2 automatically.
+// Data: GET /api/orders/admin/buy-invoices/accessories/, POST .../accessories/new/
+interface BrowseAccessory {
+  id: number; sku: string; name: string; category: string; category_display: string;
+  manufacturer: string; price: number; stock: number; image_url: string;
+  barcode: string; tcgcsv_product_id: number | null;
+}
+const ACC_CATEGORIES: [string, string][] = [
+  ["playmats", "Playmats"], ["sleeves", "Card Sleeves"], ["deck_boxes", "Deck Boxes"],
+  ["storage_tins", "Card Storage Tins"], ["storage_albums", "Storage Albums"], ["protective_pages", "Protective Pages"],
+  ["collectible_storage", "Collectible Storage"], ["life_counters", "Life Counters"], ["supply_bundles", "Supply Bundles"],
+  ["supplies", "Supplies"], ["sealed", "Sealed Product"], ["other", "Other"],
+];
+
+function AccessoryBrowser({ onAdd, inInvoice }: { onAdd: (a: BrowseAccessory) => void; inInvoice: Record<number, number> }) {
+  const [category, setCategory] = useState("");
+  const [term, setTerm] = useState("");
+  const [results, setResults] = useState<BrowseAccessory[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [err, setErr] = useState("");
+  const [reload, setReload] = useState(0);
+  // "+ New product" form
+  const [showNew, setShowNew] = useState(false);
+  const [nName, setNName] = useState("");
+  const [nCat, setNCat] = useState("sealed");
+  const [nPrice, setNPrice] = useState("");
+  const [nTid, setNTid] = useState("");
+  const [nImg, setNImg] = useState("");
+  const [nMfr, setNMfr] = useState("");
+  const [nBusy, setNBusy] = useState(false);
+  const [nMsg, setNMsg] = useState("");
+
+  useEffect(() => {
+    const q = term.trim();
+    if (!category && q.length < 2) { setResults([]); setErr(""); return; }
+    const t = setTimeout(async () => {
+      setLoading(true); setErr("");
+      try {
+        const qs = new URLSearchParams();
+        if (q) qs.set("term", q);
+        if (category) qs.set("category", category);
+        const res = await authFetch(`/api/orders/admin/buy-invoices/accessories/?${qs}`);
+        if (!res.ok) throw new Error();
+        setResults((await res.json()).results || []);
+      } catch (e) {
+        setErr(e instanceof SessionExpiredError ? "Session expired — please sign in again." : "Could not load products.");
+        setResults([]);
+      } finally { setLoading(false); }
+    }, 300);
+    return () => clearTimeout(t);
+  }, [category, term, reload]);
+
+  const createNew = async () => {
+    setNBusy(true); setNMsg("");
+    try {
+      const res = await authFetch("/api/orders/admin/buy-invoices/accessories/new/", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: nName, category: nCat, price: nPrice, tcgcsv_product_id: nTid, image_url: nImg, manufacturer: nMfr }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) { setNMsg(data.error || "Could not add the product."); return; }
+      onAdd(data.result);
+      setNMsg(data.message || "Added.");
+      setNName(""); setNPrice(""); setNTid(""); setNImg(""); setNMfr("");
+      setShowNew(false); setReload((n) => n + 1);
+    } catch (e) {
+      setNMsg(e instanceof SessionExpiredError ? "Session expired — please sign in again." : "Failed — check your connection.");
+    } finally { setNBusy(false); }
+  };
+
+  return (
+    <div style={{ background: "#12121a", border: "1px solid #2a2a3a", borderRadius: 10, padding: 12 }}>
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
+        <select style={{ ...inp, flex: 1, minWidth: 170 }} value={category} onChange={(e) => setCategory(e.target.value)}>
+          <option value="">All categories (search)</option>
+          {ACC_CATEGORIES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+        </select>
+        <input style={{ ...inp, flex: 2, minWidth: 220 }} value={term} onChange={(e) => setTerm(e.target.value)}
+          placeholder="Search playmats, sleeves, ETBs… by name, SKU, barcode or TCGplayer ID" />
+        <button style={btn} onClick={() => setShowNew((v) => !v)}>{showNew ? "Close new product" : "+ New product"}</button>
+      </div>
+
+      {showNew && (
+        <div style={{ background: "#1a1a24", border: "1px solid #2a2a3a", borderRadius: 8, padding: 10, marginBottom: 10, display: "flex", flexWrap: "wrap", gap: 8, alignItems: "flex-end" }}>
+          <div style={{ flex: 2, minWidth: 220 }}><label style={lbl}>Name *</label><input style={{ ...inp, width: "100%" }} value={nName} onChange={(e) => setNName(e.target.value)} placeholder="e.g. Prismatic Evolutions Super-Premium Collection Playmat" /></div>
+          <div style={{ width: 160 }}><label style={lbl}>Category</label>
+            <select style={{ ...inp, width: "100%" }} value={nCat} onChange={(e) => setNCat(e.target.value)}>
+              {ACC_CATEGORIES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+            </select></div>
+          <div style={{ width: 110 }}><label style={lbl}>Site sell price (R)</label><input style={{ ...inp, width: "100%" }} type="number" min="0" step="0.5" value={nPrice} onChange={(e) => setNPrice(e.target.value)} /></div>
+          <div style={{ width: 130 }}><label style={lbl}>TCGplayer product ID</label><input style={{ ...inp, width: "100%" }} value={nTid} onChange={(e) => setNTid(e.target.value)} placeholder="for the image" /></div>
+          <div style={{ flex: 1, minWidth: 180 }}><label style={lbl}>…or image URL</label><input style={{ ...inp, width: "100%" }} value={nImg} onChange={(e) => setNImg(e.target.value)} placeholder="https://…" /></div>
+          <div style={{ width: 140 }}><label style={lbl}>Manufacturer</label><input style={{ ...inp, width: "100%" }} value={nMfr} onChange={(e) => setNMfr(e.target.value)} placeholder="Pokémon" /></div>
+          <button style={btnPrimary} onClick={createNew} disabled={nBusy || !nName.trim()}>{nBusy ? "Adding…" : "Add & put on invoice"}</button>
+          <div style={{ width: "100%", fontSize: 10, color: "#888" }}>
+            The image is copied to images.pokebulk.co.za (R2). Starts with 0 stock — stock is added when you Complete the invoice. You can upload your own photo later in Django admin → Accessories.
+          </div>
+        </div>
+      )}
+
+      <div style={{ fontSize: 11, color: "#888", marginBottom: 8, minHeight: 16 }}>
+        {loading ? "Loading…" : err ? <span style={{ color: "#EF4444" }}>{err}</span> : nMsg ? <span style={{ color: "#4ade80" }}>{nMsg}</span>
+          : results.length ? `${results.length} product(s) shown` : "Pick a category or type to search. Not listed? Use + New product."}
+      </div>
+      <div style={{ maxHeight: 360, overflowY: "auto", display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(190px, 1fr))", gap: 8, alignContent: "start" }}>
+        {results.map((a) => {
+          const qty = inInvoice[a.id] || 0;
+          return (
+            <div key={a.id} style={{ background: "#1a1a24", border: `1px solid ${qty ? "#2fbf71" : "#2a2a3a"}`, borderRadius: 8, padding: 8, display: "flex", flexDirection: "column", gap: 4 }}>
+              <div style={{ height: 80, display: "flex", alignItems: "center", justifyContent: "center", background: "#12121a", borderRadius: 6 }}>
+                {a.image_url ? <img src={a.image_url} alt="" style={{ maxHeight: 76, maxWidth: "100%", objectFit: "contain" }} /> : <span style={{ fontSize: 10, color: "#555" }}>no image</span>}
+              </div>
+              <div style={{ fontSize: 12, fontWeight: 700, color: "#fff" }}>{a.name}</div>
+              <div style={{ fontSize: 10, color: "#888" }}>{[a.category_display, a.sku].filter(Boolean).join(" · ")}</div>
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11 }}>
+                <span style={{ color: "#ff6b35", fontWeight: 700 }}>{a.price > 0 ? money(a.price) : "no price"}</span>
+                <span style={{ color: a.stock > 0 ? "#4ade80" : "#666" }}>stock {a.stock}</span>
+              </div>
+              <button style={{ ...btnPrimary, width: "100%" }} onClick={() => onAdd(a)}>
+                {qty ? `+ Add another (${qty} on invoice)` : "+ Add"}
+              </button>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+const isCatalogue = (l: BuyLine) => !!(l.product_id || l.accessory_id);
+
 const profitOf = (l: BuyLine) => {
   const sell = parseFloat(l.sell_price), paid = parseFloat(l.unit_price);
-  return !l.product_id || isNaN(sell) || sell <= 0 ? null : sell - (isNaN(paid) ? 0 : paid);
+  return !isCatalogue(l) || isNaN(sell) || sell <= 0 ? null : sell - (isNaN(paid) ? 0 : paid);
 };
 const profitText = (l: BuyLine) => { const p = profitOf(l); return p === null ? "—" : `${p >= 0 ? "+" : "-"}${money(Math.abs(p))}`; };
 const profitColor = (l: BuyLine) => { const p = profitOf(l); return p === null ? "#666" : p >= 0 ? "#4ade80" : "#EF4444"; };
@@ -276,7 +415,8 @@ function InvoiceEditor({ initial, onSaved, onCancel }: { initial?: BuyInvoice; o
       const tcg = i.tcg_price ? parseFloat(i.tcg_price) : null; // already condition-adjusted (server snapshot)
       const base = tcg ? tcg / (COND_MULT[i.condition || "NM"] || 1) : null;
       return {
-        key: newKey(), product_id: i.product_id, description: i.description, set_name: i.set_name,
+        key: newKey(), product_id: i.product_id, accessory_id: i.accessory_id ?? null, image_url: i.image_url ?? null,
+        description: i.description, set_name: i.set_name,
         card_number: i.card_number, variant: i.variant, quantity: String(i.quantity), unit_price: String(i.unit_price),
         live_stock: i.live_stock, tcg_price: tcg, base_tcg: base, pct: rToPct(String(i.unit_price), tcg),
         condition: i.condition || "NM", sell_price: i.sell_price ? String(i.sell_price) : "", sell_pct: i.sell_price ? rToPct(String(i.sell_price), tcg) : "", bulk: false,
@@ -285,6 +425,7 @@ function InvoiceEditor({ initial, onSaved, onCancel }: { initial?: BuyInvoice; o
   );
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [browseMode, setBrowseMode] = useState<"cards" | "accessories">("cards");
 
   const makeLine = (p: BrowseCard): BuyLine => {
     const tcg = p.price > 0 ? p.price : null;
@@ -294,7 +435,7 @@ function InvoiceEditor({ initial, onSaved, onCancel }: { initial?: BuyInvoice; o
     const bulk = bulkPrice !== "" && !isNaN(parseFloat(bulkPrice));
     const unit = bulk ? round2(parseFloat(bulkPrice)) : pctToR(defaultPct, tcg);
     return {
-      key: newKey(), product_id: p.id, description: p.name, set_name: p.set_name,
+      key: newKey(), product_id: p.id, accessory_id: null, image_url: null, description: p.name, set_name: p.set_name,
       card_number: p.card_number ? String(p.card_number) : "", variant,
       quantity: "1", unit_price: unit, live_stock: p.stock,
       tcg_price: tcg, base_tcg: tcg, pct: bulk ? rToPct(unit, tcg) : tcg ? defaultPct : "",
@@ -313,15 +454,34 @@ function InvoiceEditor({ initial, onSaved, onCancel }: { initial?: BuyInvoice; o
   });
   const inInvoice: Record<number, number> = {};
   lines.forEach((l) => { if (l.product_id) inInvoice[l.product_id] = parseInt(l.quantity) || 0; });
+  // Accessory lines: reference price = current site price; buy-in at the
+  // default %; sell price left blank = keep the site price.
+  const makeAccLine = (a: BrowseAccessory): BuyLine => {
+    const ref = a.price > 0 ? a.price : null;
+    return {
+      key: newKey(), product_id: null, accessory_id: a.id, image_url: a.image_url || null,
+      description: a.name, set_name: a.category_display, card_number: "", variant: "",
+      quantity: "1", unit_price: pctToR(defaultPct, ref), live_stock: a.stock,
+      tcg_price: ref, base_tcg: ref, pct: ref ? defaultPct : "",
+      condition: "NM", sell_price: "", sell_pct: "", bulk: false,
+    };
+  };
+  const addAccessory = (a: BrowseAccessory) => setLines((ls) => {
+    const i = ls.findIndex((l) => l.accessory_id === a.id);
+    if (i >= 0) return ls.map((l, n) => n === i ? { ...l, quantity: String((parseInt(l.quantity) || 0) + 1) } : l);
+    return [...ls, makeAccLine(a)];
+  });
+  const accInInvoice: Record<number, number> = {};
+  lines.forEach((l) => { if (l.accessory_id) accInInvoice[l.accessory_id] = parseInt(l.quantity) || 0; });
   const addFree = () => setLines((ls) => [...ls, {
-    key: newKey(), product_id: null, description: "", set_name: "", card_number: "", variant: "",
+    key: newKey(), product_id: null, accessory_id: null, image_url: null, description: "", set_name: "", card_number: "", variant: "",
     quantity: "1", unit_price: "", live_stock: null, tcg_price: null, base_tcg: null, pct: "",
     condition: "NM", sell_price: "", sell_pct: "", bulk: false,
   }]);
   const applyPctToAll = () => setLines((ls) => ls.map((l) =>
-    l.product_id && l.tcg_price && !l.bulk ? { ...l, pct: defaultPct, unit_price: pctToR(defaultPct, l.tcg_price) } : l));
+    isCatalogue(l) && l.tcg_price && !l.bulk ? { ...l, pct: defaultPct, unit_price: pctToR(defaultPct, l.tcg_price) } : l));
   const applySellPctToAll = () => setLines((ls) => ls.map((l) =>
-    l.product_id && l.tcg_price ? { ...l, sell_pct: bulkSellPct, sell_price: pctToR(bulkSellPct, l.tcg_price) } : l));
+    isCatalogue(l) && l.tcg_price ? { ...l, sell_pct: bulkSellPct, sell_price: pctToR(bulkSellPct, l.tcg_price) } : l));
   // Changing condition rescales the reference price (NM x multiplier) and
   // re-prices the line: buy-in R and sell R keep their % of the new price.
   const setCondition = (key: string, condition: string) => setLines((ls) => ls.map((l) => {
@@ -339,7 +499,7 @@ function InvoiceEditor({ initial, onSaved, onCancel }: { initial?: BuyInvoice; o
 
   const total = lines.reduce((s, l) => s + (parseFloat(l.unit_price) || 0) * (parseInt(l.quantity) || 0), 0);
   const units = lines.reduce((s, l) => s + (parseInt(l.quantity) || 0), 0);
-  const offCat = lines.filter((l) => !l.product_id).reduce((s, l) => s + (parseInt(l.quantity) || 0), 0);
+  const offCat = lines.filter((l) => !isCatalogue(l)).reduce((s, l) => s + (parseInt(l.quantity) || 0), 0);
 
   const save = async () => {
     setSaving(true); setError("");
@@ -351,9 +511,9 @@ function InvoiceEditor({ initial, onSaved, onCancel }: { initial?: BuyInvoice; o
       if (boxNumber.trim()) body.box_number = boxNumber.trim(); // blank = keep the auto-assigned box
       if (!locked) {
         body.items = lines.map((l) => ({
-          product_id: l.product_id, description: l.description, set_name: l.set_name,
+          product_id: l.product_id, accessory_id: l.accessory_id, description: l.description, set_name: l.set_name,
           card_number: l.card_number, variant: l.variant, quantity: l.quantity, unit_price: l.unit_price || "0",
-          condition: l.condition, sell_price: l.product_id ? l.sell_price : "",
+          condition: l.condition, sell_price: isCatalogue(l) ? l.sell_price : "",
         }));
       }
       const res = await authFetch(initial ? `/api/orders/admin/buy-invoices/${initial.id}/` : "/api/orders/admin/buy-invoices/", {
@@ -387,7 +547,14 @@ function InvoiceEditor({ initial, onSaved, onCancel }: { initial?: BuyInvoice; o
         <div style={{ fontSize: 11, color: "#e0b050" }}>This invoice is {initial?.status_display}. Lines are locked — use “Back to draft” on the list to change them.</div>
       ) : (
         <>
-        <CardBrowser onAdd={(c) => addCards([c])} onAddMany={addCards} inInvoice={inInvoice} />
+        <div style={{ display: "flex", gap: 6 }}>
+          {([["cards", "Cards"], ["accessories", "Accessories & sealed"]] as const).map(([m, label]) => (
+            <button key={m} style={browseMode === m ? btnPrimary : btn} onClick={() => setBrowseMode(m)}>{label}</button>
+          ))}
+        </div>
+        {browseMode === "cards"
+          ? <CardBrowser onAdd={(c) => addCards([c])} onAddMany={addCards} inInvoice={inInvoice} />
+          : <AccessoryBrowser onAdd={addAccessory} inInvoice={accInInvoice} />}
         <div style={{ display: "flex", flexWrap: "wrap", gap: 10, alignItems: "center" }}>
           <button style={btn} onClick={addFree}>+ Off-catalogue line</button>
           <span style={{ fontSize: 11, color: "#888", display: "inline-flex", alignItems: "center", gap: 6 }}>
@@ -430,11 +597,17 @@ function InvoiceEditor({ initial, onSaved, onCancel }: { initial?: BuyInvoice; o
                 return (
                   <tr key={l.key} style={{ borderBottom: "1px solid #2a2a3a" }}>
                     <td style={{ padding: "6px 8px", fontSize: 12, color: "#ddd", minWidth: 200 }}>
-                      {l.product_id ? l.description : (
+                      {l.accessory_id ? (
+                        <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                          {l.image_url && <img src={l.image_url} alt="" style={{ height: 28, width: 28, objectFit: "contain" }} />}
+                          {l.description}
+                        </span>
+                      ) : l.product_id ? l.description : (
                         <input style={{ ...inp, width: "100%" }} value={l.description} disabled={locked}
                           onChange={(e) => upd(l.key, { description: e.target.value })} placeholder="e.g. Bulk lot of commons (no stock added)" />
                       )}
-                      {!l.product_id && <div style={{ color: "#e0b050", fontSize: 9 }}>off-catalogue — adds no stock</div>}
+                      {l.accessory_id && <div style={{ color: "#60a5fa", fontSize: 9 }}>accessory / sealed — stock added on Complete</div>}
+                      {!isCatalogue(l) && <div style={{ color: "#e0b050", fontSize: 9 }}>off-catalogue — adds no stock</div>}
                       {l.bulk && <div style={{ color: "#4ade80", fontSize: 9 }}>bulk price</div>}
                       {l.product_id && (
                         <select style={{ ...inp, padding: "3px 6px", fontSize: 11, marginTop: 4 }} value={l.condition} disabled={locked}
@@ -456,11 +629,11 @@ function InvoiceEditor({ initial, onSaved, onCancel }: { initial?: BuyInvoice; o
                         onChange={(e) => upd(l.key, { unit_price: e.target.value, pct: rToPct(e.target.value, l.tcg_price), bulk: false })} placeholder="0.00" />
                     </td>
                     <td style={{ padding: "6px 8px" }}>
-                      <input style={{ ...inp, width: 64 }} type="number" min="0" step="1" value={l.sell_pct} disabled={locked || !l.product_id || !l.tcg_price}
+                      <input style={{ ...inp, width: 64 }} type="number" min="0" step="1" value={l.sell_pct} disabled={locked || !isCatalogue(l) || !l.tcg_price}
                         onChange={(e) => upd(l.key, { sell_pct: e.target.value, sell_price: pctToR(e.target.value, l.tcg_price) })} placeholder="%" />
                     </td>
                     <td style={{ padding: "6px 8px" }}>
-                      <input style={{ ...inp, width: 90 }} type="number" min="0" step="0.01" value={l.sell_price} disabled={locked || !l.product_id}
+                      <input style={{ ...inp, width: 90 }} type="number" min="0" step="0.01" value={l.sell_price} disabled={locked || !isCatalogue(l)}
                         onChange={(e) => upd(l.key, { sell_price: e.target.value, sell_pct: rToPct(e.target.value, l.tcg_price) })} placeholder="keep" />
                     </td>
                     <td style={{ padding: "6px 8px", fontSize: 11, color: profitColor(l) }}>{profitText(l)}</td>
@@ -477,9 +650,9 @@ function InvoiceEditor({ initial, onSaved, onCancel }: { initial?: BuyInvoice; o
       <div style={{ fontSize: 12, color: "#a0a0b0" }}>
         {units} item(s) · Total to pay seller: <strong style={{ color: "#fff", fontSize: 14 }}>{money(total)}</strong>
         {offCat > 0 && <span style={{ color: "#e0b050" }}> · {offCat} off-catalogue (no stock added)</span>}
-        {lines.some((l) => l.product_id && parseFloat(l.sell_price) > 0) && (
+        {lines.some((l) => isCatalogue(l) && parseFloat(l.sell_price) > 0) && (
           <div style={{ color: "#888", fontSize: 11, marginTop: 4 }}>
-            Lines with a sell price are listed at that price when you Complete the invoice and are then kept at that % of TCG (adjusted for condition) by the nightly price update, so they follow TCG and the exchange rate. Lines left blank keep the normal site price. Non-NM conditions are added to the played copy of the card.
+            Lines with a sell price are listed at that price when you Complete the invoice and are then kept at that % of TCG (adjusted for condition) by the nightly price update, so they follow TCG and the exchange rate. Lines left blank keep the normal site price. Non-NM conditions are added to the played copy of the card. Accessory / sealed lines are listed at their sell price on Complete and that price is kept (the accessory sync won't overwrite it).
           </div>
         )}
       </div>

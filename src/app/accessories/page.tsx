@@ -28,6 +28,7 @@ const CATEGORIES: { value: string; label: string }[] = [
   { value: "collectible_storage", label: "Collectible Storage" },
   { value: "supply_bundles", label: "Supply Bundles" },
   { value: "supplies", label: "Supplies" },
+  { value: "sealed", label: "Sealed Product" },
   { value: "other", label: "Other" },
 ];
 
