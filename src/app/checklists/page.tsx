@@ -33,7 +33,7 @@ const VARIANT_LABEL_FULL: Record<string, string> = {
   FB: 'Friend Ball', QB: 'Quick Ball', UB: 'Ultra Ball',
   DB: 'Dusk Ball', TR: 'Team Rocket', SE: 'Secret',
   PBP: 'PB Pattern', MBP: 'MB Pattern',
-  CC: 'Code Card', TT: 'Trick or Trade', 'HR-EX': 'Illustration Rare',
+  CC: 'Code Card', TT: 'Trick or Trade', CH: 'Cosmos Holo', 'HR-EX': 'Illustration Rare',
   EX: 'Double Rare', GX: 'GX', V: 'V', VMAX: 'VMAX', VSTAR: 'VSTAR',
   RR: 'Rainbow Rare', RAD: 'Radiant',
 };
@@ -1376,7 +1376,7 @@ function Checklist({ code, sub, onBack }: { code: string; sub?: 'pikachu' | null
                       const key = card.num + '_' + v.vc;
                       const owned = !!checks[key];
                       const vcColor: Record<string, string> = {
-                        N: '#a0a0b0', RH: '#ff6b35', H: '#ffd700', ESH: '#1D9E75',
+                        N: '#a0a0b0', RH: '#ff6b35', H: '#ffd700', ESH: '#1D9E75', CH: '#7F77DD',
                         PB: '#e040fb', MB: '#7c4dff', LB: '#00bcd4',
                         FB: '#4caf50', QB: '#f44336', UB: '#2196f3',
                         DB: '#795548', TR: '#607d8b', SE: '#ff9800',
@@ -1501,7 +1501,7 @@ function Checklist({ code, sub, onBack }: { code: string; sub?: 'pikachu' | null
                     {card.variants.map(v => {
                       const key = card.num + '_' + v.vc;
                       const vcColor: Record<string, string> = {
-                        N: '#a0a0b0', RH: '#ff6b35', H: '#ffd700', ESH: '#1D9E75',
+                        N: '#a0a0b0', RH: '#ff6b35', H: '#ffd700', ESH: '#1D9E75', CH: '#7F77DD',
                         PB: '#e040fb', MB: '#7c4dff', LB: '#00bcd4',
                         FB: '#4caf50', QB: '#f44336', UB: '#2196f3',
                         DB: '#795548', TR: '#607d8b', SE: '#ff9800',

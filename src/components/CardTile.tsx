@@ -33,6 +33,7 @@ export function getVariantKey(card: { variant_override: string; rarity: string; 
     if (v === "DB") return "BRH-DB";
     if (v === "TR" || v === "TT") return "BRH-R";
     if (v === "CC") return "MH";
+    if (v === "CH") return "MH"; // Cosmos Holo blister/box print (2026-10-27)
     // 2026-09-09, Michael (round 2): "HR-EX is incorrect - It's not Hyper
     // rare, but Double Rare" -- HR-EX is repurposed to mean Illustration
     // Rare (routes to the existing "IR" bucket: diagonal pattern + "IR"

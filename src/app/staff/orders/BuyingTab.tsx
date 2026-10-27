@@ -126,7 +126,7 @@ const ERA_LABELS: Record<string, string> = {
 };
 // Same variant list as the POS screen (orders/admin.py VARIANT_CHOICES).
 const VARIANT_OPTIONS: [string, string][] = [
-  ["N", "Normal"], ["H", "Holo"], ["RH", "Reverse Holo"], ["FE", "1st Edition"], ["PB", "Poke Ball"],
+  ["N", "Normal"], ["H", "Holo"], ["RH", "Reverse Holo"], ["CH", "Cosmos Holo"], ["FE", "1st Edition"], ["PB", "Poke Ball"],
   ["MB", "Master Ball"], ["FB", "Friend Ball"], ["LB", "Love Ball"], ["QB", "Quick Ball"], ["DB", "Dusk Ball"],
   ["HR-EX", "Illustration Rare"], ["EX", "Double Rare"], ["GX", "GX"], ["V", "V"], ["VMAX", "VMAX"],
   ["VSTAR", "VSTAR"], ["RR", "Rainbow Rare"], ["RAD", "Radiant"],
