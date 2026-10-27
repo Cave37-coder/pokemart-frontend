@@ -177,6 +177,10 @@ const SORT_OPTIONS = [
     { value: "price", label: "Price (low to high)" },
     { value: "-price", label: "Price (high to low)" },
     { value: "name", label: "Name A to Z" },
+    // 2026-10-27, Michael: "can we add a 'Recently Added' to the Filter" --
+    // newest cards on the site first (PokemonProduct.created_at), grouped
+    // binder-style within a batch so a whole new set reads in card order.
+    { value: "-created_at,card_set__code,card_number,variant_sort", label: "Recently added" },
 ];
 
 // Variant badge/border/overlay logic now lives in @/components/CardTile so
