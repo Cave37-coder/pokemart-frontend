@@ -64,6 +64,8 @@ interface Analysis {
 interface BuyInvoice {
   id: number; buy_number: string; box_number: number | null; amount_paid: string | null; cost_applied: boolean; premium_accepted?: boolean; analysis: Analysis; status: string; status_display: string; stock_mode: string;
   seller_name: string; seller_email: string; seller_phone: string; user_username: string | null;
+  user_id: number | null; user_credit_balance: string | null;
+  store_credit_amount: string; amount_owed: string; cash_portion: string;
   seller_note: string; internal_note: string;
   payment_made: boolean; payment_method: string; payment_method_display: string;
   total: string; item_count: number; off_catalogue_units: number;
@@ -392,6 +394,59 @@ const profitOf = (l: BuyLine) => {
 const profitText = (l: BuyLine) => { const p = profitOf(l); return p === null ? "—" : `${p >= 0 ? "+" : "-"}${money(Math.abs(p))}`; };
 const profitColor = (l: BuyLine) => { const p = profitOf(l); return p === null ? "#666" : p >= 0 ? "#4ade80" : "#EF4444"; };
 
+// ---- Seller account link (2026-10-27) ----
+// Store credit always goes onto a site account, so the seller has to be
+// linked to one before any of the payout can be given as credit.
+// Data: GET /api/auth/admin/customers/?search= (staff, JWT).
+interface CustomerHit {
+  id: number; username: string; email: string; first_name: string; last_name: string;
+  phone_number?: string; store_credit_balance?: string;
+}
+function SellerAccountPicker({ linked, onLink, disabled }: {
+  linked: { id: number; username: string; balance: string | null } | null;
+  onLink: (c: CustomerHit | null) => void; disabled: boolean;
+}) {
+  const [q, setQ] = useState("");
+  const [hits, setHits] = useState<CustomerHit[]>([]);
+  useEffect(() => {
+    const term = q.trim();
+    if (term.length < 2) { setHits([]); return; }
+    const t = setTimeout(async () => {
+      try {
+        const res = await authFetch(`/api/auth/admin/customers/?search=${encodeURIComponent(term)}`);
+        setHits(res.ok ? (await res.json()).slice(0, 8) : []);
+      } catch { setHits([]); }
+    }, 300);
+    return () => clearTimeout(t);
+  }, [q]);
+  if (linked) {
+    return (
+      <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, color: "#4ade80" }}>
+        🔗 @{linked.username}
+        {linked.balance !== null && <span style={{ color: "#888" }}>· credit balance {money(linked.balance)}</span>}
+        {!disabled && <button style={btn} onClick={() => onLink(null)}>Unlink</button>}
+      </div>
+    );
+  }
+  return (
+    <div style={{ position: "relative" }}>
+      <input style={{ ...inp, width: "100%" }} value={q} disabled={disabled} onChange={(e) => setQ(e.target.value)}
+        placeholder="Search site account by name, username or email (needed for store credit)" />
+      {hits.length > 0 && (
+        <div style={{ position: "absolute", zIndex: 5, left: 0, right: 0, background: "#12121a", border: "1px solid #2a2a3a", borderRadius: 6, marginTop: 2 }}>
+          {hits.map((c) => (
+            <div key={c.id} onClick={() => { onLink(c); setQ(""); setHits([]); }}
+              style={{ padding: "6px 10px", cursor: "pointer", fontSize: 12, color: "#ddd", borderBottom: "1px solid #2a2a3a" }}>
+              {`${c.first_name} ${c.last_name}`.trim() || c.username} <span style={{ color: "#888" }}>@{c.username} · {c.email}</span>
+              {c.store_credit_balance && parseFloat(c.store_credit_balance) > 0 && <span style={{ color: "#4ade80" }}> · credit {money(c.store_credit_balance)}</span>}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function InvoiceEditor({ initial, onSaved, onCancel }: { initial?: BuyInvoice; onSaved: () => void; onCancel: () => void }) {
   const locked = !!initial && initial.status !== "draft"; // paid: lines locked, details editable
   const [sellerName, setSellerName] = useState(initial?.seller_name || "");
@@ -399,6 +454,9 @@ function InvoiceEditor({ initial, onSaved, onCancel }: { initial?: BuyInvoice; o
   const [sellerPhone, setSellerPhone] = useState(initial?.seller_phone || "");
   const [boxNumber, setBoxNumber] = useState(initial?.box_number ? String(initial.box_number) : "");
   const [sellerNote, setSellerNote] = useState(initial?.seller_note || "");
+  const [linked, setLinked] = useState<{ id: number; username: string; balance: string | null } | null>(
+    initial?.user_id && initial.user_username ? { id: initial.user_id, username: initial.user_username, balance: initial.user_credit_balance } : null);
+  const [creditAmt, setCreditAmt] = useState(initial && parseFloat(initial.store_credit_amount) > 0 ? String(initial.store_credit_amount) : "");
   const [internalNote, setInternalNote] = useState(initial?.internal_note || "");
   // Default buy-in % applied to each newly added card (editable per line).
   const [defaultPct, setDefaultPct] = useState("80");
@@ -509,6 +567,8 @@ function InvoiceEditor({ initial, onSaved, onCancel }: { initial?: BuyInvoice; o
         seller_note: sellerNote, internal_note: internalNote,
       };
       if (boxNumber.trim()) body.box_number = boxNumber.trim(); // blank = keep the auto-assigned box
+      body.user_id = linked ? linked.id : null;
+      if (!locked) body.store_credit_amount = linked && creditAmt.trim() ? creditAmt.trim() : "0";
       if (!locked) {
         body.items = lines.map((l) => ({
           product_id: l.product_id, accessory_id: l.accessory_id, description: l.description, set_name: l.set_name,
@@ -541,6 +601,37 @@ function InvoiceEditor({ initial, onSaved, onCancel }: { initial?: BuyInvoice; o
         <div style={{ flex: 1, minWidth: 180 }}><label style={lbl}>Email (for the receipt)</label><input style={{ ...inp, width: "100%" }} value={sellerEmail} onChange={(e) => setSellerEmail(e.target.value)} /></div>
         <div style={{ flex: 1, minWidth: 140 }}><label style={lbl}>Phone</label><input style={{ ...inp, width: "100%" }} value={sellerPhone} onChange={(e) => setSellerPhone(e.target.value)} /></div>
         <div style={{ width: 120 }}><label style={lbl}>Box #</label><input style={{ ...inp, width: "100%" }} type="number" min="1" value={boxNumber} placeholder={initial ? "" : "Auto"} onChange={(e) => setBoxNumber(e.target.value)} /></div>
+      </div>
+
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 10, alignItems: "flex-end", background: "#12121a", border: "1px solid #2a2a3a", borderRadius: 8, padding: 10 }}>
+        <div style={{ flex: 2, minWidth: 260 }}>
+          <label style={lbl}>Seller's site account</label>
+          <SellerAccountPicker linked={linked} disabled={locked && parseFloat(creditAmt || "0") > 0}
+            onLink={(c) => {
+              if (!c) { setLinked(null); setCreditAmt(""); return; }
+              setLinked({ id: c.id, username: c.username, balance: c.store_credit_balance ?? null });
+              if (!sellerName.trim()) setSellerName(`${c.first_name} ${c.last_name}`.trim() || c.username);
+              if (!sellerEmail.trim()) setSellerEmail(c.email || "");
+              if (!sellerPhone.trim() && c.phone_number) setSellerPhone(c.phone_number);
+            }} />
+        </div>
+        <div style={{ flex: 1, minWidth: 220 }}>
+          <label style={lbl}>Pay as store credit (R)</label>
+          <div style={{ display: "flex", gap: 6 }}>
+            <input style={{ ...inp, width: 110 }} type="number" min="0" step="0.01" value={creditAmt} disabled={locked || !linked}
+              onChange={(e) => setCreditAmt(e.target.value)} placeholder={linked ? "0.00" : "link account"} />
+            <button style={btn} disabled={locked || !linked} onClick={() => setCreditAmt(round2(total))}>All as credit</button>
+            <button style={btn} disabled={locked || !linked} onClick={() => setCreditAmt("")}>None</button>
+          </div>
+        </div>
+        <div style={{ fontSize: 11, color: "#888", flexBasis: "100%" }}>
+          {linked && parseFloat(creditAmt || "0") > 0
+            ? <>Seller gets <strong style={{ color: "#4ade80" }}>{money(creditAmt)}</strong> store credit
+                {total - parseFloat(creditAmt) >= 0.005 && <> + <strong style={{ color: "#fff" }}>{money(total - parseFloat(creditAmt))}</strong> by cash / EFT / card</>}.
+                Credit is added to their account when you mark the invoice Paid (R1 payout = R1 credit).</>
+            : "Optional: give all or part of the payout as store credit. The seller must be linked to their site account."}
+          {locked && <span style={{ color: "#e0b050" }}> Store credit can only be changed while the invoice is a Draft.</span>}
+        </div>
       </div>
 
       {locked ? (
@@ -990,6 +1081,11 @@ export default function BuyingTab() {
                     </td>
                     <td style={{ padding: "8px", fontSize: 11, color: inv.payment_made ? "#4ade80" : "#888" }}>
                       {inv.payment_made ? `✅ ${inv.payment_method_display || "Paid"}` : "Unpaid"}
+                      {parseFloat(inv.store_credit_amount) > 0 && (
+                        <div style={{ color: "#4ade80", fontSize: 10 }}>
+                          {money(inv.store_credit_amount)} store credit{parseFloat(inv.cash_portion) > 0 && inv.payment_method !== "credit" ? ` + ${money(inv.cash_portion)}` : ""}
+                        </div>
+                      )}
                     </td>
                     <td style={{ padding: "8px", fontSize: 11, color: "#888" }}>{dateFmt(inv.created_at)}</td>
                     <td style={{ padding: "8px" }}>
@@ -997,10 +1093,23 @@ export default function BuyingTab() {
                         {!legacy && inv.status === "draft" && (
                           <>
                             <button style={btn} onClick={() => setEditing(inv)}>✏️ Edit</button>
-                            <select style={{ ...inp, padding: "4px 6px", fontSize: 11 }} value={payMethod[inv.id] || ""} onChange={(e) => setPayMethod((m) => ({ ...m, [inv.id]: e.target.value }))}>
-                              <option value="">Paid by…</option><option value="eft">EFT</option><option value="cash">Cash</option><option value="card">Card</option>
-                            </select>
-                            <button style={btnPrimary} disabled={busy || !payMethod[inv.id]} onClick={() => act(inv, "mark_paid")}>💰 Mark paid</button>
+                            {(() => {
+                              const credit = parseFloat(inv.store_credit_amount) || 0;
+                              const allCredit = credit > 0 && parseFloat(inv.cash_portion) < 0.005;
+                              return (
+                                <>
+                                  {!allCredit && (
+                                    <select style={{ ...inp, padding: "4px 6px", fontSize: 11 }} value={payMethod[inv.id] || ""} onChange={(e) => setPayMethod((m) => ({ ...m, [inv.id]: e.target.value }))}>
+                                      <option value="">{credit > 0 ? `Rest (${money(inv.cash_portion)}) paid by…` : "Paid by…"}</option><option value="eft">EFT</option><option value="cash">Cash</option><option value="card">Card</option>
+                                    </select>
+                                  )}
+                                  <button style={btnPrimary} disabled={busy || (!allCredit && !payMethod[inv.id])}
+                                    onClick={() => act(inv, "mark_paid", credit > 0 ? `Mark ${inv.buy_number} paid? ${money(credit)} goes onto @${inv.user_username}'s store credit now.` : undefined)}>
+                                    💰 Mark paid{credit > 0 ? (allCredit ? " (store credit)" : " + credit") : ""}
+                                  </button>
+                                </>
+                              );
+                            })()}
                           </>
                         )}
                         {!legacy && inv.status === "paid" && (

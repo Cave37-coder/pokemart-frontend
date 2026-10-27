@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import NotificationSettings from "@/components/NotificationSettings";
+import StoreCreditPanel from "@/components/StoreCreditPanel";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://pokemart-api-production.up.railway.app";
 
@@ -246,6 +247,9 @@ export default function ProfilePage() {
             Trainer Level: <span style={{ color: "#ff6b35", textTransform: "capitalize" }}>{profile?.trainer_level || "rookie"}</span>
           </p>
         </div>
+
+        {/* Store credit (2026-10-27) -- only shown once the customer has had credit */}
+        <StoreCreditPanel sectionStyle={sectionStyle} />
 
         {/* Account Info — names editable, username locked */}
         <div style={sectionStyle}>

@@ -24,6 +24,7 @@ interface Order {
   waybill_number: string; courier_name: string; courier_tracking_url: string;
   customer_note: string; created_at: string;
   payment_method?: string;
+  store_credit_applied?: string; amount_due?: string;
 }
 
 const STEPS = [
@@ -179,6 +180,14 @@ export default function OrderDetailPage() {
           <div style={{ fontSize:24, marginBottom:8 }}>Payment Cancelled</div>
           <div style={{ color:"#EF4444", fontWeight:600, marginBottom:4 }}>Your payment was not completed.</div>
           <div style={{ color:"#a0a0b0", fontSize:13 }}>Your order is on hold. Contact us if you need help.</div>
+        </div>
+      )}
+
+      {paymentResult === "credit" && (
+        <div style={{ background:"#10B98122", border:"1px solid #10B98144", borderRadius:12, padding:"16px 20px", marginBottom:16, textAlign:"center" }}>
+          <div style={{ fontSize:24, marginBottom:8 }}>Order Confirmed!</div>
+          <div style={{ color:"#10B981", fontWeight:600, marginBottom:4 }}>Paid in full with your store credit.</div>
+          <div style={{ color:"#a0a0b0", fontSize:13 }}>Nothing else to pay — any credit left over stays on your account.</div>
         </div>
       )}
 
@@ -394,6 +403,18 @@ export default function OrderDetailPage() {
             <span style={{ color:"#a0a0b0", fontSize:14 }}>Total</span>
             <span style={{ fontWeight:700, color:"#ff6b35", fontSize:16 }}>R{parseFloat(order.total_price).toFixed(2)}</span>
           </div>
+          {parseFloat(order.store_credit_applied || "0") > 0 && (
+            <>
+              <div style={{ display:"flex", justifyContent:"space-between" }}>
+                <span style={{ color:"#10B981", fontSize:13 }}>Paid with store credit</span>
+                <span style={{ color:"#10B981", fontSize:13, fontWeight:600 }}>-R{parseFloat(order.store_credit_applied || "0").toFixed(2)}</span>
+              </div>
+              <div style={{ display:"flex", justifyContent:"space-between" }}>
+                <span style={{ color:"#fff", fontSize:14, fontWeight:600 }}>Amount due</span>
+                <span style={{ fontWeight:700, color:"#fff", fontSize:15 }}>R{parseFloat(order.amount_due || "0").toFixed(2)}</span>
+              </div>
+            </>
+          )}
         </div>
       </div>
 

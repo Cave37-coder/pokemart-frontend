@@ -59,6 +59,9 @@ export default function CheckoutPage() {
   const [loading, setLoading]   = useState(true);
   const [placing, setPlacing]   = useState(false);
   const [error, setError]       = useState("");
+  // Store credit (2026-10-27): balance from /api/auth/profile/; "use" is on by default when there is some.
+  const [creditBalance, setCreditBalance] = useState(0);
+  const [useCredit, setUseCredit] = useState(true);
   const [delivery, setDelivery] = useState({
     first_name: "", last_name: "", email: "", phone: "",
     address_line1: "", address_line2: "", city: "", province: "", postal_code: "",
@@ -73,6 +76,7 @@ export default function CheckoutPage() {
       fetch(`${API_URL}/api/auth/profile/`, { headers: { Authorization: `Bearer ${token}` } }).then(r => r.json()),
     ]).then(([cartData, profileData]) => {
       setCart(cartData);
+      setCreditBalance(parseFloat(profileData.store_credit_balance || "0") || 0);
       setDelivery({
         first_name:          profileData.first_name || "",
         last_name:           profileData.last_name  || "",
@@ -106,6 +110,9 @@ export default function CheckoutPage() {
   const discountAmount   = parseFloat(cart?.discount_amount || "0");
   const cartTotal         = parseFloat(cart?.total || "0"); // post-discount
   const orderTotal        = cartTotal + shippingCost;
+  const creditApplied     = useCredit ? Math.min(creditBalance, orderTotal) : 0;
+  const amountDue         = Math.max(orderTotal - creditApplied, 0);
+  const fullyCredit       = creditApplied > 0 && amountDue < 0.005;
   const items        = (cart?.items || []).filter(
     (item): item is CartItem & { product: NonNullable<CartItem["product"]> } => item.product !== null
   );
@@ -157,6 +164,7 @@ export default function CheckoutPage() {
           shipping_method:     shipping,
           shipping_cost:       shippingCost,
           payment_method:      payment,
+          use_store_credit:    creditApplied > 0,
           pudo_locker_name:    delivery.pudo_locker_name,
           pudo_locker_address: delivery.pudo_locker_address,
         }),
@@ -183,6 +191,7 @@ export default function CheckoutPage() {
 
       window.dispatchEvent(new Event("pile-updated"));
 
+      if (order.payment_method === "credit") { router.push(`/orders/${order.id}?payment=credit`); return; }
       if (payment === "coc") { router.push(`/orders/${order.id}?payment=collection`); return; }
       if (payment === "eft") { router.push(`/orders/${order.id}?payment=eft`); return; }
 
@@ -214,12 +223,14 @@ export default function CheckoutPage() {
 
   const btnLabel = () => {
     if (placing) return "Processing...";
-    if (payment === "coc") return `Place Order (COC) — R ${orderTotal.toFixed(2)}`;
-    if (payment === "eft") return `Place Order (EFT) — R ${orderTotal.toFixed(2)}`;
-    return `Pay with PayFast — R ${orderTotal.toFixed(2)}`;
+    if (fullyCredit) return `Place Order — paid with store credit`;
+    if (payment === "coc") return `Place Order (COC) — R ${amountDue.toFixed(2)}`;
+    if (payment === "eft") return `Place Order (EFT) — R ${amountDue.toFixed(2)}`;
+    return `Pay with PayFast — R ${amountDue.toFixed(2)}`;
   };
 
   const btnNote = () => {
+    if (fullyCredit) return `R ${creditApplied.toFixed(2)} comes off your store credit — nothing else to pay`;
     if (payment === "coc") return "Pay cash when you collect at Birchleigh North";
     if (payment === "eft") return "Order held until EFT payment reflects in our account";
     return "You'll be redirected to PayFast to complete payment securely";
@@ -325,9 +336,28 @@ export default function CheckoutPage() {
             </div>
           )}
 
+          {/* Store credit */}
+          {creditBalance > 0 && (
+            <div style={card({ border: `1px solid ${useCredit ? "#10B981" : "#2a2a3a"}` })}>
+              <label style={{ display:"flex", alignItems:"center", gap:10, cursor:"pointer" }}>
+                <input type="checkbox" checked={useCredit} onChange={e => setUseCredit(e.target.checked)} style={{ width:18, height:18 }} />
+                <div>
+                  <div style={{ fontWeight:700, color:"#fff", fontSize:14 }}>Use my store credit</div>
+                  <div style={{ fontSize:12, color:"#a0a0b0" }}>
+                    You have <strong style={{ color:"#10B981" }}>R {creditBalance.toFixed(2)}</strong> store credit.
+                    {useCredit && (fullyCredit
+                      ? ` It covers this whole order — R ${(creditBalance - creditApplied).toFixed(2)} will be left over for next time.`
+                      : ` R ${creditApplied.toFixed(2)} comes off this order; pay the remaining R ${amountDue.toFixed(2)} below.`)}
+                  </div>
+                </div>
+              </label>
+            </div>
+          )}
+
           {/* Payment method */}
+          {!fullyCredit && (
           <div style={card()}>
-            <h2 style={{ fontSize:15, fontWeight:700, color:"#fff", margin:"0 0 14px" }}>Payment method</h2>
+            <h2 style={{ fontSize:15, fontWeight:700, color:"#fff", margin:"0 0 14px" }}>{creditApplied > 0 ? `Pay the remaining R ${amountDue.toFixed(2)} with` : "Payment method"}</h2>
             <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
               {paymentOptions.map(opt => (
                 <button key={opt.id} onClick={() => setPayment(opt.id)} style={{
@@ -373,6 +403,7 @@ export default function CheckoutPage() {
               </div>
             )}
           </div>
+          )}
 
           {/* Order notes */}
           <div style={card()}>
@@ -418,8 +449,18 @@ export default function CheckoutPage() {
               </div>
               <div style={{ display:"flex", justifyContent:"space-between", fontSize:16, fontWeight:700, color:"#fff", marginTop:6, paddingTop:8, borderTop:"1px solid #2a2a3a" }}>
                 <span>Total</span>
-                <span style={{ color:"#ff6b35" }}>R {orderTotal.toFixed(2)}</span>
+                <span style={{ color: creditApplied > 0 ? "#fff" : "#ff6b35" }}>R {orderTotal.toFixed(2)}</span>
               </div>
+              {creditApplied > 0 && (
+                <>
+                  <div style={{ display:"flex", justifyContent:"space-between", fontSize:13, color:"#10B981" }}>
+                    <span>Store credit</span><span>-R {creditApplied.toFixed(2)}</span>
+                  </div>
+                  <div style={{ display:"flex", justifyContent:"space-between", fontSize:16, fontWeight:700, color:"#fff" }}>
+                    <span>To pay</span><span style={{ color:"#ff6b35" }}>R {amountDue.toFixed(2)}</span>
+                  </div>
+                </>
+              )}
             </div>
 
             {error && (
