@@ -1,5 +1,6 @@
 "use client";
 // v1.2.0 — Added Pudo locker fields
+import LockerPicker from "@/components/LockerPicker";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import NotificationSettings from "@/components/NotificationSettings";
@@ -428,20 +429,11 @@ export default function ProfilePage() {
           <p style={{ color: "#555", fontSize: "12px", margin: "0 0 16px 0" }}>
             Your preferred Pudo locker for order delivery.
           </p>
-          <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
-            <div>
-              <label style={labelStyle}>Locker Name</label>
-              <input style={inputStyle} value={pudoName} onChange={(e) => setPudoName(e.target.value)} placeholder="e.g. Clicks Kempton Park" />
-            </div>
-            <div>
-              <label style={labelStyle}>Locker Address / Suburb</label>
-              <input style={inputStyle} value={pudoAddress} onChange={(e) => setPudoAddress(e.target.value)} placeholder="e.g. 123 Main St, Kempton Park" />
-            </div>
-            <div>
-              <label style={labelStyle}>Locker Code</label>
-              <input style={inputStyle} value={pudoCode} onChange={(e) => setPudoCode(e.target.value)} placeholder="e.g. GP-KEM-001" />
-            </div>
-          </div>
+          <LockerPicker
+            value={{ name: pudoName, address: pudoAddress, code: pudoCode }}
+            onChange={(v) => { setPudoName(v.name); setPudoAddress(v.address); setPudoCode(v.code); }}
+            inputStyle={inputStyle}
+          />
         </div>
 
         {/* Editable — Collection Privacy */}

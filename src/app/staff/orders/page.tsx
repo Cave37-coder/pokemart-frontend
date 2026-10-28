@@ -3,6 +3,7 @@ import { useEffect, useState, useCallback, Fragment } from "react";
 import Link from "next/link";
 import { authFetch, SessionExpiredError } from "@/lib/api";
 import { downloadLabelPng } from "@/lib/downloadLabel";
+import LockerPicker from "@/components/LockerPicker";
 import BuyingTab from "./BuyingTab";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://pokemart-api-production.up.railway.app";
@@ -90,7 +91,8 @@ interface AdminOrder {
   shipping_method: string; delivery_method: string;
   waybill_number: string; courier_name: string; courier_tracking_url: string;
   item_count: number; created_at: string;
-  pudo_locker_name?: string; pudo_locker_address?: string;
+  pudo_locker_name?: string; pudo_locker_address?: string; pudo_locker_code?: string;
+  pudo_shipment_id?: string; pudo_pin?: string; pudo_booking_error?: string;
   delivery_address_line1?: string; delivery_address_line2?: string;
   delivery_city?: string; delivery_province?: string; delivery_postal_code?: string;
 }
@@ -160,6 +162,7 @@ function DeliveryEditor({ order, onSaved }: { order: AdminOrder; onSaved: () => 
   const [cost, setCost] = useState(String(DELIVERY_OPTIONS.find((o) => o.id === (order.shipping_method === "collection" ? "pudo_locker" : order.shipping_method))?.price ?? 75));
   const [lockerName, setLockerName] = useState(order.pudo_locker_name || "");
   const [lockerAddr, setLockerAddr] = useState(order.pudo_locker_address || "");
+  const [lockerCode, setLockerCode] = useState(order.pudo_locker_code || "");
   const [addr1, setAddr1] = useState(order.delivery_address_line1 || "");
   const [addr2, setAddr2] = useState(order.delivery_address_line2 || "");
   const [city, setCity] = useState(order.delivery_city || "");
@@ -192,7 +195,7 @@ function DeliveryEditor({ order, onSaved }: { order: AdminOrder; onSaved: () => 
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           shipping_method: method, shipping_cost: cost,
-          pudo_locker_name: lockerName, pudo_locker_address: lockerAddr,
+          pudo_locker_name: lockerName, pudo_locker_address: lockerAddr, pudo_locker_code: lockerCode,
           address_line1: addr1, address_line2: addr2, city, province, postal_code: postal,
           ...(needsPayment ? { payment_method: payment } : {}),
         }),
@@ -245,15 +248,13 @@ function DeliveryEditor({ order, onSaved }: { order: AdminOrder; onSaved: () => 
           </div>
 
           {needsLocker && (
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
-              <div style={{ flex: 1, minWidth: 200 }}>
-                <label style={lbl}>Pudo locker / kiosk name</label>
-                <input style={{ ...inp, width: "100%" }} value={lockerName} onChange={(e) => setLockerName(e.target.value)} placeholder="e.g. Birchleigh North Mall" />
-              </div>
-              <div style={{ flex: 1, minWidth: 200 }}>
-                <label style={lbl}>Locker address</label>
-                <input style={{ ...inp, width: "100%" }} value={lockerAddr} onChange={(e) => setLockerAddr(e.target.value)} placeholder="e.g. Mooifontein Rd, Birchleigh North" />
-              </div>
+            <div>
+              <label style={lbl}>Pudo locker / kiosk (pick from the list so the booking gets the locker code)</label>
+              <LockerPicker
+                value={{ name: lockerName, address: lockerAddr, code: lockerCode }}
+                onChange={(v) => { setLockerName(v.name); setLockerAddr(v.address); setLockerCode(v.code); }}
+                inputStyle={{ ...inp, width: "100%" }}
+              />
             </div>
           )}
 
@@ -309,12 +310,38 @@ function OrderManageRow({ order, onSaved }: { order: AdminOrder; onSaved: () => 
           eft_confirmed: eftConfirmed, cash_confirmed: cashConfirmed, stripe_payment_intent: paymentRef,
         }),
       });
-      if (!res.ok) throw new Error("Failed to update");
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        setError(body.error || "Failed to update.");
+        return;
+      }
       onSaved();
     } catch {
       setError("Failed to save — check your connection and try again.");
     } finally { setSaving(false); }
   };
+
+  // Pudo (2026-10-28): book now without changing the status / open the waybill PDF.
+  const [pudoBusy, setPudoBusy] = useState(false);
+  const pudoBook = async () => {
+    setPudoBusy(true); setError("");
+    try {
+      const res = await authFetch(`/api/orders/admin/${order.id}/pudo-book/`, { method: "POST" });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) { setError(body.error || "Pudo booking failed."); return; }
+      onSaved();
+    } catch { setError("Could not reach the server."); } finally { setPudoBusy(false); }
+  };
+  const pudoWaybill = async () => {
+    setPudoBusy(true); setError("");
+    try {
+      const res = await authFetch(`/api/orders/admin/${order.id}/pudo-waybill/`);
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok || !body.url) { setError(body.error || "Could not get the waybill PDF."); return; }
+      window.open(body.url, "_blank", "noopener");
+    } catch { setError("Could not reach the server."); } finally { setPudoBusy(false); }
+  };
+  const isLockerOrder = ["pudo_locker", "pudo_kiosk", "pudo_medium"].includes(order.shipping_method);
 
   return (
     <div style={{ background: "#12121a", border: "1px solid #2a2a3a", borderRadius: 8, padding: 14, marginTop: 6, display: "flex", flexDirection: "column", gap: 12 }}>
@@ -371,6 +398,26 @@ function OrderManageRow({ order, onSaved }: { order: AdminOrder; onSaved: () => 
           </div>
         </div>
       </div>
+
+      {isLockerOrder && (
+        <div style={{ borderTop: "1px solid #2a2a3a", paddingTop: 12, display: "flex", flexWrap: "wrap", gap: 10, alignItems: "center" }}>
+          <span style={{ fontSize: 11, color: "#888" }}>Pudo:</span>
+          {order.pudo_shipment_id ? (
+            <>
+              <span style={{ fontSize: 12, color: "#4ade80" }}>✅ Booked — waybill <strong>{order.waybill_number}</strong>{order.pudo_pin ? <> · drop-off PIN <strong>{order.pudo_pin}</strong></> : null}</span>
+              <button style={btn} onClick={pudoWaybill} disabled={pudoBusy}>🖨 Waybill PDF</button>
+            </>
+          ) : (
+            <>
+              <span style={{ fontSize: 12, color: order.pudo_locker_code ? "#ccc" : "#f59e0b" }}>
+                {order.pudo_locker_code ? `Locker ${order.pudo_locker_code} — books automatically when you set “Courier Being Booked”.` : "No locker code on this order — pick the locker below before booking."}
+              </span>
+              <button style={btn} onClick={pudoBook} disabled={pudoBusy || !order.pudo_locker_code}>{pudoBusy ? "Booking…" : "📦 Book Pudo now"}</button>
+            </>
+          )}
+          {order.pudo_booking_error && !order.pudo_shipment_id && <span style={{ fontSize: 11, color: "#EF4444" }}>Last attempt: {order.pudo_booking_error}</span>}
+        </div>
+      )}
 
       <DeliveryEditor order={order} onSaved={onSaved} />
 

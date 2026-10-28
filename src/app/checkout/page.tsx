@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { trackAddShippingInfo } from "@/lib/analytics";
 import BackButton from "@/components/BackButton";
 import { EFT_DETAILS } from "@/lib/bankingDetails";
+import LockerPicker from "@/components/LockerPicker";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://pokemart-api-production.up.railway.app";
 
@@ -65,7 +66,7 @@ export default function CheckoutPage() {
   const [delivery, setDelivery] = useState({
     first_name: "", last_name: "", email: "", phone: "",
     address_line1: "", address_line2: "", city: "", province: "", postal_code: "",
-    pudo_locker_name: "", pudo_locker_address: "",
+    pudo_locker_name: "", pudo_locker_address: "", pudo_locker_code: "",
   });
 
   useEffect(() => {
@@ -89,6 +90,7 @@ export default function CheckoutPage() {
         postal_code:         profileData.address_postal_code || "",
         pudo_locker_name:    profileData.pudo_locker_name || "",
         pudo_locker_address: profileData.pudo_locker_address || "",
+        pudo_locker_code:    profileData.pudo_locker_code || "",
       });
       setLoading(false);
     }).catch(() => { setError("Failed to load checkout data."); setLoading(false); });
@@ -167,6 +169,7 @@ export default function CheckoutPage() {
           use_store_credit:    creditApplied > 0,
           pudo_locker_name:    delivery.pudo_locker_name,
           pudo_locker_address: delivery.pudo_locker_address,
+          pudo_locker_code:    delivery.pudo_locker_code,
         }),
       });
       if (!orderRes.ok) {
@@ -185,6 +188,7 @@ export default function CheckoutPage() {
           address_line2: delivery.address_line2, address_city: delivery.city,
           address_province: delivery.province, address_postal_code: delivery.postal_code,
           pudo_locker_name: delivery.pudo_locker_name, pudo_locker_address: delivery.pudo_locker_address,
+          pudo_locker_code: delivery.pudo_locker_code,
           delivery_preference: isCourier ? "pudo" : "collection",
         }),
       });
@@ -292,16 +296,11 @@ export default function CheckoutPage() {
               <p style={{ fontSize:12, color:"#a0a0b0", margin:"0 0 14px" }}>
                 Find your nearest location at <a href="https://www.pudo.co.za/find-a-locker" target="_blank" rel="noreferrer" style={{ color:"#ff6b35" }}>pudo.co.za</a>
               </p>
-              <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
-                <div>
-                  <label style={{ fontSize:11, color:"#a0a0b0", display:"block", marginBottom:4 }}>Locker / Kiosk name</label>
-                  <input style={inp()} value={delivery.pudo_locker_name} onChange={e => setDelivery(d=>({...d,pudo_locker_name:e.target.value}))} placeholder="e.g. Birchleigh North Mall" />
-                </div>
-                <div>
-                  <label style={{ fontSize:11, color:"#a0a0b0", display:"block", marginBottom:4 }}>Locker / Kiosk address</label>
-                  <input style={inp()} value={delivery.pudo_locker_address} onChange={e => setDelivery(d=>({...d,pudo_locker_address:e.target.value}))} placeholder="e.g. Mooifontein Rd, Birchleigh North" />
-                </div>
-              </div>
+              <LockerPicker
+                value={{ name: delivery.pudo_locker_name, address: delivery.pudo_locker_address, code: delivery.pudo_locker_code }}
+                onChange={v => setDelivery(d => ({ ...d, pudo_locker_name: v.name, pudo_locker_address: v.address, pudo_locker_code: v.code }))}
+                inputStyle={inp()}
+              />
             </div>
           )}
 
