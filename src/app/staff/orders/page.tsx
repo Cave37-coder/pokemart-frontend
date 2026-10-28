@@ -93,6 +93,7 @@ interface AdminOrder {
   item_count: number; created_at: string;
   pudo_locker_name?: string; pudo_locker_address?: string; pudo_locker_code?: string;
   pudo_shipment_id?: string; pudo_pin?: string; pudo_booking_error?: string;
+  parcel_size?: string; shipping_quotes?: Record<string, string>;
   delivery_address_line1?: string; delivery_address_line2?: string;
   delivery_city?: string; delivery_province?: string; delivery_postal_code?: string;
 }
@@ -159,7 +160,7 @@ function DeliveryEditor({ order, onSaved }: { order: AdminOrder; onSaved: () => 
   const closed = order.status === "cancelled" || order.status === "invoiced";
   const [open, setOpen] = useState(false);
   const [method, setMethod] = useState(order.shipping_method === "collection" ? "pudo_locker" : (order.shipping_method || "pudo_locker"));
-  const [cost, setCost] = useState(String(DELIVERY_OPTIONS.find((o) => o.id === (order.shipping_method === "collection" ? "pudo_locker" : order.shipping_method))?.price ?? 75));
+  const [cost, setCost] = useState(String(order.shipping_quotes?.[order.shipping_method === "collection" ? "pudo_locker" : order.shipping_method] ?? DELIVERY_OPTIONS.find((o) => o.id === (order.shipping_method === "collection" ? "pudo_locker" : order.shipping_method))?.price ?? 75));
   const [lockerName, setLockerName] = useState(order.pudo_locker_name || "");
   const [lockerAddr, setLockerAddr] = useState(order.pudo_locker_address || "");
   const [lockerCode, setLockerCode] = useState(order.pudo_locker_code || "");
@@ -183,7 +184,7 @@ function DeliveryEditor({ order, onSaved }: { order: AdminOrder; onSaved: () => 
 
   const pick = (id: string) => {
     setMethod(id);
-    setCost(String(DELIVERY_OPTIONS.find((o) => o.id === id)?.price ?? 0));
+    setCost(String(order.shipping_quotes?.[id] ?? DELIVERY_OPTIONS.find((o) => o.id === id)?.price ?? 0));
   };
 
   const submit = async () => {
@@ -402,6 +403,7 @@ function OrderManageRow({ order, onSaved }: { order: AdminOrder; onSaved: () => 
       {isLockerOrder && (
         <div style={{ borderTop: "1px solid #2a2a3a", paddingTop: 12, display: "flex", flexWrap: "wrap", gap: 10, alignItems: "center" }}>
           <span style={{ fontSize: 11, color: "#888" }}>Pudo:</span>
+          {order.parcel_size && <span style={{ fontSize: 12, color: "#ccc" }}>Parcel: <strong>{order.parcel_size}</strong> ({order.item_count} cards)</span>}
           {order.pudo_shipment_id ? (
             <>
               <span style={{ fontSize: 12, color: "#4ade80" }}>✅ Booked — waybill <strong>{order.waybill_number}</strong>{order.pudo_pin ? <> · drop-off PIN <strong>{order.pudo_pin}</strong></> : null}</span>

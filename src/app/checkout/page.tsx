@@ -11,10 +11,10 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://pokemart-api-product
 
 const DELIVERY_OPTIONS = [
   { id: "collection",        label: "Collection",                          price: 0,   desc: "Collect from Birchleigh North, Kempton Park. Mon-Fri 18:30-21:00 | Sat 10:00-18:00 | Sun 10:00-15:00. Please give 24hrs notice!", courier: false },
-  { id: "pudo_locker",       label: "Pudo — Locker to Locker (XSmall)",   price: 75,  desc: "1-4 business days. Delivered to your nearest Pudo locker.", courier: true },
-  { id: "pudo_kiosk",        label: "Pudo — Locker to Kiosk (XSmall)",    price: 85,  desc: "1-4 business days. Collect from your nearest Pudo kiosk.", courier: true },
+  { id: "pudo_locker",       label: "Pudo — Locker to Locker",            price: 75,  desc: "1-4 business days. Delivered to your nearest Pudo locker.", courier: true },
+  { id: "pudo_kiosk",        label: "Pudo — Locker to Kiosk",             price: 85,  desc: "1-4 business days. Collect from your nearest Pudo kiosk.", courier: true },
   { id: "pudo_medium",       label: "Pudo — Medium/Tins (Kiosk)",         price: 95,  desc: "For tins or larger items. Collect from your nearest Pudo kiosk.", courier: true },
-  { id: "pudo_door",         label: "Pudo — Locker to Door (XSmall)",     price: 105, desc: "2-4 business days. Delivered to your door.", courier: true },
+  { id: "pudo_door",         label: "Pudo — Locker to Door",              price: 105, desc: "2-4 business days. Delivered to your door.", courier: true },
   // Postnet removed 2026-09-18 per Michael -- no longer offered at checkout.
 ];
 
@@ -62,6 +62,8 @@ export default function CheckoutPage() {
   const [error, setError]       = useState("");
   // Store credit (2026-10-27): balance from /api/auth/profile/; "use" is on by default when there is some.
   const [creditBalance, setCreditBalance] = useState(0);
+  // Delivery prices come from the server (parcel size is decided by card count -- see orders/shipping.py).
+  const [quote, setQuote] = useState<{ cards: number; size: string; up_to_cards: number; prices: Record<string, string> } | null>(null);
   const [useCredit, setUseCredit] = useState(true);
   const [delivery, setDelivery] = useState({
     first_name: "", last_name: "", email: "", phone: "",
@@ -75,8 +77,10 @@ export default function CheckoutPage() {
     Promise.all([
       fetch(`${API_URL}/api/cart/`, { headers: { Authorization: `Bearer ${token}` } }).then(r => r.json()),
       fetch(`${API_URL}/api/auth/profile/`, { headers: { Authorization: `Bearer ${token}` } }).then(r => r.json()),
-    ]).then(([cartData, profileData]) => {
+      fetch(`${API_URL}/api/shipping-quote/`, { headers: { Authorization: `Bearer ${token}` } }).then(r => r.ok ? r.json() : null).catch(() => null),
+    ]).then(([cartData, profileData, quoteData]) => {
       setCart(cartData);
+      if (quoteData && quoteData.prices) setQuote(quoteData);
       setCreditBalance(parseFloat(profileData.store_credit_balance || "0") || 0);
       setDelivery({
         first_name:          profileData.first_name || "",
@@ -106,7 +110,11 @@ export default function CheckoutPage() {
     if (!isCourier && !["coc","eft","payfast"].includes(payment)) setPayment("coc");
   }, [isCourier]);
 
-  const shippingCost     = selectedDelivery?.price || 0;
+  const priceOf = (opt: { id: string; price: number }) => {
+    const q = quote?.prices?.[opt.id];
+    return q !== undefined && !isNaN(parseFloat(q)) ? parseFloat(q) : opt.price;
+  };
+  const shippingCost     = selectedDelivery ? priceOf(selectedDelivery) : 0;
   const cartSubtotal     = parseFloat(cart?.subtotal || cart?.total || "0");
   const discountPercent  = parseFloat(cart?.discount_percent || "0");
   const discountAmount   = parseFloat(cart?.discount_amount || "0");
@@ -269,6 +277,11 @@ export default function CheckoutPage() {
           {/* Delivery method */}
           <div style={card()}>
             <h2 style={{ fontSize:15, fontWeight:700, color:"#fff", margin:"0 0 14px" }}>Delivery method</h2>
+            {quote && quote.cards > 0 && (
+              <p style={{ fontSize:11, color:"#a0a0b0", margin:"-6px 0 12px", lineHeight:1.5 }}>
+                Your {quote.cards} card{quote.cards===1?"":"s"} will ship in a Pudo <strong style={{ color:"#fff" }}>{quote.size}</strong> parcel (up to {quote.up_to_cards} cards) — we choose the right parcel size for your order, and the delivery prices below already include it.
+              </p>
+            )}
             <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
               {DELIVERY_OPTIONS.map(opt => (
                 <button key={opt.id} onClick={() => setShipping(opt.id)} style={{
@@ -282,7 +295,7 @@ export default function CheckoutPage() {
                     <div style={{ fontSize:11, color:"#a0a0b0", lineHeight:1.5, maxWidth:320 }}>{opt.desc}</div>
                   </div>
                   <div style={{ fontWeight:700, color:shipping===opt.id?"#ff6b35":"#a0a0b0", fontSize:14, marginLeft:12, flexShrink:0 }}>
-                    {opt.price===0?"FREE":`R ${opt.price}`}
+                    {priceOf(opt)===0?"FREE":`R ${priceOf(opt)}`}
                   </div>
                 </button>
               ))}
