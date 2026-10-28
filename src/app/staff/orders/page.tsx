@@ -749,6 +749,8 @@ function InvoicesTab() {
                       <a style={btn} href={`${API_URL}/admin/orders/manualinvoice/${inv.id}/manual-invoice-pull-sheet/`} target="_blank" rel="noreferrer">🖨 Pull Sheet</a>
                       <a style={btn} href={`${API_URL}/admin/orders/manualinvoice/${inv.id}/manual-invoice-print/`} target="_blank" rel="noreferrer">📄 Invoice</a>
                       <a style={btn} href={`${API_URL}/admin/orders/manualinvoice/${inv.id}/manual-invoice-pdf/`} target="_blank" rel="noreferrer">⬇ PDF</a>
+                      <button style={btn} title="40x30 mm tag for the Volkano label printer (open in Labelnize > Image Printing)" onClick={async () => { const m = await downloadLabelPng(`/api/orders/admin/manual-invoices/${inv.id}/label/`, `label-${inv.invoice_number}.png`); if (m) alert(m); }}>🏷 Tag 40×30</button>
+                      <button style={btn} title="14x40 mm Thank-you sticker with the customer's first name. Shift-click for the standing version." onClick={async (e) => { const m = await downloadLabelPng(`/api/orders/admin/manual-invoices/${inv.id}/thankyou/${e.shiftKey ? "?portrait=1" : ""}`, `thankyou-${inv.invoice_number}.png`); if (m) alert(m); }}>💌 Thank-you 14×40</button>
                       <button style={btn} onClick={() => emailInvoice(inv.id, inv.invoice_number)}>✉️ Email</button>
                     </div>
                   </td>

@@ -1498,6 +1498,16 @@ export default function BuyingTab() {
                         <a style={btn} title="Seller's copy: TCG price, rate bought at, price paid" href={`${API_URL}/admin/orders/buyorder/${inv.id}/buy-order-client-print/`} target="_blank" rel="noreferrer">🖨 Client copy</a>
                         <a style={btn} title="Seller's copy as PDF" href={`${API_URL}/admin/orders/buyorder/${inv.id}/buy-order-client-pdf/`} target="_blank" rel="noreferrer">⬇ Client PDF</a>
                         <a style={btn} title="Internal: condition, rate, sell-at price" href={`${API_URL}/admin/orders/buyorder/${inv.id}/buy-order-print/`} target="_blank" rel="noreferrer">📋 Stock sheet</a>
+                        <button style={btn} title="40x30 mm stock-box label(s) for the Volkano label printer — asks how many boxes" onClick={async () => {
+                          const ans = window.prompt(`How many boxes to label for ${inv.buy_number}${inv.box_number ? ` (Box ${inv.box_number})` : ""}?`, "1");
+                          if (ans === null) return;
+                          const n = Math.max(1, Math.min(50, parseInt(ans, 10) || 1));
+                          for (let i = 1; i <= n; i++) {
+                            const m = await downloadLabelPng(`/api/orders/admin/buy-invoices/${inv.id}/box-label/?i=${i}&n=${n}`, `box-${inv.buy_number}-${i}of${n}.png`);
+                            if (m) { alert(m); return; }
+                            if (i < n) await new Promise((r) => setTimeout(r, 500));
+                          }
+                        }}>📦 Box labels</button>
                         <button style={btn} title="Emails the client copy (PDF attached)" onClick={() => emailReceipt(inv)}>✉️ Email client</button>
                       </div>
                     </td>
