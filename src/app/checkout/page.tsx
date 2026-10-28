@@ -13,7 +13,7 @@ const DELIVERY_OPTIONS = [
   { id: "collection",        label: "Collection",                          price: 0,   desc: "Collect from Birchleigh North, Kempton Park. Mon-Fri 18:30-21:00 | Sat 10:00-18:00 | Sun 10:00-15:00. Please give 24hrs notice!", courier: false },
   { id: "pudo_locker",       label: "Pudo — Locker to Locker",            price: 75,  desc: "1-4 business days. Delivered to your nearest Pudo locker.", courier: true },
   { id: "pudo_kiosk",        label: "Pudo — Locker to Kiosk",             price: 85,  desc: "1-4 business days. Collect from your nearest Pudo kiosk.", courier: true },
-  { id: "pudo_medium",       label: "Pudo — Medium/Tins (Kiosk)",         price: 95,  desc: "For tins or larger items. Collect from your nearest Pudo kiosk.", courier: true },
+  // Medium/Tins removed 2026-10-28 per Michael -- parcel size is decided by us from the card count, not chosen by the customer.
   { id: "pudo_door",         label: "Pudo — Locker to Door",              price: 105, desc: "2-4 business days. Delivered to your door.", courier: true },
   // Postnet removed 2026-09-18 per Michael -- no longer offered at checkout.
 ];
