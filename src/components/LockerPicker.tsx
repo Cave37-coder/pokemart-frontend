@@ -91,11 +91,15 @@ export default function LockerPicker({
         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
           <div>
             <label style={{ fontSize: 11, color: muted, display: "block", marginBottom: 4 }}>Locker / Kiosk name</label>
-            <input style={inp} value={value.name} onChange={e => onChange({ name: e.target.value, address: value.address, code: "" })} placeholder="e.g. Birchleigh North Mall" />
+            <input style={inp} value={value.name} onChange={e => onChange({ name: e.target.value, address: value.address, code: value.code })} placeholder="e.g. Birchleigh North Mall" />
           </div>
           <div>
             <label style={{ fontSize: 11, color: muted, display: "block", marginBottom: 4 }}>Locker / Kiosk address</label>
-            <input style={inp} value={value.address} onChange={e => onChange({ name: value.name, address: e.target.value, code: "" })} placeholder="e.g. Mooifontein Rd, Birchleigh North" />
+            <input style={inp} value={value.address} onChange={e => onChange({ name: value.name, address: e.target.value, code: value.code })} placeholder="e.g. Mooifontein Rd, Birchleigh North" />
+          </div>
+          <div>
+            <label style={{ fontSize: 11, color: muted, display: "block", marginBottom: 4 }}>Locker code (optional — on the Pudo app or sticker, e.g. CG54)</label>
+            <input style={inp} value={value.code} onChange={e => onChange({ name: value.name, address: value.address, code: e.target.value.toUpperCase().replace(/[^A-Z0-9_-]/g, "").slice(0, 32) })} placeholder="e.g. CG54" />
           </div>
         </div>
       )}
