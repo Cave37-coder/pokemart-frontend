@@ -38,7 +38,7 @@ interface BuyLine {
 }
 
 // Same multipliers as PokemonProduct.CONDITION_MULTIPLIERS on the backend.
-const COND_MULT: Record<string, number> = { NM: 1, LP: 0.8, MP: 0.6, HP: 0.35, DMG: 0.2 };
+const COND_MULT: Record<string, number> = { NM: 1, LP: 0.84, MP: 0.65, HP: 0.45, DMG: 0.3 };
 const CONDITIONS: [string, string][] = [
   ["NM", "Near Mint"], ["LP", "Lightly Played"], ["MP", "Moderately Played"], ["HP", "Heavily Played"], ["DMG", "Damaged"],
 ];
@@ -61,7 +61,10 @@ interface Analysis {
   expected_sell_total: string; expected_profit: string | null; expected_margin: string | null;
 }
 
+interface BulkSortRow { id: number; name: string; set_name: string; card_number: string; variant: string; quantity: number; condition: string; unit_cost: string; created_at: string }
+
 interface BuyInvoice {
+  kind?: "standard" | "bulk"; // "bulk" = Bulk Buy-in (bundles registered now, cards sorted into stock later)
   id: number; buy_number: string; box_number: number | null; amount_paid: string | null; cost_applied: boolean; premium_accepted?: boolean; analysis: Analysis; status: string; status_display: string; stock_mode: string;
   seller_name: string; seller_email: string; seller_phone: string; user_username: string | null;
   user_id: number | null; user_credit_balance: string | null;
@@ -70,8 +73,11 @@ interface BuyInvoice {
   payment_made: boolean; payment_method: string; payment_method_display: string;
   total: string; item_count: number; off_catalogue_units: number;
   created_at: string; completed_at: string | null;
-  items: { id: number; product_id: number | null; accessory_id?: number | null; image_url?: string | null; description: string; set_name: string; card_number: string; variant: string; quantity: number; unit_price: string; line_total: string; live_stock: number | null; tcg_price?: string | null; condition?: string; sell_price?: string | null; sell_pct?: string | null; live_price?: string | null; effective_unit_cost: string; effective_rate: string | null }[];
+  items: { id: number; product_id: number | null; accessory_id?: number | null; image_url?: string | null; description: string; set_name: string; card_number: string; variant: string; quantity: number; unit_price: string; line_total: string; live_stock: number | null; tcg_price?: string | null; condition?: string; sell_price?: string | null; sell_pct?: string | null; live_price?: string | null; effective_unit_cost: string; effective_rate: string | null; bundle_type?: string; sorted_qty?: number; remaining_qty?: number; sorts?: BulkSortRow[] }[];
 }
+
+const BUNDLE_TYPES: [string, string][] = [["common", "Commons"], ["holo", "Holos"], ["reverse", "Reverse Holos"]];
+const bundleLabel = (t?: string) => BUNDLE_TYPES.find(([k]) => k === t)?.[1] || "";
 
 interface ApiProduct {
   id: number; name: string; card_set?: { name: string; code: string } | null;
@@ -961,6 +967,334 @@ function TracePanel() {
   );
 }
 
+// =============================================================================
+// BULK BUY-IN (2026-10-28, Michael): "a quick buy-in to register the bulk amount of
+// cards, then a later fill-in of the exact cards to add to stock". A separate kind of
+// buying invoice: bundles of Commons / Holos / Reverse Holos (type, optional set, qty,
+// R per card). Marking it Paid pays the seller (cash / EFT / store credit); NO stock is
+// added until the exact cards are sorted (BulkSortPanel), each at the bundle's real cost.
+// Anything EX and up is bought as a normal invoice (priced by % of TCG).
+// =============================================================================
+interface BundleLine { key: string; bundle_type: string; set_name: string; quantity: string; unit_price: string }
+
+function BulkEditor({ initial, onSaved, onCancel }: { initial?: BuyInvoice; onSaved: () => void; onCancel: () => void }) {
+  const locked = !!initial && initial.status !== "draft";
+  const [sellerName, setSellerName] = useState(initial?.seller_name || "");
+  const [sellerEmail, setSellerEmail] = useState(initial?.seller_email || "");
+  const [sellerPhone, setSellerPhone] = useState(initial?.seller_phone || "");
+  const [sellerNote, setSellerNote] = useState(initial?.seller_note || "");
+  const [internalNote, setInternalNote] = useState(initial?.internal_note || "");
+  const [boxNumber, setBoxNumber] = useState(initial?.box_number ? String(initial.box_number) : "");
+  const [linked, setLinked] = useState<{ id: number; username: string; balance: string | null } | null>(
+    initial?.user_id && initial.user_username ? { id: initial.user_id, username: initial.user_username, balance: initial.user_credit_balance } : null);
+  const [creditAmt, setCreditAmt] = useState(initial && parseFloat(initial.store_credit_amount) > 0 ? String(initial.store_credit_amount) : "");
+  const [lines, setLines] = useState<BundleLine[]>(
+    (initial?.items || []).filter((i) => i.bundle_type).map((i) => ({
+      key: newKey(), bundle_type: i.bundle_type || "common", set_name: i.set_name || "",
+      quantity: String(i.quantity), unit_price: String(i.unit_price),
+    })));
+  const [sets, setSets] = useState<SetOpt[]>([]);
+  const [addType, setAddType] = useState("common");
+  const [addSet, setAddSet] = useState("");
+  const [addQty, setAddQty] = useState("");
+  const [addPrice, setAddPrice] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    fetch(`${API_URL}/api/sets/`).then((r) => r.json()).then((d) => setSets(d.results || [])).catch(() => setSets([]));
+  }, []);
+
+  const total = lines.reduce((s, l) => s + (parseFloat(l.unit_price) || 0) * (parseInt(l.quantity) || 0), 0);
+  const cards = lines.reduce((s, l) => s + (parseInt(l.quantity) || 0), 0);
+
+  const addLine = () => {
+    const q = parseInt(addQty);
+    if (!q || q < 1) { setError("Enter how many cards."); return; }
+    if (addPrice.trim() === "" || isNaN(parseFloat(addPrice))) { setError("Enter the price offered per card."); return; }
+    setError("");
+    const setName = addSet ? (sets.find((s) => s.code === addSet)?.name || addSet) : "";
+    setLines((ls) => [...ls, { key: newKey(), bundle_type: addType, set_name: setName, quantity: String(q), unit_price: round2(parseFloat(addPrice)) }]);
+    setAddQty(""); setAddPrice("");
+  };
+
+  const save = async () => {
+    setSaving(true); setError("");
+    try {
+      const body: Record<string, unknown> = {
+        kind: "bulk", seller_name: sellerName, seller_email: sellerEmail, seller_phone: sellerPhone,
+        seller_note: sellerNote, internal_note: internalNote, user_id: linked ? linked.id : null,
+      };
+      if (boxNumber.trim()) body.box_number = boxNumber.trim();
+      if (!locked) {
+        body.store_credit_amount = linked && creditAmt.trim() ? creditAmt.trim() : "0";
+        body.items = lines.map((l) => ({
+          bundle_type: l.bundle_type, set_name: l.set_name, quantity: l.quantity, unit_price: l.unit_price || "0",
+        }));
+      }
+      const res = await authFetch(initial ? `/api/orders/admin/buy-invoices/${initial.id}/` : "/api/orders/admin/buy-invoices/", {
+        method: initial ? "PATCH" : "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) { setError(data.error || "Could not save the bulk buy-in."); return; }
+      onSaved();
+    } catch (e) {
+      setError(e instanceof SessionExpiredError ? "Session expired — please sign in again." : "Failed to save — check your connection.");
+    } finally { setSaving(false); }
+  };
+
+  return (
+    <div style={{ ...card, marginBottom: 18, display: "flex", flexDirection: "column", gap: 14, borderColor: "#7c3aed" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <strong style={{ color: "#fff", fontSize: 14 }}>{initial ? `Edit ${initial.buy_number}` : "📦 New Bulk Buy-in"} <span style={{ color: "#a78bfa", fontSize: 11, fontWeight: 400 }}>— Commons / Holos / Reverse Holos, sorted into stock later</span></strong>
+        <button style={btn} onClick={onCancel}>Close</button>
+      </div>
+
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
+        <div style={{ flex: 1, minWidth: 180 }}><label style={lbl}>Seller name *</label><input style={{ ...inp, width: "100%" }} value={sellerName} onChange={(e) => setSellerName(e.target.value)} /></div>
+        <div style={{ flex: 1, minWidth: 180 }}><label style={lbl}>Email (for the receipt)</label><input style={{ ...inp, width: "100%" }} value={sellerEmail} onChange={(e) => setSellerEmail(e.target.value)} /></div>
+        <div style={{ flex: 1, minWidth: 140 }}><label style={lbl}>Phone</label><input style={{ ...inp, width: "100%" }} value={sellerPhone} onChange={(e) => setSellerPhone(e.target.value)} /></div>
+        <div style={{ width: 120 }}><label style={lbl}>Box #</label><input style={{ ...inp, width: "100%" }} type="number" min="1" value={boxNumber} placeholder={initial ? "" : "Auto"} onChange={(e) => setBoxNumber(e.target.value)} /></div>
+      </div>
+
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 10, alignItems: "flex-end", background: "#12121a", border: "1px solid #2a2a3a", borderRadius: 8, padding: 10 }}>
+        <div style={{ flex: 2, minWidth: 260 }}>
+          <label style={lbl}>Seller&apos;s site account (needed for store credit)</label>
+          <SellerAccountPicker linked={linked} disabled={locked && parseFloat(creditAmt || "0") > 0}
+            onLink={(c) => {
+              if (!c) { setLinked(null); setCreditAmt(""); return; }
+              setLinked({ id: c.id, username: c.username, balance: c.store_credit_balance ?? null });
+              if (!sellerName.trim()) setSellerName(`${c.first_name} ${c.last_name}`.trim() || c.username);
+              if (!sellerEmail.trim()) setSellerEmail(c.email || "");
+              if (!sellerPhone.trim() && c.phone_number) setSellerPhone(c.phone_number);
+            }} />
+        </div>
+        <div style={{ flex: 1, minWidth: 220 }}>
+          <label style={lbl}>Pay as store credit (R)</label>
+          <div style={{ display: "flex", gap: 6 }}>
+            <input style={{ ...inp, width: 110 }} type="number" min="0" step="0.01" value={creditAmt} disabled={locked || !linked}
+              onChange={(e) => setCreditAmt(e.target.value)} placeholder={linked ? "0.00" : "link account"} />
+            <button style={btn} disabled={locked || !linked} onClick={() => setCreditAmt(round2(total))}>All as credit</button>
+            <button style={btn} disabled={locked || !linked} onClick={() => setCreditAmt("")}>None</button>
+          </div>
+        </div>
+        <div style={{ fontSize: 11, color: "#888", flexBasis: "100%" }}>
+          {linked && parseFloat(creditAmt || "0") > 0
+            ? <>Seller gets <strong style={{ color: "#4ade80" }}>{money(creditAmt)}</strong> store credit when you mark this Paid (R1 payout = R1 credit).</>
+            : "Optional: pay all or part as store credit for her next order. The seller must be linked to her site account."}
+        </div>
+      </div>
+
+      {locked ? (
+        <div style={{ fontSize: 11, color: "#e0b050" }}>This bulk buy-in is {initial?.status_display}. Lines are locked — use “Back to draft” on the list to change them.</div>
+      ) : (
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "flex-end", background: "#12121a", border: "1px dashed #7c3aed", borderRadius: 8, padding: 10 }}>
+          <div><label style={lbl}>Type</label>
+            <select style={inp} value={addType} onChange={(e) => setAddType(e.target.value)}>
+              {BUNDLE_TYPES.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
+            </select></div>
+          <div style={{ flex: 1, minWidth: 200 }}><label style={lbl}>Set (leave blank if mixed)</label>
+            <select style={{ ...inp, width: "100%" }} value={addSet} onChange={(e) => setAddSet(e.target.value)}>
+              <option value="">Mixed / any set</option>
+              {groupSets(sets).map((g) => (
+                <optgroup key={g.era} label={g.label}>
+                  {g.sets.map((s) => <option key={s.code} value={s.code}>{s.name} [{s.code}]</option>)}
+                </optgroup>
+              ))}
+            </select></div>
+          <div><label style={lbl}>Qty (cards)</label><input style={{ ...inp, width: 90 }} type="number" min="1" value={addQty} onChange={(e) => setAddQty(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter") addLine(); }} /></div>
+          <div><label style={lbl}>Price offered per card (R)</label><input style={{ ...inp, width: 120 }} type="number" min="0" step="0.05" value={addPrice} onChange={(e) => setAddPrice(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter") addLine(); }} /></div>
+          <button style={btnPrimary} onClick={addLine}>+ Add bundle</button>
+        </div>
+      )}
+
+      {lines.length > 0 && (
+        <table style={{ width: "100%", borderCollapse: "collapse" }}>
+          <thead><tr style={{ borderBottom: "2px solid #2a2a3a" }}>
+            {["Bundle", "Set", "Qty", "R per card", "Line total", ""].map((h) => (
+              <th key={h} style={{ textAlign: "left", padding: "6px 8px", fontSize: 10, color: "#888", textTransform: "uppercase" }}>{h}</th>
+            ))}
+          </tr></thead>
+          <tbody>
+            {lines.map((l) => (
+              <tr key={l.key} style={{ borderBottom: "1px solid #2a2a3a" }}>
+                <td style={{ padding: "6px 8px", fontSize: 12, color: "#ddd", fontWeight: 700 }}>{bundleLabel(l.bundle_type)}</td>
+                <td style={{ padding: "6px 8px", fontSize: 12, color: "#888" }}>{l.set_name || "Mixed"}</td>
+                <td style={{ padding: "6px 8px" }}><input style={{ ...inp, width: 80 }} type="number" min="1" value={l.quantity} disabled={locked}
+                  onChange={(e) => setLines((ls) => ls.map((x) => x.key === l.key ? { ...x, quantity: e.target.value } : x))} /></td>
+                <td style={{ padding: "6px 8px" }}><input style={{ ...inp, width: 90 }} type="number" min="0" step="0.05" value={l.unit_price} disabled={locked}
+                  onChange={(e) => setLines((ls) => ls.map((x) => x.key === l.key ? { ...x, unit_price: e.target.value } : x))} /></td>
+                <td style={{ padding: "6px 8px", fontSize: 12, fontWeight: 700, color: "#fff" }}>{money((parseFloat(l.unit_price) || 0) * (parseInt(l.quantity) || 0))}</td>
+                <td style={{ padding: "6px 8px" }}>{!locked && <button style={btnDanger} onClick={() => setLines((ls) => ls.filter((x) => x.key !== l.key))}>✕</button>}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+
+      <div style={{ fontSize: 12, color: "#a0a0b0" }}>
+        {cards} card(s) · Total to pay seller: <strong style={{ color: "#fff", fontSize: 14 }}>{money(total)}</strong>
+        <div style={{ color: "#888", fontSize: 11, marginTop: 4 }}>
+          No stock is added by this invoice. When you have time, open it from the list and use “Sort cards” to add the exact cards to stock — each at the price per card above.
+        </div>
+      </div>
+
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
+        <div style={{ flex: 1, minWidth: 220 }}><label style={lbl}>Note for the seller (shown on her receipt)</label><input style={{ ...inp, width: "100%" }} value={sellerNote} onChange={(e) => setSellerNote(e.target.value)} /></div>
+        <div style={{ flex: 1, minWidth: 220 }}><label style={lbl}>Internal note (private)</label><input style={{ ...inp, width: "100%" }} value={internalNote} onChange={(e) => setInternalNote(e.target.value)} placeholder="e.g. 3 ETBs of mixed bulk" /></div>
+      </div>
+
+      <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+        <button style={btnPrimary} onClick={save} disabled={saving}>{saving ? "Saving…" : initial ? "Save changes" : "Save as draft"}</button>
+        {error && <span style={{ color: "#EF4444", fontSize: 12 }}>{error}</span>}
+      </div>
+    </div>
+  );
+}
+
+// ---- Sort cards: add the exact cards from a bulk buy-in's bundles into live stock ----
+interface PendingSort { key: string; item_id: number; card: BrowseCard; quantity: string; condition: string }
+
+function BulkSortPanel({ inv, onChanged }: { inv: BuyInvoice; onChanged: (msg: string) => void }) {
+  const bundles = inv.items.filter((i) => i.bundle_type);
+  const open = bundles.filter((i) => (i.remaining_qty ?? i.quantity) > 0);
+  const [itemId, setItemId] = useState<number>(open[0]?.id ?? bundles[0]?.id ?? 0);
+  const [pending, setPending] = useState<PendingSort[]>([]);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+  const [showHistory, setShowHistory] = useState(false);
+
+  const remainingOf = (id: number) => bundles.find((b) => b.id === id)?.remaining_qty ?? 0;
+  const pendingFor = (id: number) => pending.filter((p) => p.item_id === id).reduce((s, p) => s + (parseInt(p.quantity) || 0), 0);
+
+  const addCards = (cs: BrowseCard[]) => {
+    if (!itemId) return;
+    setPending((ps) => {
+      const out = [...ps];
+      for (const c of cs) {
+        const i = out.findIndex((p) => p.item_id === itemId && p.card.id === c.id && p.condition === "NM");
+        if (i >= 0) out[i] = { ...out[i], quantity: String((parseInt(out[i].quantity) || 0) + 1) };
+        else out.push({ key: newKey(), item_id: itemId, card: c, quantity: "1", condition: "NM" });
+      }
+      return out;
+    });
+  };
+  const inPending: Record<number, number> = {};
+  pending.filter((p) => p.item_id === itemId).forEach((p) => { inPending[p.card.id] = (inPending[p.card.id] || 0) + (parseInt(p.quantity) || 0); });
+
+  const over = bundles.some((b) => pendingFor(b.id) > (b.remaining_qty ?? 0));
+
+  const apply = async () => {
+    setBusy(true); setErr("");
+    try {
+      const res = await authFetch(`/api/orders/admin/buy-invoices/${inv.id}/action/`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "sort_bulk",
+          sorts: pending.map((p) => ({ item_id: p.item_id, product_id: p.card.id, quantity: p.quantity, condition: p.condition })),
+        }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) { setErr(body.error || "Could not add the cards to stock."); return; }
+      setPending([]);
+      onChanged(`${inv.buy_number}: ${body.message}`);
+    } catch (e) {
+      setErr(e instanceof SessionExpiredError ? "Session expired — please sign in again." : "Request failed — check your connection.");
+    } finally { setBusy(false); }
+  };
+
+  const allSorts = bundles.flatMap((b) => (b.sorts || []).map((s) => ({ ...s, bundle: `${bundleLabel(b.bundle_type)}${b.set_name ? ` · ${b.set_name}` : ""}` })));
+
+  return (
+    <div style={{ background: "#12121a", border: "1px solid #7c3aed", borderRadius: 10, padding: 12, margin: "4px 0 10px" }}>
+      <div style={{ color: "#fff", fontWeight: 700, fontSize: 13, marginBottom: 8 }}>🗂 Sort cards into stock — {inv.buy_number}</div>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 10 }}>
+        {bundles.map((b) => {
+          const rem = b.remaining_qty ?? b.quantity;
+          const active = b.id === itemId;
+          return (
+            <div key={b.id} onClick={() => setItemId(b.id)}
+              style={{ cursor: "pointer", padding: "8px 12px", borderRadius: 8, border: `1px solid ${active ? "#7c3aed" : "#2a2a3a"}`, background: active ? "#1f1536" : "#1a1a24", minWidth: 190 }}>
+              <div style={{ color: "#fff", fontSize: 12, fontWeight: 700 }}>{bundleLabel(b.bundle_type)} <span style={{ color: "#888", fontWeight: 400 }}>· {b.set_name || "Mixed"}</span></div>
+              <div style={{ fontSize: 11, color: "#a0a0b0" }}>{b.quantity} bought · {b.sorted_qty ?? 0} sorted · <b style={{ color: rem > 0 ? "#e0b050" : "#4ade80" }}>{rem} left</b> · R{round2(parseFloat(b.unit_price))} each</div>
+              {pendingFor(b.id) > 0 && <div style={{ fontSize: 10, color: pendingFor(b.id) > rem ? "#EF4444" : "#a78bfa" }}>adding {pendingFor(b.id)} now</div>}
+            </div>
+          );
+        })}
+      </div>
+
+      {remainingOf(itemId) > 0 ? (
+        <>
+          <div style={{ fontSize: 11, color: "#a0a0b0", marginBottom: 6 }}>
+            Sorting from the highlighted bundle above. Search or pick a set, then tap a card to add it (tap again for more copies).
+          </div>
+          <CardBrowser onAdd={(c) => addCards([c])} onAddMany={addCards} inInvoice={inPending} />
+        </>
+      ) : <div style={{ fontSize: 12, color: "#4ade80" }}>✔ This bundle is fully sorted.</div>}
+
+      {pending.length > 0 && (
+        <div style={{ marginTop: 10 }}>
+          <table style={{ width: "100%", borderCollapse: "collapse" }}>
+            <thead><tr>{["From", "Card", "Set · # · Var", "Qty", "Condition", ""].map((h) => (
+              <th key={h} style={{ textAlign: "left", padding: "4px 8px", fontSize: 10, color: "#888", textTransform: "uppercase" }}>{h}</th>))}</tr></thead>
+            <tbody>
+              {pending.map((p) => {
+                const b = bundles.find((x) => x.id === p.item_id);
+                return (
+                  <tr key={p.key} style={{ borderTop: "1px solid #2a2a3a" }}>
+                    <td style={{ padding: "4px 8px", fontSize: 11, color: "#a78bfa" }}>{bundleLabel(b?.bundle_type)}</td>
+                    <td style={{ padding: "4px 8px", fontSize: 12, color: "#ddd" }}>{p.card.name}</td>
+                    <td style={{ padding: "4px 8px", fontSize: 11, color: "#888" }}>{[p.card.set_name, p.card.card_number && `#${p.card.card_number}`, p.card.variant].filter(Boolean).join(" · ")}</td>
+                    <td style={{ padding: "4px 8px" }}><input style={{ ...inp, width: 70 }} type="number" min="1" value={p.quantity}
+                      onChange={(e) => setPending((ps) => ps.map((x) => x.key === p.key ? { ...x, quantity: e.target.value } : x))} /></td>
+                    <td style={{ padding: "4px 8px" }}>
+                      <select style={{ ...inp, padding: "3px 6px", fontSize: 11 }} value={p.condition}
+                        onChange={(e) => setPending((ps) => ps.map((x) => x.key === p.key ? { ...x, condition: e.target.value } : x))}>
+                        {CONDITIONS.map(([c, n]) => <option key={c} value={c}>{c} — {n}</option>)}
+                      </select>
+                    </td>
+                    <td style={{ padding: "4px 8px" }}><button style={btnDanger} onClick={() => setPending((ps) => ps.filter((x) => x.key !== p.key))}>✕</button></td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+          <div style={{ display: "flex", gap: 10, alignItems: "center", marginTop: 8, flexWrap: "wrap" }}>
+            <button style={btnGreen} disabled={busy || over} onClick={() => window.confirm(`Add ${pending.reduce((s, p) => s + (parseInt(p.quantity) || 0), 0)} card(s) to LIVE website stock now? Each is costed at its bundle's price per card.`) && apply()}>
+              ✅ Add {pending.reduce((s, p) => s + (parseInt(p.quantity) || 0), 0)} card(s) to stock
+            </button>
+            <button style={btn} disabled={busy} onClick={() => setPending([])}>Clear</button>
+            {over && <span style={{ color: "#EF4444", fontSize: 12 }}>More cards than are left in a bundle — lower a quantity.</span>}
+            {err && <span style={{ color: "#EF4444", fontSize: 12 }}>{err}</span>}
+          </div>
+        </div>
+      )}
+
+      {allSorts.length > 0 && (
+        <div style={{ marginTop: 10 }}>
+          <button style={btn} onClick={() => setShowHistory(!showHistory)}>{showHistory ? "Hide" : "Show"} cards already sorted ({allSorts.reduce((s, x) => s + x.quantity, 0)})</button>
+          {showHistory && (
+            <table style={{ width: "100%", borderCollapse: "collapse", marginTop: 6 }}>
+              <thead><tr>{["Date", "From", "Card", "Qty", "Cond", "Cost each"].map((h) => (
+                <th key={h} style={{ textAlign: "left", padding: "4px 8px", fontSize: 10, color: "#888", textTransform: "uppercase" }}>{h}</th>))}</tr></thead>
+              <tbody>{allSorts.map((s) => (
+                <tr key={s.id} style={{ borderTop: "1px solid #2a2a3a", fontSize: 11, color: "#ddd" }}>
+                  <td style={{ padding: "4px 8px" }}>{dateFmt(s.created_at)}</td>
+                  <td style={{ padding: "4px 8px", color: "#a78bfa" }}>{s.bundle}</td>
+                  <td style={{ padding: "4px 8px" }}>{s.name} <span style={{ color: "#666" }}>{[s.set_name, s.card_number && `#${s.card_number}`, s.variant].filter(Boolean).join(" · ")}</span></td>
+                  <td style={{ padding: "4px 8px" }}>{s.quantity}</td><td style={{ padding: "4px 8px" }}>{s.condition}</td>
+                  <td style={{ padding: "4px 8px" }}>{money(s.unit_cost)}</td>
+                </tr>))}</tbody>
+            </table>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function BuyingTab() {
   const [data, setData] = useState<Paginated<BuyInvoice> | null>(null);
   const [loading, setLoading] = useState(true);
@@ -970,16 +1304,19 @@ export default function BuyingTab() {
   const [search, setSearch] = useState("");
   const [searchInput, setSearchInput] = useState("");
   const [page, setPage] = useState(1);
-  const [editing, setEditing] = useState<BuyInvoice | "new" | null>(null);
+  const [editing, setEditing] = useState<BuyInvoice | "new" | "newBulk" | null>(null);
   const [busyId, setBusyId] = useState<number | null>(null);
   const [payMethod, setPayMethod] = useState<Record<number, string>>({});
   const [openCost, setOpenCost] = useState<number | null>(null);
+  const [openSort, setOpenSort] = useState<number | null>(null);
+  const [kind, setKind] = useState("");
 
   const load = useCallback(async () => {
     setLoading(true); setError("");
     try {
       const qs = new URLSearchParams({ page: String(page) });
       if (status) qs.set("status", status);
+      if (kind) qs.set("kind", kind);
       if (search) qs.set("search", search);
       const res = await authFetch(`/api/orders/admin/buy-invoices/?${qs}`);
       if (!res.ok) throw new Error();
@@ -987,7 +1324,7 @@ export default function BuyingTab() {
     } catch (e) {
       setError(e instanceof SessionExpiredError ? "Session expired — please sign in again." : "Failed to load buying invoices.");
     } finally { setLoading(false); }
-  }, [page, status, search]);
+  }, [page, status, kind, search]);
   useEffect(() => { load(); }, [load]);
 
   const act = async (inv: BuyInvoice, action: string, confirmText?: string) => {
@@ -1017,6 +1354,12 @@ export default function BuyingTab() {
       <TracePanel />
       <div style={{ display: "flex", gap: 10, marginBottom: 16, flexWrap: "wrap", alignItems: "center" }}>
         <button style={btnPrimary} onClick={() => setEditing("new")}>+ New Buying Invoice</button>
+        <button style={{ ...btnPrimary, background: "#7c3aed" }} title="Register bundles of Commons / Holos / Reverse Holos now; sort the exact cards into stock later" onClick={() => setEditing("newBulk")}>📦 New Bulk Buy-in</button>
+        <select style={inp} value={kind} onChange={(e) => { setKind(e.target.value); setPage(1); }}>
+          <option value="">All types</option>
+          <option value="standard">Standard invoices</option>
+          <option value="bulk">Bulk buy-ins</option>
+        </select>
         <select style={inp} value={status} onChange={(e) => { setStatus(e.target.value); setPage(1); }}>
           <option value="">All statuses</option>
           {STATUS_CHOICES.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
@@ -1024,17 +1367,24 @@ export default function BuyingTab() {
         <input style={inp} value={searchInput} onChange={(e) => setSearchInput(e.target.value)}
           onKeyDown={(e) => { if (e.key === "Enter") { setSearch(searchInput); setPage(1); } }} placeholder="Search seller / BUY-# / box #…" />
         <button style={btn} onClick={() => { setSearch(searchInput); setPage(1); }}>Search</button>
-        {(status || search) && <button style={btn} onClick={() => { setStatus(""); setSearch(""); setSearchInput(""); setPage(1); }}>Clear filters</button>}
+        {(status || kind || search) && <button style={btn} onClick={() => { setStatus(""); setKind(""); setSearch(""); setSearchInput(""); setPage(1); }}>Clear filters</button>}
       </div>
 
-      {editing && (
+      {editing && (editing === "newBulk" || (editing !== "new" && editing.kind === "bulk") ? (
+        <BulkEditor
+          key={editing === "newBulk" ? "newBulk" : editing.id}
+          initial={editing === "newBulk" ? undefined : editing}
+          onCancel={() => setEditing(null)}
+          onSaved={() => { setEditing(null); setMsg("Saved."); load(); }}
+        />
+      ) : (
         <InvoiceEditor
           key={editing === "new" ? "new" : editing.id}
           initial={editing === "new" ? undefined : editing}
           onCancel={() => setEditing(null)}
           onSaved={() => { setEditing(null); setMsg("Saved."); load(); }}
         />
-      )}
+      ))}
 
       {msg && <div style={{ color: "#4ade80", fontSize: 13, marginBottom: 12 }}>{msg}</div>}
       {error && <div style={{ color: "#EF4444", fontSize: 13, marginBottom: 12 }}>{error}</div>}
@@ -1063,6 +1413,7 @@ export default function BuyingTab() {
                     <td style={{ padding: "8px", fontSize: 12 }}>
                       <a href={`${API_URL}/admin/orders/buyorder/${inv.id}/change/`} target="_blank" rel="noreferrer" style={{ color: "#ff6b35", fontWeight: 700 }}>{inv.buy_number}</a>
                       {legacy && <div style={{ color: "#666", fontSize: 9 }}>legacy POS</div>}
+                      {inv.kind === "bulk" && <div style={{ color: "#a78bfa", fontSize: 9, fontWeight: 700 }}>📦 BULK BUY-IN</div>}
                     </td>
                     <td style={{ padding: "8px", fontSize: 13, fontWeight: 700, color: "#fff" }}>{inv.box_number ? `📦 ${inv.box_number}` : "—"}</td>
                     <td style={{ padding: "8px", fontSize: 12, color: "#ddd" }}>
@@ -1072,6 +1423,10 @@ export default function BuyingTab() {
                     <td style={{ padding: "8px" }}><StatusBadge status={inv.status} label={inv.status_display} /></td>
                     <td style={{ padding: "8px", fontSize: 12, color: "#888" }}>
                       {inv.item_count}{inv.off_catalogue_units > 0 && <div style={{ color: "#e0b050", fontSize: 9 }}>{inv.off_catalogue_units} off-cat.</div>}
+                      {inv.kind === "bulk" && (() => {
+                        const left = inv.items.reduce((s, i) => s + (i.bundle_type ? (i.remaining_qty ?? i.quantity) : 0), 0);
+                        return <div style={{ color: left > 0 ? "#e0b050" : "#4ade80", fontSize: 9 }}>{left > 0 ? `${left} unsorted` : "all sorted"}</div>;
+                      })()}
                     </td>
                     <td style={{ padding: "8px", fontSize: 12, fontWeight: 700, color: "#fff" }}>
                       {money(inv.total)}
@@ -1112,12 +1467,17 @@ export default function BuyingTab() {
                             })()}
                           </>
                         )}
+                        {!legacy && inv.kind === "bulk" && (inv.status === "paid" || inv.status === "complete") && (
+                          <button style={{ ...btnPrimary, background: "#7c3aed" }} onClick={() => setOpenSort(openSort === inv.id ? null : inv.id)}>🗂 Sort cards</button>
+                        )}
                         {!legacy && inv.status === "paid" && (
                           <>
-                            <button style={btnGreen} disabled={busy}
-                              onClick={() => act(inv, "complete", `Complete ${inv.buy_number}? This adds ${inv.item_count - inv.off_catalogue_units} card(s) to LIVE website stock and locks the invoice.`)}>
-                              ✅ Complete &amp; add stock
-                            </button>
+                            {inv.kind !== "bulk" && (
+                              <button style={btnGreen} disabled={busy}
+                                onClick={() => act(inv, "complete", `Complete ${inv.buy_number}? This adds ${inv.item_count - inv.off_catalogue_units} card(s) to LIVE website stock and locks the invoice.`)}>
+                                ✅ Complete &amp; add stock
+                              </button>
+                            )}
                             <button style={btn} onClick={() => setEditing(inv)}>✏️ Details</button>
                             <button style={btn} disabled={busy} onClick={() => act(inv, "unpay")}>↩ Back to draft</button>
                           </>
@@ -1135,6 +1495,11 @@ export default function BuyingTab() {
                       </div>
                     </td>
                   </tr>
+                  {openSort === inv.id && inv.kind === "bulk" && (
+                    <tr><td colSpan={9} style={{ padding: "0 8px" }}>
+                      <BulkSortPanel inv={inv} onChanged={(m) => { setMsg(m); load(); }} />
+                    </td></tr>
+                  )}
                   {openCost === inv.id && (
                     <tr><td colSpan={9} style={{ padding: "0 8px" }}>
                       <CostPanel inv={inv} onChanged={(m) => { setMsg(m); load(); }} />
