@@ -2,6 +2,7 @@
 import { useEffect, useState, useCallback, Fragment } from "react";
 import Link from "next/link";
 import { authFetch, SessionExpiredError } from "@/lib/api";
+import { downloadLabelPng } from "@/lib/downloadLabel";
 import BuyingTab from "./BuyingTab";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://pokemart-api-production.up.railway.app";
@@ -565,6 +566,8 @@ function OrdersTab() {
                         <a style={btn} href={`${API_URL}/api/print/order/${o.id}/`} target="_blank" rel="noreferrer">🖨 Pull Sheet</a>
                         <a style={btn} href={`${API_URL}/api/print/invoice/${o.id}/`} target="_blank" rel="noreferrer">📄 Invoice</a>
                         <a style={btn} href={`${API_URL}/api/print/label/${o.id}/`} target="_blank" rel="noreferrer">🏷 Label</a>
+                        <button style={btn} title="40x30 mm tag for the Volkano label printer (open in Labelnize > Image Printing)" onClick={async () => { const m = await downloadLabelPng(`/api/orders/admin/${o.id}/label/`, `label-order-${o.id}.png`); if (m) alert(m); }}>🏷 Tag 40×30</button>
+                        <button style={btn} title="14x40 mm Thank-you sticker with the customer's name (lying down). Shift-click for the standing version." onClick={async (e) => { const m = await downloadLabelPng(`/api/orders/admin/${o.id}/thankyou/${e.shiftKey ? "?portrait=1" : ""}`, `thankyou-order-${o.id}.png`); if (m) alert(m); }}>💌 Thank-you 14×40</button>
                         <button style={btn} onClick={() => emailInvoice(o.id)}>✉️ Email</button>
                       </div>
                     </td>

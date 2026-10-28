@@ -1,6 +1,7 @@
 "use client";
 import { Fragment, useEffect, useState, useCallback, useRef } from "react";
 import { authFetch, SessionExpiredError } from "@/lib/api";
+import { downloadLabelPng } from "@/lib/downloadLabel";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://pokemart-api-production.up.railway.app";
 
@@ -1466,6 +1467,12 @@ export default function BuyingTab() {
                               );
                             })()}
                           </>
+                        )}
+                        {!legacy && inv.kind === "bulk" && (
+                          <button style={btn} title="40x30 mm bundle tag for the Volkano label printer (open in Labelnize > Image Printing)"
+                            onClick={async () => { const m = await downloadLabelPng(`/api/orders/admin/buy-invoices/${inv.id}/label/`, `label-${inv.buy_number}.png`); if (m) alert(m); }}>
+                            🏷 Bundle tag 40×30
+                          </button>
                         )}
                         {!legacy && inv.kind === "bulk" && (inv.status === "paid" || inv.status === "complete") && (
                           <button style={{ ...btnPrimary, background: "#7c3aed" }} onClick={() => setOpenSort(openSort === inv.id ? null : inv.id)}>🗂 Sort cards</button>
