@@ -89,6 +89,8 @@ interface ApiProduct {
 interface Paginated<T> { count: number; next: string | null; previous: string | null; results: T[]; }
 
 const card: React.CSSProperties = { background: "#1a1a24", border: "1px solid #2a2a3a", borderRadius: 12, padding: 16 };
+// list tables are wide: scroll sideways inside the card on a phone instead of being cut off
+const listCard: React.CSSProperties = { ...card, overflowX: "auto" };
 const btn: React.CSSProperties = { background: "#12121a", border: "1px solid #2a2a3a", color: "#a0a0b0", borderRadius: 6, padding: "5px 10px", fontSize: 11, cursor: "pointer", textDecoration: "none", display: "inline-block" };
 const btnPrimary: React.CSSProperties = { ...btn, background: "#ff6b35", color: "#fff", border: "none", fontWeight: 600 };
 const btnGreen: React.CSSProperties = { ...btn, background: "#1b5e20", color: "#fff", border: "none", fontWeight: 600 };
@@ -1395,7 +1397,7 @@ export default function BuyingTab() {
       ) : !data || data.results.length === 0 ? (
         <div style={{ color: "#555", fontSize: 13 }}>No buying invoices yet. Click “+ New Buying Invoice”.</div>
       ) : (
-        <div style={card}>
+        <div style={listCard}>
           <table style={{ width: "100%", borderCollapse: "collapse" }}>
             <thead>
               <tr style={{ borderBottom: "2px solid #2a2a3a" }}>

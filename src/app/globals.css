@@ -26,6 +26,25 @@ body {
   font-family: 'Inter', sans-serif;
 }
 
+/* ---- Staff pages on a phone (2026-10-29) --------------------------------------------------------
+   html/body above hide horizontal overflow, so wide staff tables were simply cut off. Every table under
+   /staff now becomes its own sideways-scrolling strip with readable, un-squashed columns. */
+.staff-root { min-width: 0; max-width: 100%; }
+.staff-root table {
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+.staff-root th, .staff-root td { white-space: nowrap; }
+@media (max-width: 700px) {
+  .staff-root { font-size: 15px; }
+  .staff-root th { font-size: 11px !important; }
+  .staff-root td { font-size: 13px !important; padding-top: 10px !important; padding-bottom: 10px !important; }
+  .staff-root input, .staff-root select, .staff-root textarea { font-size: 16px !important; min-height: 40px; }
+  .staff-root button { min-height: 38px; }
+}
+
 .card-hover {
   transition: transform 0.2s ease, box-shadow 0.2s ease;
 }
