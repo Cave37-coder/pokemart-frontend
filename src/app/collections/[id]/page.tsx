@@ -100,7 +100,7 @@ export default async function SingleCollectionPage({ params }: { params: Promise
 
             <div style={{ marginTop: "32px", padding: "16px 20px", background: "#1a1a24", borderRadius: "8px", border: "1px solid #2a2a3a", fontSize: "13px", color: "#a0a0b0" }}>
                 <strong style={{ color: "#fff" }}>Local Pickup</strong> — Birchleigh North, Kempton Park<br />
-                Mon-Fri: 18:30-21:00 | Sat: 10:00-18:00 | Sun: 10:00-15:00<br />
+                Mon-Fri: 18:15-20:30 | Sat-Sun: 10:00-16:00<br />
                 <span style={{ color: "#ff6b35" }}>Give us 24 hours notice to prep your order!</span>
             </div>
         </div>

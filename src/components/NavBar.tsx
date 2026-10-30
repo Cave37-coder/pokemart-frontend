@@ -179,6 +179,7 @@ export default function NavBar() {
     // every visit).
     { href: "/collections", label: "My Pokemon" },
     { href: "/accessories", label: "Accessories" },
+    { href: "/calendar", label: "Calendar" },
     { href: "/bundles", label: "Bundles" },
     { href: "/sell", label: "Sell Cards" },
     // External site (separate Railway app) -- community-run scammer lookup,

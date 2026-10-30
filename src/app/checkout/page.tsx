@@ -6,11 +6,13 @@ import { trackAddShippingInfo } from "@/lib/analytics";
 import BackButton from "@/components/BackButton";
 import { EFT_DETAILS } from "@/lib/bankingDetails";
 import LockerPicker from "@/components/LockerPicker";
+import { PrepTimeCheckout } from "@/components/PrepTimeNotice";
+import CollectionDatePicker, { CollectionChoice } from "@/components/CollectionDatePicker";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://pokemart-api-production.up.railway.app";
 
 const DELIVERY_OPTIONS = [
-  { id: "collection",        label: "Collection",                          price: 0,   desc: "Collect from Birchleigh North, Kempton Park. Mon-Fri 18:30-21:00 | Sat 10:00-18:00 | Sun 10:00-15:00. Please give 24hrs notice!", courier: false },
+  { id: "collection",        label: "Collection",                          price: 0,   desc: "Collect from Birchleigh North, Kempton Park. Mon-Fri 18:15-20:30 | Sat-Sun 10:00-16:00. Pick your collection day below.", courier: false },
   { id: "pudo_locker",       label: "Pudo — Locker to Locker",            price: 75,  desc: "1-4 business days. Delivered to your nearest Pudo locker.", courier: true },
   { id: "pudo_kiosk",        label: "Pudo — Locker to Kiosk",             price: 85,  desc: "1-4 business days. Collect from your nearest Pudo kiosk.", courier: true },
   // Medium/Tins removed 2026-10-28 per Michael -- parcel size is decided by us from the card count, not chosen by the customer.
@@ -65,6 +67,8 @@ export default function CheckoutPage() {
   // Delivery prices come from the server (parcel size is decided by card count -- see orders/shipping.py).
   const [quote, setQuote] = useState<{ cards: number; size: string; up_to_cards: number; prices: Record<string, string> } | null>(null);
   const [useCredit, setUseCredit] = useState(true);
+  // Collection day or No Rush (2026-10-30, see CollectionDatePicker).
+  const [collection, setCollection] = useState<CollectionChoice>({ date: "", noRush: false });
   const [delivery, setDelivery] = useState({
     first_name: "", last_name: "", email: "", phone: "",
     address_line1: "", address_line2: "", city: "", province: "", postal_code: "",
@@ -144,6 +148,10 @@ export default function CheckoutPage() {
   const placeOrder = async () => {
     const token = localStorage.getItem("access_token");
     if (!token) return;
+    if (!isCourier && !collection.date && !collection.noRush) {
+      setError("Please choose a collection day, or tick No Rush.");
+      return;
+    }
     setPlacing(true);
     setError("");
 
@@ -178,6 +186,8 @@ export default function CheckoutPage() {
           pudo_locker_name:    delivery.pudo_locker_name,
           pudo_locker_address: delivery.pudo_locker_address,
           pudo_locker_code:    delivery.pudo_locker_code,
+          collection_date:     !isCourier && !collection.noRush ? collection.date : "",
+          no_rush:             !isCourier && collection.noRush,
         }),
       });
       if (!orderRes.ok) {
@@ -301,6 +311,17 @@ export default function CheckoutPage() {
               ))}
             </div>
           </div>
+
+          {/* Collection day (2026-10-30) */}
+          {!isCourier && (
+            <div style={card()}>
+              <h2 style={{ fontSize:15, fontWeight:700, color:"#fff", margin:"0 0 6px" }}>Collection day</h2>
+              <p style={{ fontSize:12, color:"#a0a0b0", margin:"0 0 14px" }}>
+                Choose the day you&apos;d like to collect. We&apos;ll have your order ready for that day.
+              </p>
+              <CollectionDatePicker value={collection} onChange={setCollection} />
+            </div>
+          )}
 
           {/* Pudo locker details */}
           {needsLocker && (
@@ -474,6 +495,8 @@ export default function CheckoutPage() {
                 </>
               )}
             </div>
+
+            <PrepTimeCheckout courier={shipping !== "collection"} />
 
             {error && (
               <div style={{ background:"#EF444420", border:"1px solid #EF444440", borderRadius:8, padding:"10px 12px", marginTop:12, color:"#EF4444", fontSize:12 }}>

@@ -81,6 +81,25 @@ const INVOICE_STATUS_COLOR: Record<string, string> = {
   ready: "#00acc1", payment_confirmed: "#1565c0", complete: "#1b5e20", cancelled: "#757575",
 };
 
+// "Due" column (2026-10-30): collection day the customer booked / No Rush,
+// or for Pudo the next day it may be sent (KZN + EC Mon-Thu, Western Cape
+// Mon-Wed + Fri, see pokemart-api orders/schedule.py).
+const dueDay = (iso: string) => { const [y, m, d] = iso.split("-").map(Number); return new Date(y, m - 1, d); };
+function DueCell({ o }: { o: AdminOrder }) {
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const fmt = (iso: string) => dueDay(iso).toLocaleDateString("en-ZA", { weekday: "short", day: "numeric", month: "short" });
+  if (o.delivery_method === "collection" || o.shipping_method === "collection") {
+    if (o.no_rush) return <span style={{ color: "#60a5fa" }}>🐢 No Rush</span>;
+    if (!o.collection_date) return <span style={{ color: "#555" }}>No day chosen</span>;
+    const diff = Math.round((dueDay(o.collection_date).getTime() - today.getTime()) / 86400000);
+    const colour = diff < 0 ? "#dc2626" : diff <= 1 ? "#f59e0b" : "#ccc";
+    return <span style={{ color: colour }} title="Collection day booked at checkout">📅 {diff === 0 ? "Today" : diff === 1 ? "Tomorrow" : fmt(o.collection_date)}</span>;
+  }
+  if (!o.next_send_day) return <span style={{ color: "#555" }}>—</span>;
+  const sendToday = dueDay(o.next_send_day).getTime() === today.getTime();
+  return <span style={{ color: sendToday ? "#4ade80" : "#ccc" }} title={`Pudo region: ${o.pudo_region}`}>🚚 {sendToday ? "Can send today" : `Send ${fmt(o.next_send_day)}`}{o.pudo_region && o.pudo_region !== "Other" ? ` · ${o.pudo_region}` : ""}</span>;
+}
+
 interface AdminOrder {
   id: number; status: string; status_display: string;
   customer_name: string; customer_email: string; customer_phone?: string;
@@ -94,6 +113,9 @@ interface AdminOrder {
   pudo_locker_name?: string; pudo_locker_address?: string; pudo_locker_code?: string;
   pudo_shipment_id?: string; pudo_pin?: string; pudo_booking_error?: string;
   parcel_size?: string; shipping_quotes?: Record<string, string>;
+  // 2026-10-30 collection calendar / Pudo send days (orders/schedule.py)
+  collection_date?: string | null; no_rush?: boolean;
+  pudo_region?: string | null; next_send_day?: string | null;
   delivery_address_line1?: string; delivery_address_line2?: string;
   delivery_city?: string; delivery_province?: string; delivery_postal_code?: string;
 }
@@ -497,6 +519,8 @@ function OrdersTab() {
   const [searchInput, setSearchInput] = useState("");
   const [page, setPage] = useState(1);
   const [expanded, setExpanded] = useState<number | null>(null);
+  // "Who needs what when" (2026-10-30): sort by booked collection date.
+  const [sortDue, setSortDue] = useState(false);
 
   const load = useCallback(() => {
     setLoading(true);
@@ -504,13 +528,14 @@ function OrdersTab() {
     if (status) params.set("status", status);
     if (paid) params.set("paid", paid);
     if (search) params.set("search", search);
+    if (sortDue) params.set("sort", "collection");
     params.set("page", String(page));
     authFetch(`/api/orders/admin/?${params.toString()}`)
       .then((r) => r.json())
       .then((d) => { setData(d); setError(""); })
       .catch((e) => { if (e instanceof SessionExpiredError) setError("Session expired — please log in again."); else setError("Failed to load orders."); })
       .finally(() => setLoading(false));
-  }, [status, paid, search, page]);
+  }, [status, paid, search, page, sortDue]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -555,6 +580,10 @@ function OrdersTab() {
           onKeyDown={(e) => { if (e.key === "Enter") { setSearch(searchInput); setPage(1); } }}
           placeholder="Search customer / waybill…" />
         <button style={btn} onClick={() => { setSearch(searchInput); setPage(1); }}>Search</button>
+        <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "#ccc", cursor: "pointer" }}>
+          <input type="checkbox" checked={sortDue} onChange={(e) => { setSortDue(e.target.checked); setPage(1); }} />
+          Sort by collection day
+        </label>
         {(status || paid || search) && (
           <button style={btn} onClick={() => { setStatus(""); setPaid(""); setSearch(""); setSearchInput(""); setPage(1); }}>Clear filters</button>
         )}
@@ -575,7 +604,7 @@ function OrdersTab() {
           <table style={{ width: "100%", borderCollapse: "collapse" }}>
             <thead>
               <tr style={{ borderBottom: "2px solid #2a2a3a" }}>
-                {["Order", "Customer", "Status", "Paid", "Total", "Discount", "Shipping", "Items", "Date", ""].map((h) => (
+                {["Order", "Customer", "Status", "Due", "Paid", "Total", "Discount", "Shipping", "Items", "Date", ""].map((h) => (
                   <th key={h} style={{ textAlign: "left", padding: "6px 8px", fontSize: 10, color: "#888", textTransform: "uppercase" }}>{h}</th>
                 ))}
               </tr>
@@ -589,6 +618,7 @@ function OrdersTab() {
                     </td>
                     <td style={{ padding: "8px", fontSize: 12, color: "#ddd" }}>{o.customer_name}<div style={{ color: "#555", fontSize: 10 }}>{o.customer_email}</div></td>
                     <td style={{ padding: "8px" }}><StatusBadge status={o.status} label={o.status_display} /></td>
+                    <td style={{ padding: "8px", fontSize: 11, whiteSpace: "nowrap" }}><DueCell o={o} /></td>
                     <td style={{ padding: "8px", fontSize: 12 }}>
                       {o.payment_method === "payfast" ? (
                         o.is_paid ? <span style={{ color: "#4ade80" }}>✅ {o.paid_via || o.payment_method_display}</span> : <span style={{ color: "#dc2626" }}>❌ {o.payment_method_display}</span>
@@ -625,7 +655,7 @@ function OrdersTab() {
                   </tr>
                   {expanded === o.id && (
                     <tr>
-                      <td colSpan={10} style={{ padding: "0 8px 10px" }}>
+                      <td colSpan={11} style={{ padding: "0 8px 10px" }}>
                         <OrderManageRow order={o} onSaved={() => { setExpanded(null); load(); }} />
                       </td>
                     </tr>

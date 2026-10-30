@@ -68,7 +68,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               <div style={{ fontWeight:700, fontSize:"14px", marginBottom:"12px", color:"#fff" }}>Local Pickup</div>
               <div style={{ color:"#a0a0b0", fontSize:"13px", lineHeight:1.8 }}>
                 Unit 4, Sunkist Village<br />11 Heliose Street<br />Birchleigh North<br />Kempton Park, 1618<br />
-                Mon-Fri: 18:30-21:00<br />Sat: 10:00-18:00<br />Sun: 10:00-15:00
+                Mon-Fri: 18:15-20:30<br />Sat-Sun: 10:00-16:00
               </div>
               <a
                 href={MAPS_URL}

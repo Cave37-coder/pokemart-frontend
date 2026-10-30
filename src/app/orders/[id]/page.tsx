@@ -23,6 +23,7 @@ interface Order {
   delivery_city: string; delivery_province: string; delivery_postal_code: string;
   waybill_number: string; courier_name: string; courier_tracking_url: string;
   customer_note: string; created_at: string;
+  collection_date?: string | null; no_rush?: boolean;
   payment_method?: string;
   store_credit_applied?: string; amount_due?: string;
 }
@@ -195,7 +196,14 @@ export default function OrderDetailPage() {
         <div style={{ background:"#10B98122", border:"1px solid #10B98144", borderRadius:12, padding:"16px 20px", marginBottom:16, textAlign:"center" }}>
           <div style={{ fontSize:24, marginBottom:8 }}>Order Confirmed!</div>
           <div style={{ color:"#10B981", fontWeight:600, marginBottom:4 }}>Your collection order is confirmed.</div>
-          <div style={{ color:"#a0a0b0", fontSize:13 }}>Pay cash when you collect at Birchleigh North. Please give us 24 hours notice!</div>
+          <div style={{ color:"#a0a0b0", fontSize:13 }}>
+            {order?.no_rush
+              ? <>No Rush: we&apos;ll message you when it&apos;s ready. </>
+              : order?.collection_date
+                ? <>Collection day: <strong style={{ color:"#fff" }}>{(() => { const [y,m,d] = order.collection_date.split("-").map(Number); return new Date(y,m-1,d).toLocaleDateString("en-ZA",{ weekday:"long", day:"numeric", month:"long" }); })()}</strong>{(() => { const [y,m,d] = order.collection_date.split("-").map(Number); const wd = new Date(y,m-1,d).getDay(); return wd === 0 || wd === 6 ? ", 10:00–16:00" : ", 18:15–20:30"; })()}. </>
+                : null}
+            Pay cash when you collect at Birchleigh North.
+          </div>
         </div>
       )}
 

@@ -2,6 +2,7 @@ export const dynamic = 'force-dynamic';
 
 import Link from "next/link";
 import { getCards } from "@/lib/api";
+import { PrepTimeBanner } from "@/components/PrepTimeNotice";
 
 const ERAS = [
   { label: "WotC", code: "B1", emoji: "🏆", desc: "1999-2003" },
@@ -114,6 +115,9 @@ export default async function HomePage() {
         </div>
       </div>
 
+      {/* ORDER PREP TIME -- 2026-10-30, live from /api/prep-time/ */}
+      <PrepTimeBanner />
+
       {/* FEATURED CARDS */}
       <div style={{ maxWidth:"1200px", margin:"0 auto", padding:"60px 2rem 40px" }}>
         <div style={{ display:"flex", alignItems:"baseline", gap:"12px", marginBottom:"6px" }}>
@@ -179,7 +183,7 @@ export default async function HomePage() {
         <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill, minmax(250px, 1fr))", gap:"20px" }}>
           {[
             { icon:"💰", title:"ZAR Pricing", desc:"All prices in South African Rand, updated nightly from live market data." },
-            { icon:"🏠", title:"Local Pickup", desc:"Based in Birchleigh North, Kempton Park. Collection Mon-Sun, no shipping hassle." },
+            { icon:"🏠", title:"Local Pickup", desc:"Based in Birchleigh North, Kempton Park. Pick your collection day at checkout, no shipping hassle." },
             { icon:"📦", title:"80+ Sets", desc:"From 1999 Base Set to the latest Mega Evolution — we have it all." },
             { icon:"⚡", title:"Live Stock", desc:"Stock and prices update automatically. What you see is what we have." },
           ].map((item) => (
@@ -207,10 +211,9 @@ export default async function HomePage() {
               Kempton Park, 1618
             </div>
             <div style={{ color:"#a0a0b0", fontSize:"14px", marginTop:"14px", lineHeight:2 }}>
-              Mon - Fri: 18:30 - 21:00<br />
-              Saturday: 10:00 - 18:00<br />
-              Sunday: 10:00 - 15:00<br />
-              <span style={{ color:"#ff6b35" }}>Give us 24 hours notice to prep your cards!</span>
+              Mon - Fri: 18:15 - 20:30<br />
+              Sat - Sun: 10:00 - 16:00<br />
+              <span style={{ color:"#ff6b35" }}>Pick your collection day at checkout. <Link href="/calendar" style={{ color:"#ff6b35" }}>See our event calendar</Link> for days we&apos;re away.</span>
             </div>
             <div style={{ marginTop:"16px", display:"flex", gap:"12px", flexWrap:"wrap" }}>
               <a href={MAPS_URL} target="_blank" rel="noopener noreferrer" style={{ background:"#ff6b35", color:"#fff", padding:"8px 16px", borderRadius:"8px", textDecoration:"none", fontSize:"13px", fontWeight:600 }}>
