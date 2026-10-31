@@ -197,6 +197,7 @@ export default function NavBar() {
       title: "Store",
       links: [
         { href: "/staff/orders", label: "📦 Orders" },
+        { href: "/staff/calendar", label: "📅 Calendar" },
         { href: "/staff/checklists", label: "📋 Customer Collections" },
         { href: "/staff/bundles", label: "🧩 Bundle Opportunities" },
         { href: "/staff/bundle-sheet", label: "🧾 Bundle Pull Sheet" },
