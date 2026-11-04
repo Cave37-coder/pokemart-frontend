@@ -14,6 +14,7 @@ import {
   PATTERN_VARIANTS,
 } from '@/lib/checklistData';
 import type { Variant, Card, SetData, SetMeta } from '@/lib/checklistData';
+import CollectionHome from '@/components/CollectionHome';
 
 // Rotating palette for the "Select All" rarity pills (Michael, 2026-09-16
 // round 3) -- purely cosmetic so a set with many rarity tiers stays visually
@@ -1703,7 +1704,7 @@ function ChecklistsPageInner() {
           // reloading the sub-set's own.
           <Checklist key={activeSet + (activeSub ? `:${activeSub}` : '')} code={activeSet} sub={activeSub} onBack={closeSet} />
         ) : (
-          <EraHome onOpen={openSet} />
+          <CollectionHome onOpen={openSet} />
         )}
       </div>
     </div>
