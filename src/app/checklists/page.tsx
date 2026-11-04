@@ -300,6 +300,10 @@ function EraHome({ onOpen }: { onOpen: (code: string) => void }) {
 
   return (
     <div style={{ padding: '16px' }}>
+      <a href="/checklists/portfolio"
+        style={{ display: 'block', marginBottom: '12px', padding: '12px 14px', background: '#14241a', border: '1px solid #1f5a33', borderRadius: '10px', color: '#7ee2a0', fontWeight: 700, fontSize: '14px', textDecoration: 'none', textAlign: 'center' }}>
+        📈 My Collection Value — price paid, gain / loss &amp; current value
+      </a>
       <div style={{ marginBottom: '16px' }}>
         <input value={query} onChange={e => setQuery(e.target.value)} placeholder="Search any set..."
           style={{ width: '100%', boxSizing: 'border-box', padding: '11px 14px', background: '#1e1e2a', border: '1px solid #2a2a3a', borderRadius: '10px', color: '#fff', fontSize: '15px' }} />
@@ -540,6 +544,35 @@ function Checklist({ code, sub, onBack }: { code: string; sub?: 'pikachu' | null
       .finally(() => setLbLoading(false));
   }, [storageCode, lbTier]);
 
+  // 2026-11-04: value tracking -- starting value (site price when ticked) + optional price paid.
+  const [meta, setMeta] = useState<Record<string, { value: number | null; paid: number | null }>>({});
+  useEffect(() => {
+    setMeta({});
+    if (typeof window === 'undefined' || !localStorage.getItem('access_token')) return;
+    authFetch(`/api/checklists/portfolio/?set=${storageCode}`)
+      .then(r => (r.ok ? r.json() : []))
+      .then((rows: { card_key: string; value_when_added: number | null; price_paid: number | null }[]) => {
+        const m: Record<string, { value: number | null; paid: number | null }> = {};
+        rows.forEach(r => { m[r.card_key] = { value: r.value_when_added, paid: r.price_paid }; });
+        setMeta(m);
+      })
+      .catch(() => {});
+  }, [storageCode]);
+  const setPaid = (key: string) => {
+    const cur = meta[key]?.paid;
+    const input = window.prompt('Price you actually paid (R). Leave blank to clear:', cur != null ? String(cur) : '');
+    if (input === null) return;
+    const clean = input.replace(/[^0-9.,]/g, '').replace(',', '.');
+    const paid = clean === '' ? null : parseFloat(clean);
+    if (paid !== null && isNaN(paid)) return;
+    setMeta(prev => ({ ...prev, [key]: { value: prev[key]?.value ?? null, paid } }));
+    authFetch('/api/checklists/entry-meta/', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ card_set: storageCode, card_key: key, price_paid: paid }),
+    }).catch(() => {});
+  };
+
   useEffect(() => {
     setMyTierProgress(null);
     if (typeof window === 'undefined' || !localStorage.getItem('access_token')) return;
@@ -660,10 +693,16 @@ function Checklist({ code, sub, onBack }: { code: string; sub?: 'pikachu' | null
     });
 
     flip(); // optimistic -- the checkbox responds instantly
+    // Track the starting value: set when ticking, dropped when un-ticking.
+    setMeta(prev => {
+      const next = { ...prev };
+      if (next[key]) delete next[key]; else next[key] = { value: zar > 0 ? zar : null, paid: null };
+      return next;
+    });
     authFetch('/api/checklists/toggle/', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ card_set: storageCode, card_key: key }),
+      body: JSON.stringify({ card_set: storageCode, card_key: key, value: zar > 0 ? zar : null }),
     }).catch(() => {
       // Genuinely couldn't save (session really did expire) -- flip back so
       // the checkbox reflects what's actually saved on the account.
@@ -785,8 +824,9 @@ function Checklist({ code, sub, onBack }: { code: string; sub?: 'pikachu' | null
     const token = localStorage.getItem('access_token');
     if (!token) { router.push('/auth/login'); return; }
     const targets: string[] = [];
+    const targetZar: Record<string, number> = {};
     tierFilteredSorted.forEach(card => {
-      vcPicker(card).forEach(v => targets.push(card.num + '_' + v.vc));
+      vcPicker(card).forEach(v => { targets.push(card.num + '_' + v.vc); targetZar[card.num + '_' + v.vc] = zarOf(v); });
     });
     if (targets.length === 0) return;
     const deselecting = targets.every(key => checks[key]);
@@ -806,11 +846,19 @@ function Checklist({ code, sub, onBack }: { code: string; sub?: 'pikachu' | null
     // Fire-and-forget, same one-POST-per-card pattern `toggle` already uses
     // for a single card -- just for many at once, so a batch of 100+ can't
     // block the UI. An occasional dropped request just needs a re-tap.
+    setMeta(prev => {
+      const next = { ...prev };
+      changed.forEach(key => {
+        if (deselecting) delete next[key];
+        else next[key] = { value: targetZar[key] > 0 ? targetZar[key] : null, paid: null };
+      });
+      return next;
+    });
     changed.forEach(key => {
       authFetch('/api/checklists/toggle/', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ card_set: storageCode, card_key: key }),
+        body: JSON.stringify({ card_set: storageCode, card_key: key, value: targetZar[key] > 0 ? targetZar[key] : null }),
       }).catch(() => {});
     });
   }, [storageCode, router, tierFilteredSorted, checks]);
@@ -1447,12 +1495,32 @@ function Checklist({ code, sub, onBack }: { code: string; sub?: 'pikachu' | null
                     const badge = patternBadge(card.name);
                     return (
                       <div key={v.vc} style={{
-                        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px', flexWrap: 'wrap',
                         background: '#1e1e2a', border: '1px solid #2a2a3a', borderRadius: '6px',
                         padding: '2px 6px 2px 7px', fontSize: '10px', width: '100%',
                       }}>
                         <span style={{ color: badge ? badge.color : '#777', fontWeight: 700 }} title={badge ? badge.label : undefined}>{badge ? badge.code : v.vc}</span>
                         {zarOf(v) > 0 && <span style={{ color: '#ccc' }}>R{zarOf(v).toFixed(2)}</span>}
+                        {owned && (() => {
+                          const m = meta[key];
+                          const base = m?.paid ?? m?.value ?? null;
+                          const delta = base != null && zarOf(v) > 0 ? zarOf(v) - base : null;
+                          return (
+                            <>
+                              <button onClick={(e) => { e.preventDefault(); e.stopPropagation(); setPaid(key); }}
+                                title="Tap to enter what you actually paid"
+                                style={{ fontSize: '9px', color: '#9ad', background: 'transparent', border: '1px dashed #345', borderRadius: '4px', padding: '0 4px', cursor: 'pointer' }}>
+                                {m?.paid != null ? `Paid R${m.paid.toFixed(2)}` : '+ Paid'}
+                              </button>
+                              {delta != null && (
+                                <span title={m?.paid != null ? 'Gain/loss vs price paid' : 'Gain/loss vs value when you ticked it'}
+                                  style={{ fontWeight: 700, color: delta >= 0 ? '#22c55e' : '#f87171' }}>
+                                  {delta >= 0 ? '+' : '−'}R{Math.abs(delta).toFixed(2)}
+                                </span>
+                              )}
+                            </>
+                          );
+                        })()}
                         {canBuy && (
                           <button
                             onClick={(e) => { e.preventDefault(); e.stopPropagation(); buyCard(v.pid, v.vc, key, zarOf(v), card.name); }}
