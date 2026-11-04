@@ -649,6 +649,7 @@ function OrdersTab() {
                         <a style={btn} href={`${API_URL}/api/print/label/${o.id}/`} target="_blank" rel="noreferrer">🏷 Label</a>
                         <button style={btn} title="40x30 mm tag for the Volkano label printer (open in Labelnize > Image Printing)" onClick={async () => { const m = await downloadLabelPng(`/api/orders/admin/${o.id}/label/`, `label-order-${o.id}.png`); if (m) alert(m); }}>🏷 Tag 40×30</button>
                         <button style={btn} title="14x40 mm Thank-you sticker with the customer's name (lying down). Shift-click for the standing version." onClick={async (e) => { const m = await downloadLabelPng(`/api/orders/admin/${o.id}/thankyou/${e.shiftKey ? "?portrait=1" : ""}`, `thankyou-order-${o.id}.png`); if (m) alert(m); }}>💌 Thank-you 14×40</button>
+                        <button style={btn} title="40x30 mm Thank-you sticker: big logo, THANK YOU! and the customer's first name." onClick={async () => { const m = await downloadLabelPng(`/api/orders/admin/${o.id}/thankyou/?size=40x30`, `thankyou-40x30-order-${o.id}.png`); if (m) alert(m); }}>💌 Thank-you 40×30</button>
                         <button style={btn} onClick={() => emailInvoice(o.id)}>✉️ Email</button>
                       </div>
                     </td>
@@ -832,6 +833,7 @@ function InvoicesTab() {
                       <a style={btn} href={`${API_URL}/admin/orders/manualinvoice/${inv.id}/manual-invoice-pdf/`} target="_blank" rel="noreferrer">⬇ PDF</a>
                       <button style={btn} title="40x30 mm tag for the Volkano label printer (open in Labelnize > Image Printing)" onClick={async () => { const m = await downloadLabelPng(`/api/orders/admin/manual-invoices/${inv.id}/label/`, `label-${inv.invoice_number}.png`); if (m) alert(m); }}>🏷 Tag 40×30</button>
                       <button style={btn} title="14x40 mm Thank-you sticker with the customer's first name. Shift-click for the standing version." onClick={async (e) => { const m = await downloadLabelPng(`/api/orders/admin/manual-invoices/${inv.id}/thankyou/${e.shiftKey ? "?portrait=1" : ""}`, `thankyou-${inv.invoice_number}.png`); if (m) alert(m); }}>💌 Thank-you 14×40</button>
+                      <button style={btn} title="40x30 mm Thank-you sticker: big logo, THANK YOU! and the customer's first name." onClick={async () => { const m = await downloadLabelPng(`/api/orders/admin/manual-invoices/${inv.id}/thankyou/?size=40x30`, `thankyou-40x30-${inv.invoice_number}.png`); if (m) alert(m); }}>💌 Thank-you 40×30</button>
                       <button style={btn} onClick={() => emailInvoice(inv.id, inv.invoice_number)}>✉️ Email</button>
                     </div>
                   </td>
