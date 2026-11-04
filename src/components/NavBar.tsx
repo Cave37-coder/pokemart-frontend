@@ -51,6 +51,8 @@ export default function NavBar() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
   const moreRef = useRef<HTMLDivElement>(null);
+  const [collOpen, setCollOpen] = useState(false);
+  const collRef = useRef<HTMLDivElement>(null);
   // 2026-09-04, Michael: "add a dropdown under Staff, current layout a bit
   // off, drop down makes more sense" -- same pattern as the "More" dropdown
   // above, just for the staff-only sub-pages instead of always jumping
@@ -115,7 +117,7 @@ export default function NavBar() {
 
   // Close the mobile dropdown and the desktop "More" menu whenever the
   // route changes -- otherwise they stay open and cover the new page.
-  useEffect(() => { setMenuOpen(false); setMoreOpen(false); setStaffOpen(false); }, [pathname]);
+  useEffect(() => { setMenuOpen(false); setMoreOpen(false); setCollOpen(false); setStaffOpen(false); }, [pathname]);
 
   // Close the "More" dropdown on an outside click (desktop only -- on
   // mobile its contents render flattened into the hamburger list instead
@@ -130,6 +132,15 @@ export default function NavBar() {
     document.addEventListener("mousedown", onClick);
     return () => document.removeEventListener("mousedown", onClick);
   }, [moreOpen]);
+
+  useEffect(() => {
+    if (!collOpen) return;
+    const onClick = (e: MouseEvent) => {
+      if (collRef.current && !collRef.current.contains(e.target as Node)) setCollOpen(false);
+    };
+    document.addEventListener("mousedown", onClick);
+    return () => document.removeEventListener("mousedown", onClick);
+  }, [collOpen]);
 
   useEffect(() => {
     if (!staffOpen) return;
@@ -164,21 +175,28 @@ export default function NavBar() {
   // shows flattened in the hamburger list, see .pb-more-menu below.
   const primaryLinks = [
     { href: "/cards", label: "Browse Cards" },
+    // 2026-11-04, Michael: Accessories sits right beside Browse Cards; everything
+    // collection-related lives under the single "My Collection" dropdown below.
+    { href: "/accessories", label: "Accessories" },
+  ];
+
+  const collectionLinks = [
+    { href: "/checklists", label: "📊 Overview & totals" },
+    { href: "/checklists?tab=sets", label: "My Sets" },
     { href: "/pokedex", label: "Pokédex" },
-    { href: "/checklists", label: "My Sets" },
+    { href: "/collections", label: "My Pokémon" },
+    { href: "/checklists?tab=collections", label: "Collections" },
+    { href: "/checklists?tab=sealed", label: "Sealed Collection" },
+    { href: "/checklists/portfolio", label: "📈 Value & gain/loss" },
+  ];
+  const collectionPaths = ["/checklists", "/pokedex", "/collections"];
+
+  const afterCollectionLinks = [
     { href: "/community", label: "Community" },
   ];
 
   const moreLinks = [
     { href: "/decklist", label: "Deck Builder", beta: true },
-    // 2026-09-29, Michael: "My Collections" + link on each Pokedex page --
-    // track one Pokemon at a time, separate from the Pokedex itself (which
-    // stays right where it is in primaryLinks above). Grouped under "More"
-    // rather than promoted to primaryLinks, matching the 2026-08-17
-    // decluttering decision (moreLinks is for links people don't need on
-    // every visit).
-    { href: "/collections", label: "My Pokemon" },
-    { href: "/accessories", label: "Accessories" },
     { href: "/calendar", label: "Calendar" },
     { href: "/bundles", label: "Bundles" },
     { href: "/sell", label: "Sell Cards" },
@@ -412,6 +430,32 @@ export default function NavBar() {
 
       <div className={`pb-nav-links${menuOpen ? " pb-nav-open" : ""}`} style={{ display: "flex", gap: "1.5rem", alignItems: "center", position: "relative", zIndex: 1 }}>
         {primaryLinks.map(renderLink)}
+
+        <div className="pb-more" ref={collRef} style={{ position: "relative" }}>
+          <button
+            className="pb-nav-link pb-more-btn"
+            onClick={() => setCollOpen((o) => !o)}
+            aria-expanded={collOpen}
+            style={{
+              background: "transparent", border: "none", cursor: "pointer", font: "inherit",
+              color: collectionPaths.some((p) => isActive(p)) || collOpen ? "#fff" : "#a0a0b0",
+              fontSize: "14px", display: "flex", alignItems: "center", gap: "4px", padding: 0,
+            }}
+          >
+            My Collection {collOpen ? "▲" : "▾"}
+          </button>
+          <div className={`pb-more-menu${collOpen ? " pb-more-menu-open" : ""}`} style={{
+            display: collOpen ? "flex" : "none",
+            position: "absolute", top: "calc(100% + 14px)", left: 0,
+            background: "#1a1a24", border: "1px solid #2a2a3a", borderRadius: "10px",
+            padding: "8px", flexDirection: "column", minWidth: "210px", gap: "2px",
+            boxShadow: "0 12px 24px rgba(0,0,0,0.4)", zIndex: 50,
+          }}>
+            {collectionLinks.map(renderLink)}
+          </div>
+        </div>
+
+        {afterCollectionLinks.map(renderLink)}
 
         <div className="pb-more" ref={moreRef} style={{ position: "relative" }}>
           <button

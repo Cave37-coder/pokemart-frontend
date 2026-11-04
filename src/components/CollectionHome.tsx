@@ -7,14 +7,17 @@ import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { authFetch } from '@/lib/api';
 import { SET_INDEX, ERA_ORDER } from '@/lib/checklistData';
-import { API_BASE, getProgress, ensureLivePrices } from '@/lib/checklistShared';
+import { API_BASE, getProgress, ensureLivePrices, getLivePrice } from '@/lib/checklistShared';
+import { SETS } from '@/lib/checklistData';
+import SealedCollection from '@/components/SealedCollection';
 
-type Tab = 'sets' | 'pokedex' | 'mypokemon' | 'collections';
+type Tab = 'sets' | 'pokedex' | 'mypokemon' | 'collections' | 'sealed';
 const TABS: { key: Tab; label: string }[] = [
   { key: 'sets', label: 'Sets' },
   { key: 'pokedex', label: 'PokeDex' },
   { key: 'mypokemon', label: 'My Pokémon' },
   { key: 'collections', label: 'Collections' },
+  { key: 'sealed', label: 'Sealed' },
 ];
 const money = (n: number) => 'R ' + n.toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const card: React.CSSProperties = { background: '#14141c', border: '1px solid #262636', borderRadius: 12 };
@@ -46,8 +49,79 @@ export default function CollectionHome({ onOpen }: { onOpen: (code: string) => v
       {tab === 'pokedex' && <PokedexTab />}
       {tab === 'mypokemon' && <MyPokemonTab />}
       {tab === 'collections' && <CollectionsTab />}
+      {tab === 'sealed' && <SealedCollection />}
     </div>
   );
+}
+
+// ── Money banner (top of every tab; each tab shows ITS OWN totals, never a mix) ──
+type Totals = { cards: number; value: number; paid: number; gain_loss: number };
+const signed = (n: number) => (n >= 0 ? '+' : '−') + money(Math.abs(n));
+
+export function Banner({ label, t, noPaid }: { label: string; t: Totals | null; noPaid?: boolean }) {
+  const hasGain = !!t && (t.paid > 0 || t.gain_loss !== 0);
+  const cell = (k: string, v: string, c = '#fff') => (
+    <div style={{ flex: '1 1 150px', background: '#1a1a24', border: '1px solid #2a2a3a', borderRadius: 10, padding: '10px 14px' }}>
+      <div style={{ fontSize: 11, color: '#888' }}>{k}</div>
+      <div style={{ fontSize: 20, fontWeight: 800, color: c }}>{v}</div>
+    </div>
+  );
+  return (
+    <div style={{ ...card, padding: 14, marginBottom: 16 }}>
+      <div style={{ fontSize: 12, color: '#999', marginBottom: 8 }}>{label}</div>
+      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+        {cell('Total invested', t && t.paid > 0 ? money(t.paid) : '—')}
+        {cell('Current value', t ? money(t.value) : '…')}
+        {cell('Gain / loss', hasGain && t ? signed(t.gain_loss) : '—', !hasGain || !t ? '#fff' : t.gain_loss >= 0 ? '#22c55e' : '#f87171')}
+      </div>
+      <div style={{ fontSize: 11, color: '#666', marginTop: 8 }}>
+        Invested = what you entered as price paid{noPaid ? ' (not tracked here yet)' : ''}. Gain/loss compares today’s price with what you paid, or with the price on the day you added the card.
+      </div>
+    </div>
+  );
+}
+
+type Summary = Record<'pokedex' | 'mypokemon' | 'collections' | 'sealed', Totals>;
+function useSummary(): Summary | null {
+  const [s, setS] = useState<Summary | null>(null);
+  useEffect(() => {
+    if (!localStorage.getItem('access_token')) { const z = { cards: 0, value: 0, paid: 0, gain_loss: 0 }; setS({ pokedex: z, mypokemon: z, collections: z, sealed: z }); return; }
+    authFetch('/api/collection-summary/').then(r => (r.ok ? r.json() : null)).then(setS).catch(() => setS(null));
+  }, []);
+  return s;
+}
+
+// Sets totals come from the static checklist data + live prices, same as the tiles.
+function useSetsTotals(tick: number): Totals | null {
+  const [rows, setRows] = useState<{ card_set: string; card_key: string; value_when_added: number | null; price_paid: number | null }[] | null>(null);
+  useEffect(() => {
+    if (!localStorage.getItem('access_token')) { setRows([]); return; }
+    authFetch('/api/checklists/portfolio/').then(r => (r.ok ? r.json() : [])).then(setRows).catch(() => setRows([]));
+  }, []);
+  return useMemo(() => {
+    if (!rows) return null;
+    let value = 0;
+    SET_INDEX.forEach(s => { value += getProgress(s.code).collectionZar; });
+    let paid = 0, gain = 0;
+    rows.forEach(r => {
+      const code = r.card_set === '30C-PIKA' ? '30C' : r.card_set;
+      const set = SETS[code]; if (!set) return;
+      const cards = r.card_set === '30C-PIKA'
+        ? set.cards.filter(c => c.rarity === 'Pikachu Rare').map((c, i) => ({ ...c, num: `${String(i + 1).padStart(2, '0')}/30` }))
+        : set.cards;
+      for (const c of cards) {
+        const v = c.variants.find(v => c.num + '_' + v.vc === r.card_key);
+        if (!v) continue;
+        const cur = getLivePrice(v.pid, v.vc, v.zar);
+        if (r.price_paid != null) paid += r.price_paid;
+        const base = r.price_paid ?? r.value_when_added;
+        if (base != null) gain += cur - base;
+        break;
+      }
+    });
+    return { cards: 0, value, paid, gain_loss: gain };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rows, tick]);
 }
 
 // ── Sets ────────────────────────────────────────────────────────────────
@@ -88,9 +162,11 @@ function SetsTab({ onOpen }: { onOpen: (code: string) => void }) {
 
   const owned = SET_INDEX.reduce((t, s) => t + getProgress(s.code).owned, 0);
   const value = SET_INDEX.reduce((t, s) => t + getProgress(s.code).collectionZar, 0);
+  const setsTotals = useSetsTotals(tick);
 
   return (
     <div key={tick}>
+      <Banner label={`Sets — ${owned.toLocaleString()} cards ticked`} t={setsTotals} />
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center', marginBottom: 14 }}>
         <input value={query} onChange={e => setQuery(e.target.value)} placeholder="Search by sets…"
           style={{ flex: '1 1 220px', padding: '10px 14px', background: '#1e1e2a', border: '1px solid #2a2a3a', borderRadius: 10, color: '#fff', fontSize: 14 }} />
@@ -141,25 +217,29 @@ function SetsTab({ onOpen }: { onOpen: (code: string) => void }) {
 
 // ── PokeDex ─────────────────────────────────────────────────────────────
 function PokedexTab() {
+  const sum = useSummary();
   const [d, setD] = useState<{ species_collected?: number; collection_value?: number } | null>(null);
   useEffect(() => {
     if (!localStorage.getItem('access_token')) { setD({}); return; }
     authFetch('/api/pokedex/my-collection/').then(r => (r.ok ? r.json() : {})).then(setD).catch(() => setD({}));
   }, []);
-  return (
+  return (<>
+    <Banner label="PokeDex" t={sum?.pokedex ?? null} noPaid />
     <HubCard href="/pokedex" title="PokeDex" cta="Open my PokeDex"
       blurb="One card per Pokémon, across all 1025. Counted on its own — ticking cards in Sets or Collections never changes it.">
-      {d && <Stats items={[['Pokémon collected', `${d.species_collected ?? 0} / 1025`], ['PokeDex value', money(d.collection_value ?? 0)]]} />}
+      {d && <Stats items={[['Pokémon collected', `${d.species_collected ?? 0} / 1025`]]} />}
     </HubCard>
-  );
+  </>);
 }
 
 // ── My Pokémon ──────────────────────────────────────────────────────────
 function MyPokemonTab() {
-  return (
+  const sum = useSummary();
+  return (<>
+    <Banner label="My Pokémon" t={sum?.mypokemon ?? null} noPaid />
     <HubCard href="/collections" title="My Pokémon" cta="Open My Pokémon"
       blurb="Pick a Pokémon and track every card of it start to finish, on its own page. Separate from your PokeDex, Sets and Collections." />
-  );
+  </>);
 }
 
 function HubCard({ href, title, blurb, cta, children }: { href: string; title: string; blurb: string; cta: string; children?: React.ReactNode }) {
@@ -193,6 +273,7 @@ function CollectionsTab() {
   const [name, setName] = useState('');
   const [err, setErr] = useState('');
   const loggedIn = typeof window !== 'undefined' && !!localStorage.getItem('access_token');
+  const sum = useSummary();
 
   useEffect(() => {
     if (!loggedIn) { setList([]); return; }
@@ -213,6 +294,7 @@ function CollectionsTab() {
 
   return (
     <div style={{ maxWidth: 900, margin: '0 auto' }}>
+      <Banner label="All your custom collections" t={sum?.collections ?? null} />
       <div style={{ ...card, padding: 16, marginBottom: 16 }}>
         <div style={{ fontSize: 13, color: '#999', marginBottom: 8 }}>
           Make your own collection — a binder, a trade pile, a favourite-art list — with any cards you like. Counted on its own, separate from Sets, PokeDex and My Pokémon.
