@@ -650,6 +650,26 @@ function OrdersTab() {
                         <button style={btn} title="40x30 mm tag for the Volkano label printer (open in Labelnize > Image Printing)" onClick={async () => { const m = await downloadLabelPng(`/api/orders/admin/${o.id}/label/`, `label-order-${o.id}.png`); if (m) alert(m); }}>🏷 Tag 40×30</button>
                         <button style={btn} title="14x40 mm Thank-you sticker with the customer's name (lying down). Shift-click for the standing version." onClick={async (e) => { const m = await downloadLabelPng(`/api/orders/admin/${o.id}/thankyou/${e.shiftKey ? "?portrait=1" : ""}`, `thankyou-order-${o.id}.png`); if (m) alert(m); }}>💌 Thank-you 14×40</button>
                         <button style={btn} title="40x30 mm Thank-you sticker: big logo, THANK YOU! and the customer's first name." onClick={async () => { const m = await downloadLabelPng(`/api/orders/admin/${o.id}/thankyou/?size=40x30`, `thankyou-40x30-order-${o.id}.png`); if (m) alert(m); }}>💌 Thank-you 40×30</button>
+                        <button style={btn} title="Use some of this customer's store credit on this order (e.g. an order placed before store credit existed)."
+                          onClick={async () => {
+                            try {
+                              const g = await authFetch(`/api/orders/admin/${o.id}/store-credit/`);
+                              const st = await g.json();
+                              if (!g.ok) { alert(st.error || "Could not load store credit"); return; }
+                              const maxUse = Math.min(parseFloat(st.balance) + parseFloat(st.applied), parseFloat(st.total));
+                              const input = window.prompt(
+                                `${st.customer} has R${st.balance} store credit.\nOrder total R${st.total}, credit already used R${st.applied}.\n\nTotal store credit to use on this order (max R${maxUse.toFixed(2)}, 0 returns it):`,
+                                maxUse.toFixed(2));
+                              if (input === null) return;
+                              const r = await authFetch(`/api/orders/admin/${o.id}/store-credit/`, {
+                                method: "POST", headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify({ amount: input.replace(",", ".").replace(/[^0-9.]/g, "") }),
+                              });
+                              const d = await r.json();
+                              alert(r.ok ? `${d.note}\nCustomer balance now R${d.balance}. Amount still due on the order: R${d.amount_due}.` : (d.error || "Failed"));
+                              if (r.ok) load();
+                            } catch { alert("Network error."); }
+                          }}>💳 Store credit</button>
                         <button style={btn} onClick={() => emailInvoice(o.id)}>✉️ Email</button>
                       </div>
                     </td>
