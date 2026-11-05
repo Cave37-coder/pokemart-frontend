@@ -67,6 +67,17 @@ export default function PilePage() {
     } finally { setRemoving(null); }
   };
 
+  const [fixing, setFixing] = useState(false);
+  const fixPile = async () => {
+    setFixing(true);
+    try {
+      await authFetch("/api/cart/fix-stock/", { method: "POST" });
+      window.dispatchEvent(new Event("pile-updated"));
+      await fetchCart();
+    } catch { /* leave the warning up; the customer can still remove items one by one */ }
+    finally { setFixing(false); }
+  };
+
   const handleCheckoutClick = () => {
     if (!cart) return;
     trackBeginCheckout(
@@ -97,6 +108,8 @@ export default function PilePage() {
   );
 
   const items = cart?.items || [];
+  // Sold-out warning (2026-11-05): cards can sell to someone else while they sit in a pile.
+  const short = items.filter((i) => i.product && i.product.stock < i.quantity);
   const subtotal = parseFloat(cart?.subtotal || cart?.total || "0");
   const discountPercent = parseFloat(cart?.discount_percent || "0");
   const discountAmount = parseFloat(cart?.discount_amount || "0");
@@ -119,6 +132,20 @@ export default function PilePage() {
         </div>
       ) : (
         <>
+          {short.length > 0 && (
+            <div style={{ background: "#2a1414", border: "1px solid #7a2a2a", borderRadius: 10, padding: "12px 16px", marginBottom: 14 }}>
+              <div style={{ color: "#f87171", fontWeight: 700, fontSize: 14, marginBottom: 4 }}>
+                {short.length === 1 ? "1 card in your pile has sold out or is running low" : `${short.length} cards in your pile have sold out or are running low`}
+              </div>
+              <div style={{ color: "#d9a0a0", fontSize: 12, marginBottom: 10 }}>
+                Cards can be bought by someone else while they wait in your pile. Checkout won&apos;t go through until this is sorted.
+              </div>
+              <button onClick={fixPile} disabled={fixing}
+                style={{ background: "#ff6b35", color: "#fff", border: "none", borderRadius: 8, padding: "8px 16px", fontWeight: 700, cursor: "pointer", fontSize: 13 }}>
+                {fixing ? "Fixing…" : "Fix my pile"}
+              </button>
+            </div>
+          )}
           {/* ITEMS */}
           <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 20 }}>
             {items.map((item) => (
@@ -149,6 +176,11 @@ export default function PilePage() {
                       <div style={{ fontSize: 11, color: "#a0a0b0" }}>
                         Qty: {item.quantity} × R {parseFloat(item.product.price).toFixed(2)}
                       </div>
+                      {item.product.stock < item.quantity && (
+                        <div style={{ marginTop: 4, fontSize: 11, fontWeight: 700, color: "#f87171" }}>
+                          {item.product.stock <= 0 ? "⚠ Sold out" : `⚠ Only ${item.product.stock} left (you have ${item.quantity})`}
+                        </div>
+                      )}
                     </div>
                   </>
                 )}
