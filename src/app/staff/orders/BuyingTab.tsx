@@ -2,6 +2,7 @@
 import { Fragment, useEffect, useState, useCallback, useRef } from "react";
 import { authFetch, SessionExpiredError } from "@/lib/api";
 import { downloadLabelPng } from "@/lib/downloadLabel";
+import WeightCounter from "./WeightCounter";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://pokemart-api-production.up.railway.app";
 
@@ -1087,6 +1088,11 @@ function BulkEditor({ initial, onSaved, onCancel }: { initial?: BuyInvoice; onSa
             : "Optional: pay all or part as store credit for her next order. The seller must be linked to her site account."}
         </div>
       </div>
+
+      {!locked && (
+        <WeightCounter sets={sets}
+          onUse={(bundleType, setCode, qty) => { setAddType(bundleType); setAddSet(setCode); setAddQty(String(qty)); }} />
+      )}
 
       {locked ? (
         <div style={{ fontSize: 11, color: "#e0b050" }}>This bulk buy-in is {initial?.status_display}. Lines are locked — use “Back to draft” on the list to change them.</div>
