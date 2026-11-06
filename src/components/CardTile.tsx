@@ -2,6 +2,7 @@ import Link from "next/link";
 import AddToPileButton from "@/components/AddToPileButton";
 import WishlistHeartButton from "@/components/WishlistHeartButton";
 import { formatPrice, isPriceTbc } from "@/lib/price";
+import { getPrinting } from "@/lib/printing";
 
 // Extracted from src/app/cards/page.tsx (2026-08-02) so the Pokedex card-list
 // page can reuse the exact same variant badges/border colors instead of
@@ -204,6 +205,7 @@ export default function CardTile({
     const eraCode = card.card_set?.era?.code || "";
     const symbolUrl = card.card_set?.symbol_url || "";
     const hasStock = card.stock > 0;
+    const printing = getPrinting(card);
     const showAsInStock = forceColor ? true : hasStock; // display-only; AddToPileButton still gets the real hasStock
     const condLabel = card.condition || 'NM';
     return (
@@ -274,7 +276,14 @@ export default function CardTile({
                     </div>
                     <div style={{ fontSize: "11px", color: "#ddd", marginBottom: "3px", lineHeight: 1.3, fontWeight: 500 }}>{card.name}</div>
                     {card.pokedex_number && <div style={{ fontSize: "9px", color: "#a0a0b0", marginBottom: "1px" }}>#{String(card.pokedex_number).padStart(4, "0")}</div>}
-                    <div style={{ fontSize: "10px", color: "#555", marginBottom: "5px" }}>{card.rarity?.replace(/_/g, " ").toUpperCase()}</div>
+                    <div style={{ fontSize: "10px", color: "#555", marginBottom: "5px" }}>
+                        {card.rarity?.replace(/_/g, " ").toUpperCase()}
+                        {printing && (
+                            <span title={printing.howToTell} style={{ marginLeft: 6, fontWeight: 700, color: printing.color, background: printing.bg, borderRadius: 4, padding: "1px 5px", fontSize: "9px", letterSpacing: "0.3px" }}>
+                                {printing.label.toUpperCase()}
+                            </span>
+                        )}
+                    </div>
                     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "6px" }}>
                         <div>
                             <div style={{ fontWeight: 700, color: isPlayed ? "#fbbf24" : "#ff6b35", fontSize: "14px" }}>{formatPrice(card.price)}</div>

@@ -6,6 +6,7 @@ import type { Card } from "@/lib/api";
 import CardTile, { getVariantKey, VariantKey, PokeballIcon } from "@/components/CardTile";
 import { usePokedexCollection } from "@/lib/usePokedexCollection";
 import { formatPrice } from "@/lib/price";
+import { getPrinting } from "@/lib/printing";
 
 // Michael, 2026-08-02: "leveling (like pkmn.gg)" -- a rough tier ladder based
 // on % of this Pokemon's catalogued variants owned in the (separate) Pokedex
@@ -156,7 +157,7 @@ export default function PokedexCardList({ cards, speciesId }: { cards: Card[]; s
                                 <div style={{ fontSize: "11px", color: "#a0a0b0" }}>{card.card_set?.code}</div>
                                 <div style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{card.name}</div>
                                 <div style={{ fontSize: "11px", color: "#a0a0b0" }}>{card.number || card.card_number}</div>
-                                <div style={{ fontSize: "11px" }}>{VARIANT_LABEL[vk] || vk}</div>
+                                <div style={{ fontSize: "11px" }}>{getPrinting(card) ? `${getPrinting(card)!.label}${/holo/i.test(card.rarity || "") ? " Holo" : ""}` : (VARIANT_LABEL[vk] || vk)}</div>
                                 <div style={{ fontSize: "11px", color: "#a0a0b0" }}>{card.rarity?.replace(/_/g, " ")}</div>
                                 <div style={{ fontWeight: 700, color: "#ff6b35" }}>{formatPrice(card.price)}</div>
                             </Link>

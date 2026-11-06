@@ -6,6 +6,7 @@ import ViewItemTracker from "./ViewItemTracker";
 import BackButton from "./BackButton";
 import WishlistHeartButton from "@/components/WishlistHeartButton";
 import { formatPrice } from "@/lib/price";
+import { getPrinting, printingsForSet } from "@/lib/printing";
 
 const TYPE_COLORS: Record<string, string> = {
   Fire: "#fb923c", Water: "#60a5fa", Grass: "#4ade80",
@@ -74,6 +75,8 @@ export default async function CardPage({ params }: { params: Promise<{ id: strin
     throw err;
   }
 
+  const printing = getPrinting(card);
+
   return (
     <div style={{ maxWidth: "1000px", margin: "0 auto", padding: "40px 2rem" }}>
       <ViewItemTracker
@@ -97,10 +100,15 @@ export default async function CardPage({ params }: { params: Promise<{ id: strin
         </div>
 
         <div>
-          <div style={{ marginBottom: "8px" }}>
+          <div style={{ marginBottom: "8px", display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
             <span style={{ fontSize: "12px", fontWeight: 700, letterSpacing: "1px", color: "#a0a0b0" }}>
               {card.rarity.replace("_", " ").toUpperCase()}
             </span>
+            {printing && (
+              <span style={{ fontSize: "12px", fontWeight: 800, letterSpacing: "0.5px", color: printing.color, background: printing.bg, borderRadius: "6px", padding: "3px 10px" }}>
+                {printing.label.toUpperCase()}
+              </span>
+            )}
           </div>
           <h1 style={{ fontSize: "36px", fontWeight: 800, marginBottom: "4px" }}>{card.name}</h1>
           {card.card_set && (
@@ -112,6 +120,20 @@ export default async function CardPage({ params }: { params: Promise<{ id: strin
           )}
           {card.name_japanese && (
             <div style={{ color: "#a0a0b0", fontSize: "18px", marginBottom: "16px" }}>{card.name_japanese}</div>
+          )}
+
+          {/* WotC print runs (2026-11-06): which printing this is and how to tell them apart, like Collectr. */}
+          {printing && card.card_set && (
+            <div style={{ background: "#1a1a24", border: "1px solid #2a2a3a", borderRadius: "12px", padding: "14px 16px", marginBottom: "20px" }}>
+              <div style={{ fontSize: "13px", color: "#fff", fontWeight: 700, marginBottom: "8px" }}>
+                This card: <span style={{ color: printing.color }}>{printing.label}</span>
+              </div>
+              {printingsForSet(card.card_set.code).map(p => (
+                <div key={p.key} style={{ fontSize: "12px", color: p.key === printing.key ? "#ddd" : "#777", marginBottom: "4px", lineHeight: 1.45 }}>
+                  <strong style={{ color: p.key === printing.key ? p.color : "#999" }}>{p.label}:</strong> {p.howToTell}
+                </div>
+              ))}
+            </div>
           )}
 
           {card.pokemon_types?.length > 0 && (
