@@ -1,11 +1,43 @@
 "use client";
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import CardTile from "@/components/CardTile";
 import { usePokedexCollection } from "@/lib/usePokedexCollection";
 import { NATIONAL_DEX_TOTAL } from "@/lib/pokedex";
 
 interface PokedexEntry { id: number; name: string }
+
+// Michael, 2026-11-06: "When I add cards to my Pokedex, when I go back, I'm
+// taken away from where I selected and have to scroll back to where I was!"
+// Cause: on Back, this grid remounts and re-fetches the collection. The
+// browser/Next restores the old scroll offset straight away, but only AFTER
+// that do the progress bar, the Top 3 / Recently Added strips and the
+// caught-card art (much taller than a sprite) appear -- pushing every tile
+// down, so you land far above where you were.
+// Fix: when a tile is tapped, remember its dex number (and the search box
+// text) on THIS history entry (window.history.state). On Back, once the
+// collection has loaded, scroll that exact tile back into view instead of
+// trusting a raw pixel offset. Stored on the history entry rather than in
+// sessionStorage so arriving fresh via the menu never jumps anywhere --
+// only a real Back to this entry restores. A second pass catches late
+// image loads in the strips above, and is skipped if you've already
+// started scrolling yourself.
+const RETURN_KEY = "pbDexReturn";
+
+function saveReturnPoint(id: number, search: string) {
+    try {
+        const state = window.history.state || {};
+        window.history.replaceState({ ...state, [RETURN_KEY]: { id, search } }, "");
+    } catch { /* ignore -- worst case is no scroll restore */ }
+}
+
+function readReturnPoint(): { id: number; search: string } | null {
+    try {
+        const v = window.history.state?.[RETURN_KEY];
+        if (v && typeof v.id === "number") return { id: v.id, search: typeof v.search === "string" ? v.search : "" };
+    } catch { /* ignore */ }
+    return null;
+}
 
 function CardStrip({ title, cards }: { title: string; cards: any[] }) {
     if (cards.length === 0) return null;
@@ -53,6 +85,53 @@ export default function PokedexGrid({ pokemon, allPokemon, external, ownerLabel 
     const collectionValue = own.collectionValue;
     const topValued = own.topValued;
     const recentlyAdded = own.recentlyAdded;
+
+    // Back-navigation scroll restore (see RETURN_KEY note above).
+    const pendingReturnId = useRef<number | null>(null);
+    const [restoreReady, setRestoreReady] = useState(false);
+
+    useEffect(() => {
+        const rp = readReturnPoint();
+        if (rp) {
+            pendingReturnId.current = rp.id;
+            if (rp.search) setSearch(rp.search);
+        }
+        setRestoreReady(true);
+    }, []);
+
+    useEffect(() => {
+        if (!restoreReady || loading || pendingReturnId.current == null) return;
+        const id = pendingReturnId.current;
+        pendingReturnId.current = null;
+
+        let userMoved = false;
+        const stop = () => { userMoved = true; };
+        window.addEventListener("touchstart", stop, { passive: true });
+        window.addEventListener("wheel", stop, { passive: true });
+        window.addEventListener("keydown", stop);
+
+        const jump = () => {
+            if (userMoved) return;
+            const el = document.querySelector<HTMLElement>(`[data-dex-id="${id}"]`);
+            if (el) el.scrollIntoView({ block: "center", behavior: "auto" });
+        };
+        const raf = requestAnimationFrame(() => requestAnimationFrame(jump));
+        const t1 = setTimeout(jump, 350);
+        const t2 = setTimeout(jump, 900);
+        const cleanup = setTimeout(() => {
+            window.removeEventListener("touchstart", stop);
+            window.removeEventListener("wheel", stop);
+            window.removeEventListener("keydown", stop);
+        }, 1000);
+
+        return () => {
+            cancelAnimationFrame(raf);
+            clearTimeout(t1); clearTimeout(t2); clearTimeout(cleanup);
+            window.removeEventListener("touchstart", stop);
+            window.removeEventListener("wheel", stop);
+            window.removeEventListener("keydown", stop);
+        };
+    }, [restoreReady, loading]);
 
     // Searching should span every generation, not just whichever gen tab is
     // currently active -- otherwise typing "Zekrom" while on the Gen 1 tab
@@ -138,6 +217,8 @@ export default function PokedexGrid({ pokemon, allPokemon, external, ownerLabel 
                             <Link
                                 key={p.id}
                                 href={`/pokedex/${p.id}`}
+                                data-dex-id={p.id}
+                                onClick={() => saveReturnPoint(p.id, search)}
                                 style={{
                                     background: "#1a1a24", border: `1px solid ${caught ? "#ff6b35" : "#2a2a3a"}`, borderRadius: "8px",
                                     padding: cardImg ? "0 0 10px" : "14px 10px", textDecoration: "none", textAlign: "center",
