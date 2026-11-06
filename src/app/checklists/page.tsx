@@ -28,8 +28,12 @@ const SELECT_GROUP_COLORS = ['#2196f3', '#7c4dff', '#ffd700', '#ec4899', '#22c55
 // (orders/views.py VARIANT_LABEL_FULL) so what a customer exports reads
 // the same as what staff see when picking the order -- the bare vc code
 // (e.g. "RH") on its own means nothing outside this codebase.
+// Short chip text for a variant code -- FE (1st Edition, WotC era, 2026-11-06)
+// reads "1ST" on the chips; every other code shows as-is.
+const vcChip = (vc: string) => (vc === 'FE' ? '1ST' : vc);
+
 const VARIANT_LABEL_FULL: Record<string, string> = {
-  N: 'Normal', H: 'Holo', RH: 'Reverse Holo',
+  N: 'Normal', H: 'Holo', RH: 'Reverse Holo', FE: '1st Edition',
   PB: 'Poke Ball', MB: 'Master Ball', LB: 'Love Ball',
   FB: 'Friend Ball', QB: 'Quick Ball', UB: 'Ultra Ball',
   DB: 'Dusk Ball', TR: 'Team Rocket', SE: 'Secret',
@@ -960,6 +964,15 @@ function Checklist({ code, sub, onBack }: { code: string; sub?: 'pikachu' | null
       });
     }
 
+    // WotC 1st Edition prints (2026-11-06) -- in scope on Master Set / Full
+    // Master only (TIER_VARIANT_SCOPE), so this button only appears there.
+    if (has(c => c.variants.some(v => v.vc === 'FE'))) {
+      groups.push({
+        key: '__fe__', label: '1st Edition', icon: '①',
+        picker: card => card.variants.filter(v => v.vc === 'FE'),
+      });
+    }
+
     if (has(c => c.variants.some(v => v.vc === 'PB'))) {
       groups.push({
         key: '__pb__', label: 'Poke Ball', icon: '⬤',
@@ -1425,7 +1438,7 @@ function Checklist({ code, sub, onBack }: { code: string; sub?: 'pikachu' | null
                       const key = card.num + '_' + v.vc;
                       const owned = !!checks[key];
                       const vcColor: Record<string, string> = {
-                        N: '#a0a0b0', RH: '#ff6b35', H: '#ffd700', ESH: '#1D9E75', CH: '#7F77DD',
+                        N: '#a0a0b0', RH: '#ff6b35', H: '#ffd700', ESH: '#1D9E75', CH: '#7F77DD', FE: '#10b981',
                         PB: '#e040fb', MB: '#7c4dff', LB: '#00bcd4',
                         FB: '#4caf50', QB: '#f44336', UB: '#2196f3',
                         DB: '#795548', TR: '#607d8b', SE: '#ff9800',
@@ -1435,8 +1448,8 @@ function Checklist({ code, sub, onBack }: { code: string; sub?: 'pikachu' | null
                       };
                       const badge = patternBadge(card.name);
                       const col = badge ? badge.color : (vcColor[v.vc] || '#a0a0b0');
-                      const displayCode = badge ? badge.code : v.vc;
-                      const displayLabel = badge ? badge.label : v.vc;
+                      const displayCode = badge ? badge.code : vcChip(v.vc);
+                      const displayLabel = badge ? badge.label : (VARIANT_LABEL_FULL[v.vc] || v.vc);
                       // Buy affordance (2026-08-12, Michael: "went customer
                       // goes to 'Grid View' please add the buy button for
                       // available stock!") -- now a tiny "+" inside the same
@@ -1500,7 +1513,7 @@ function Checklist({ code, sub, onBack }: { code: string; sub?: 'pikachu' | null
                         background: '#1e1e2a', border: '1px solid #2a2a3a', borderRadius: '6px',
                         padding: '2px 6px 2px 7px', fontSize: '10px', width: '100%',
                       }}>
-                        <span style={{ color: badge ? badge.color : '#777', fontWeight: 700 }} title={badge ? badge.label : undefined}>{badge ? badge.code : v.vc}</span>
+                        <span style={{ color: badge ? badge.color : '#777', fontWeight: 700 }} title={badge ? badge.label : VARIANT_LABEL_FULL[v.vc]}>{badge ? badge.code : vcChip(v.vc)}</span>
                         <span style={{ color: '#ccc' }}>{zarOf(v) > 0 ? 'R' + zarOf(v).toFixed(2) : 'TBC'}</span>
                         {owned && (() => {
                           const m = meta[key];
@@ -1570,7 +1583,7 @@ function Checklist({ code, sub, onBack }: { code: string; sub?: 'pikachu' | null
                     {card.variants.map(v => {
                       const key = card.num + '_' + v.vc;
                       const vcColor: Record<string, string> = {
-                        N: '#a0a0b0', RH: '#ff6b35', H: '#ffd700', ESH: '#1D9E75', CH: '#7F77DD',
+                        N: '#a0a0b0', RH: '#ff6b35', H: '#ffd700', ESH: '#1D9E75', CH: '#7F77DD', FE: '#10b981',
                         PB: '#e040fb', MB: '#7c4dff', LB: '#00bcd4',
                         FB: '#4caf50', QB: '#f44336', UB: '#2196f3',
                         DB: '#795548', TR: '#607d8b', SE: '#ff9800',
@@ -1588,7 +1601,7 @@ function Checklist({ code, sub, onBack }: { code: string; sub?: 'pikachu' | null
                             borderRadius: '3px', padding: '1px 4px',
                             fontSize: '7px', fontWeight: 700, color: checks[key] ? '#fff' : '#555',
                             textTransform: 'uppercase', lineHeight: 1.3, cursor: 'pointer',
-                          }}>{badge ? badge.code : v.vc}</div>
+                          }}>{badge ? badge.code : vcChip(v.vc)}</div>
                           {!checks[key] && inStock.has(`${v.pid}_${v.vc}`) && (
                             <button
                               onClick={() => buyCard(v.pid, v.vc, key, zarOf(v), card.name)}
