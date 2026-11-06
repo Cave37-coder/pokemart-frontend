@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic';
 import Link from "next/link";
 import { getCards } from "@/lib/api";
 import { PrepTimeBanner } from "@/components/PrepTimeNotice";
+import { formatPrice } from "@/lib/price";
 
 const ERAS = [
   { label: "WotC", code: "B1", emoji: "🏆", desc: "1999-2003" },
@@ -139,7 +140,7 @@ export default async function HomePage() {
                   {card.name_japanese && <div style={{ color:"#555", fontSize:"11px", marginBottom:"6px" }}>{card.name_japanese}</div>}
                   <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
                     <span style={{ fontSize:"11px", color:"#555" }}>{card.card_set?.code} · {card.rarity?.replace(/_/g," ").toUpperCase()}</span>
-                    <span style={{ color:"#ff6b35", fontWeight:700, fontSize:"15px" }}>R {parseFloat(card.price).toFixed(2)}</span>
+                    <span style={{ color:"#ff6b35", fontWeight:700, fontSize:"15px" }}>{formatPrice(card.price)}</span>
                   </div>
                 </div>
               </Link>

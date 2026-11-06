@@ -5,6 +5,7 @@ import AddToPileButton from "./AddToPileButton";
 import ViewItemTracker from "./ViewItemTracker";
 import BackButton from "./BackButton";
 import WishlistHeartButton from "@/components/WishlistHeartButton";
+import { formatPrice } from "@/lib/price";
 
 const TYPE_COLORS: Record<string, string> = {
   Fire: "#fb923c", Water: "#60a5fa", Grass: "#4ade80",
@@ -127,7 +128,7 @@ export default async function CardPage({ params }: { params: Promise<{ id: strin
 
           <div style={{ background: "#1a1a24", border: "1px solid #2a2a3a", borderRadius: "12px", padding: "20px", marginBottom: "20px" }}>
             <div style={{ fontSize: "36px", fontWeight: 800, color: "#ff6b35", marginBottom: "8px" }}>
-              R {parseFloat(card.price).toFixed(2)}
+              {formatPrice(card.price)}
             </div>
             {card.price_lock && (
               <div style={{ display: "inline-block", marginBottom: "8px", fontSize: "12px", fontWeight: 700, color: "#38bdf8", border: "1px solid #38bdf8", borderRadius: "6px", padding: "2px 8px" }}>

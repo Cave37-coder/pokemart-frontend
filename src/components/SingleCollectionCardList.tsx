@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import type { Card } from "@/lib/api";
 import CardTile, { getVariantKey, VariantKey, PokeballIcon } from "@/components/CardTile";
 import { useSingleCollection } from "@/lib/useSingleCollection";
+import { formatPrice } from "@/lib/price";
 
 // Adapted from PokedexCardList (2026-09-29, Michael round 2: "Single
 // pokemon collections must be seperate page... work off the pokedex
@@ -168,7 +169,7 @@ export default function SingleCollectionCardList({ cards, speciesId }: { cards: 
                                 <div style={{ fontSize: "11px", color: "#a0a0b0" }}>{card.number || card.card_number}</div>
                                 <div style={{ fontSize: "11px" }}>{VARIANT_LABEL[vk] || vk}</div>
                                 <div style={{ fontSize: "11px", color: "#a0a0b0" }}>{card.rarity?.replace(/_/g, " ")}</div>
-                                <div style={{ fontWeight: 700, color: "#ff6b35" }}>R {parseFloat(card.price).toFixed(2)}</div>
+                                <div style={{ fontWeight: 700, color: "#ff6b35" }}>{formatPrice(card.price)}</div>
                             </Link>
                         );
                     })}

@@ -25,7 +25,7 @@ const API_URL = process.env.API_URL || process.env.NEXT_PUBLIC_API_URL || "https
 async function getAllCardsForPokedex(id: string): Promise<Card[]> {
     const results: Card[] = [];
     let url: string | null =
-        `${API_URL}/api/products/?pokedex=${encodeURIComponent(id)}&min_price=0.01&page_size=200&ordering=card_set__release_date,card_set__code,card_number,variant_sort`;
+        `${API_URL}/api/products/?pokedex=${encodeURIComponent(id)}&page_size=200&ordering=card_set__release_date,card_set__code,card_number,variant_sort`;
     let guard = 0;
     while (url && guard < 25) {
         const res: Response = await fetch(url, { cache: "no-store" });

@@ -1458,7 +1458,7 @@ function Checklist({ code, sub, onBack }: { code: string; sub?: 'pikachu' | null
                           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', lineHeight: 1.1 }}>
                             <span style={{ fontSize: '8px', fontWeight: 800, color: owned ? '#eafff1' : col }}>{owned ? '✓' : displayCode}</span>
                             <span style={{ fontSize: '6px', color: owned ? '#c8f7d8' : '#888' }}>
-                              {owned ? 'Caught' : (canBuy ? 'Buy' : (zarOf(v) > 0 ? 'R' + zarOf(v).toFixed(0) : ''))}
+                              {owned ? 'Caught' : (canBuy ? 'Buy' : (zarOf(v) > 0 ? 'R' + zarOf(v).toFixed(0) : 'TBC'))}
                             </span>
                           </div>
                           {canBuy && (
@@ -1501,7 +1501,7 @@ function Checklist({ code, sub, onBack }: { code: string; sub?: 'pikachu' | null
                         padding: '2px 6px 2px 7px', fontSize: '10px', width: '100%',
                       }}>
                         <span style={{ color: badge ? badge.color : '#777', fontWeight: 700 }} title={badge ? badge.label : undefined}>{badge ? badge.code : v.vc}</span>
-                        {zarOf(v) > 0 && <span style={{ color: '#ccc' }}>R{zarOf(v).toFixed(2)}</span>}
+                        <span style={{ color: '#ccc' }}>{zarOf(v) > 0 ? 'R' + zarOf(v).toFixed(2) : 'TBC'}</span>
                         {owned && (() => {
                           const m = meta[key];
                           const base = m?.paid ?? m?.value ?? null;
@@ -1598,7 +1598,7 @@ function Checklist({ code, sub, onBack }: { code: string; sub?: 'pikachu' | null
                             </button>
                           )}
                           {!inStock.has(`${v.pid}_${v.vc}`) && (
-                            <span style={{ fontSize: '7px', color: '#333', lineHeight: 1.2 }}>{zarOf(v) > 0 ? 'R'+zarOf(v).toFixed(0) : ''}</span>
+                            <span style={{ fontSize: '7px', color: '#333', lineHeight: 1.2 }}>{zarOf(v) > 0 ? 'R'+zarOf(v).toFixed(0) : 'TBC'}</span>
                           )}
                         </div>
                       );

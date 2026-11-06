@@ -11,13 +11,15 @@ interface AddToPileButtonProps {
   // with just productId.
   price?: number;
   name?: string;
+  // TBC price (0): show "Price TBC" instead of an Add button.
+  priceTbc?: boolean;
 }
 
 // window.gtag is typed globally in src/lib/analytics.ts — no need to
 // redeclare it here. (Two conflicting declarations of the same global,
 // one here and one there, is what broke the last build.)
 
-export default function AddToPileButton({ productId, hasStock, size = "md", price, name }: AddToPileButtonProps) {
+export default function AddToPileButton({ productId, hasStock, size = "md", price, name, priceTbc = false }: AddToPileButtonProps) {
   const [loading, setLoading] = useState(false);
   const [added, setAdded] = useState(false);
   const [error, setError] = useState("");
@@ -78,6 +80,12 @@ export default function AddToPileButton({ productId, hasStock, size = "md", pric
 
   const pad = size === "sm" ? "6px" : "10px";
   const fSize = size === "sm" ? "11px" : "13px";
+
+  if (priceTbc) return (
+    <button disabled title="No market price yet -- contact us for this card" style={{ width:"100%", background:"#1e1e2a", color:"#a0a0b0", border:"1px solid #2a2a3a", borderRadius:"6px", padding:pad, fontSize:fSize, fontWeight:600, cursor:"not-allowed" }}>
+      Price TBC
+    </button>
+  );
 
   if (!hasStock) return (
     <button disabled style={{ width:"100%", background:"#1e1e2a", color:"#555", border:"1px solid #2a2a3a", borderRadius:"6px", padding:pad, fontSize:fSize, fontWeight:600, cursor:"not-allowed" }}>

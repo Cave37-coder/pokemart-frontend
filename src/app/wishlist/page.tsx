@@ -3,6 +3,7 @@ import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { authFetch, api } from "@/lib/api";
 import type { Card } from "@/lib/api";
+import { formatPrice } from "@/lib/price";
 
 const inputStyle = {
   width: "100%", background: "#1a1a2e", border: "1px solid #2a2a3a",
@@ -31,7 +32,7 @@ function CardRow({ card, actionLabel, onAction }: { card: Card; actionLabel: str
           {card.name}
         </div>
         <div style={{ color: "#a0a0b0", fontSize: "12px" }}>
-          {card.card_set?.name || ""} {card.price ? `• R${parseFloat(card.price).toFixed(2)}` : ""}
+          {card.card_set?.name || ""} {`• ${formatPrice(card.price, { space: false })}`}
         </div>
       </div>
       <button

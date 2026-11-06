@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import type { Card } from "@/lib/api";
 import CardTile, { getVariantKey, VariantKey, PokeballIcon } from "@/components/CardTile";
 import { usePokedexCollection } from "@/lib/usePokedexCollection";
+import { formatPrice } from "@/lib/price";
 
 // Michael, 2026-08-02: "leveling (like pkmn.gg)" -- a rough tier ladder based
 // on % of this Pokemon's catalogued variants owned in the (separate) Pokedex
@@ -157,7 +158,7 @@ export default function PokedexCardList({ cards, speciesId }: { cards: Card[]; s
                                 <div style={{ fontSize: "11px", color: "#a0a0b0" }}>{card.number || card.card_number}</div>
                                 <div style={{ fontSize: "11px" }}>{VARIANT_LABEL[vk] || vk}</div>
                                 <div style={{ fontSize: "11px", color: "#a0a0b0" }}>{card.rarity?.replace(/_/g, " ")}</div>
-                                <div style={{ fontWeight: 700, color: "#ff6b35" }}>R {parseFloat(card.price).toFixed(2)}</div>
+                                <div style={{ fontWeight: 700, color: "#ff6b35" }}>{formatPrice(card.price)}</div>
                             </Link>
                         );
                     })}

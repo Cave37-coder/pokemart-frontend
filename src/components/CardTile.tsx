@@ -1,6 +1,7 @@
 import Link from "next/link";
 import AddToPileButton from "@/components/AddToPileButton";
 import WishlistHeartButton from "@/components/WishlistHeartButton";
+import { formatPrice, isPriceTbc } from "@/lib/price";
 
 // Extracted from src/app/cards/page.tsx (2026-08-02) so the Pokedex card-list
 // page can reuse the exact same variant badges/border colors instead of
@@ -13,7 +14,10 @@ export type VariantKey = "N" | "H" | "RH" | "ESH" | "ERH" | "RH-PB" | "RH-MB" | 
 export function getVariantKey(card: { variant_override: string; rarity: string; price_first_edition: string | null; }): VariantKey {
     const v = (card.variant_override || "").trim();
     const r = card.rarity || "";
-    if (card.price_first_edition) return "1ST";
+    // 2026-11-06: 1st Edition is now its own row (variant "FE"). This used to
+    // badge any row that merely carried a price_first_edition side value as
+    // 1st Ed -- which wrongly badged the Unlimited/Shadowless rows.
+    if (v === "FE") return "1ST";
     if (v === "H") return "H";
     if (v === "RH" || v === "RH-H") return "RH";
     if (v === "ESH") return "ESH";
@@ -273,7 +277,7 @@ export default function CardTile({
                     <div style={{ fontSize: "10px", color: "#555", marginBottom: "5px" }}>{card.rarity?.replace(/_/g, " ").toUpperCase()}</div>
                     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "6px" }}>
                         <div>
-                            <div style={{ fontWeight: 700, color: isPlayed ? "#fbbf24" : "#ff6b35", fontSize: "14px" }}>R {parseFloat(card.price).toFixed(2)}</div>
+                            <div style={{ fontWeight: 700, color: isPlayed ? "#fbbf24" : "#ff6b35", fontSize: "14px" }}>{formatPrice(card.price)}</div>
                             {card.price_lock && (
                                 <span title="Price held while our stock lasts" style={{ display: "inline-block", marginTop: 2, fontSize: "9px", fontWeight: 700, color: "#38bdf8", border: "1px solid #38bdf8", borderRadius: 4, padding: "1px 5px" }}>🔒 PRICE LOCK</span>
                             )}
@@ -283,7 +287,7 @@ export default function CardTile({
                 </div>
             </Link>
             <div style={{ padding: "0 10px 10px" }}>
-                <AddToPileButton productId={card.id} hasStock={hasStock} size="sm" />
+                <AddToPileButton productId={card.id} hasStock={hasStock} priceTbc={isPriceTbc(card.price)} size="sm" />
             </div>
         </div>
     );

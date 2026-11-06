@@ -6,6 +6,7 @@
 // hardcoded set lists below.
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { formatPrice } from "@/lib/price";
 
 // ════════════════════════════════════════════════
 // THEME (matches src/app/about/page.tsx conventions)
@@ -1639,7 +1640,7 @@ ${notes ? `<div class="st">Notes</div><p style="font-size:10pt;line-height:1.7;c
                                 <span>
                                   {card.card_set?.code || "?"} {num}
                                 </span>
-                                {card.price && <span>R{parseFloat(card.price).toFixed(2)}</span>}
+                                <span>{formatPrice(card.price, { space: false })}</span>
                                 <span style={{ color: sectionColor(section), fontWeight: 700 }}>{sectionLabel(section)}</span>
                               </div>
                             </div>

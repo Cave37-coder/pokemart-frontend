@@ -2,6 +2,7 @@
 import { useState } from "react";
 import { Card, authFetch, SessionExpiredError } from "@/lib/api";
 import { trackAddToCart } from "@/lib/analytics";
+import { isPriceTbc } from "@/lib/price";
 
 export default function AddToPileButton({ card }: { card: Card }) {
   const [added, setAdded] = useState(false);
@@ -65,21 +66,25 @@ export default function AddToPileButton({ card }: { card: Card }) {
     );
   }
 
+  // TBC price (0): not buyable online until it has a real price.
+  const tbc = isPriceTbc(card.price);
+  const canAdd = card.in_stock && !tbc;
+
   return (
     <div style={{ marginBottom: "20px" }}>
       <button
         onClick={addToPile}
-        disabled={!card.in_stock || loading}
+        disabled={!canAdd || loading}
         style={{
           width: "100%",
-          background: added ? "#4ade80" : card.in_stock ? "#ff6b35" : "#2a2a3a",
+          background: added ? "#4ade80" : canAdd ? "#ff6b35" : "#2a2a3a",
           color: "#fff", border: "none", borderRadius: "12px",
           padding: "16px", fontSize: "16px", fontWeight: 700,
-          cursor: card.in_stock ? "pointer" : "not-allowed",
+          cursor: canAdd ? "pointer" : "not-allowed",
           transition: "background 0.2s",
         }}
       >
-        {added ? "Added to your Pile!" : loading ? "Adding..." : card.in_stock ? "Add to my Pile!" : "Out of Stock"}
+        {added ? "Added to your Pile!" : loading ? "Adding..." : tbc ? "Price TBC - contact us" : card.in_stock ? "Add to my Pile!" : "Out of Stock"}
       </button>
       {error && <div style={{ color: "#EF4444", fontSize: "12px", marginTop: "6px" }}>{error}</div>}
     </div>

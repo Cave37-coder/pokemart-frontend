@@ -324,7 +324,6 @@ export default async function CardsPage({ searchParams }: { searchParams: Promis
             ...(showInStock && { in_stock: "true" }),
             ...(effectiveLegality !== "all" && { legality: effectiveLegality }),
             ...(params.pokedex && { pokedex: params.pokedex }),
-            min_price: "0.01",
         });
     } catch {
         data = { count: 0, results: [] };
