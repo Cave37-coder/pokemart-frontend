@@ -97,18 +97,33 @@ export default function PokeTradePage() {
   const [installEvt, setInstallEvt] = useState<BeforeInstallPromptEvent | null>(null);
   const [standalone, setStandalone] = useState(false);
   const [isIos, setIsIos] = useState(false);
+  const [isAndroid, setIsAndroid] = useState(false);
+  // True only when running as the installed Poke-Trade app itself. Opened
+  // from inside the installed PokeBulk app, /trade is also "standalone" but
+  // is NOT Poke-Trade's own install -- so the Install button must still show.
+  const [ownApp, setOwnApp] = useState(false);
 
   // Load from the phone on first open.
   useEffect(() => {
     const t = window.setTimeout(() => {
       setTrade(load<Trade>(CURRENT_KEY, newTrade()));
       setHistory(load<Trade[]>(HISTORY_KEY, []));
-      setStandalone(window.matchMedia("(display-mode: standalone)").matches || (navigator as unknown as { standalone?: boolean }).standalone === true);
+      const sa = window.matchMedia("(display-mode: standalone)").matches || (navigator as unknown as { standalone?: boolean }).standalone === true;
+      setStandalone(sa);
       setIsIos(/iPhone|iPad|iPod/i.test(navigator.userAgent));
+      setIsAndroid(/Android/i.test(navigator.userAgent));
+      // The installed Poke-Trade app always starts at /trade?app=1 (its manifest
+      // start_url); remember that for the rest of this app session.
+      let own = false;
+      try {
+        if (new URLSearchParams(window.location.search).get("app") === "1") sessionStorage.setItem("pt-own-app", "1");
+        own = sessionStorage.getItem("pt-own-app") === "1";
+      } catch { /* ignore */ }
+      setOwnApp(sa && own);
       setReady(true);
     }, 0);
     const onBip = (e: Event) => { e.preventDefault(); setInstallEvt(e as BeforeInstallPromptEvent); };
-    const onInstalled = () => { setInstallEvt(null); setStandalone(true); };
+    const onInstalled = () => { setInstallEvt(null); setOwnApp(true); };
     window.addEventListener("beforeinstallprompt", onBip);
     window.addEventListener("appinstalled", onInstalled);
     return () => {
@@ -220,7 +235,7 @@ export default function PokeTradePage() {
   };
 
   const install = async () => {
-    if (installEvt) {
+    if (installEvt && !standalone) {
       await installEvt.prompt();
       setInstallEvt(null);
     } else {
@@ -242,7 +257,7 @@ export default function PokeTradePage() {
           <span>Poke-Trade</span>
         </div>
         <div className="pt-top-actions">
-          {!standalone && <button className="pt-ghost" onClick={install}>Install</button>}
+          {!ownApp && <button className="pt-ghost" onClick={install}>Install</button>}
           <button className="pt-ghost" onClick={() => setSheet("saved")}>Saved{history.length ? ` (${history.length})` : ""}</button>
           <button className="pt-ghost" onClick={startNew}>New</button>
         </div>
@@ -350,6 +365,20 @@ export default function PokeTradePage() {
 
       {sheet === "install" && (
         <Sheet title="Put Poke-Trade on your phone" onClose={() => setSheet(null)}>
+          {standalone && (
+            <div className="pt-inapp">
+              <p>You opened Poke-Trade inside the PokeBulk app, where it works as a normal page. To get it as its own app with its own icon, open it in your phone&apos;s browser first:</p>
+              {isAndroid ? (
+                <a className="pt-primary pt-link" href="intent://www.pokebulk.co.za/trade#Intent;scheme=https;package=com.android.chrome;end">Open in Chrome</a>
+              ) : (
+                <button className="pt-primary" onClick={async () => {
+                  try { await navigator.clipboard.writeText("https://www.pokebulk.co.za/trade"); flash("Link copied. Paste it in Safari"); }
+                  catch { flash("Go to pokebulk.co.za/trade in Safari"); }
+                }}>Copy the link for Safari</button>
+              )}
+              <p className="pt-muted">Then follow these steps there:</p>
+            </div>
+          )}
           {isIos ? (
             <ol className="pt-steps">
               <li>Open this page in Safari.</li>
@@ -426,6 +455,9 @@ function AddSheet({ side, onSide, onClose, onAdd }: {
   const [q, setQ] = useState("");
   const [results, setResults] = useState<Result[]>([]);
   const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
+  const [pages, setPages] = useState(0);
+  const listTop = useRef<HTMLDivElement>(null);
   const [state, setState] = useState<"idle" | "loading" | "error">("idle");
   const [cash, setCash] = useState("");
   const [otherName, setOtherName] = useState("");
@@ -436,6 +468,9 @@ function AddSheet({ side, onSide, onClose, onAdd }: {
 
   useEffect(() => { if (mode === "card") inputRef.current?.focus(); }, [mode]);
 
+  // New search words always start again at page 1.
+  const onQuery = (v: string) => { setQ(v); setPage(1); };
+
   useEffect(() => {
     const term = q.trim();
     if (term.length < 2) return;
@@ -443,19 +478,36 @@ function AddSheet({ side, onSide, onClose, onAdd }: {
     const t = window.setTimeout(async () => {
       setState("loading");
       try {
-        const res = await fetch(`${API}/api/trade/search/?q=${encodeURIComponent(term)}`);
+        const res = await fetch(`${API}/api/trade/search/?q=${encodeURIComponent(term)}&page=${page}`);
         if (!res.ok) throw new Error();
-        const data: { results: Result[]; total_matches: number } = await res.json();
+        const data: { results: Result[]; total_matches: number; page?: number; pages?: number } = await res.json();
         if (mine !== seq.current) return;
         setResults(data.results);
         setTotal(data.total_matches);
+        setPages(data.pages ?? 1);
         setState("idle");
+        listTop.current?.scrollIntoView({ block: "nearest" });
       } catch {
         if (mine === seq.current) setState("error");
       }
-    }, 300);
+    }, page > 1 ? 0 : 300);
     return () => window.clearTimeout(t);
-  }, [q]);
+  }, [q, page]);
+
+  const PAGE = 40;
+  const from = total ? (page - 1) * PAGE + 1 : 0;
+  const to = Math.min(page * PAGE, total);
+  const pager = showPager();
+  function showPager() {
+    if (q.trim().length < 2 || pages <= 1) return null;
+    return (
+      <div className="pt-pager">
+        <button disabled={page <= 1 || state === "loading"} onClick={() => setPage(p => Math.max(1, p - 1))}>Previous</button>
+        <span>Page {page} of {pages}</span>
+        <button disabled={page >= pages || state === "loading"} onClick={() => setPage(p => Math.min(pages, p + 1))}>Next</button>
+      </div>
+    );
+  }
 
   const sideName = side === "give" ? "You give" : "You get";
 
@@ -504,9 +556,13 @@ function AddSheet({ side, onSide, onClose, onAdd }: {
             inputMode="search"
             placeholder="Card name, then set or number, e.g. charizard bs 4"
             value={q}
-            onChange={e => setQ(e.target.value)}
+            onChange={e => onQuery(e.target.value)}
           />
-          <div className="pt-results">
+          <div className="pt-results" ref={listTop}>
+            {q.trim().length >= 2 && total > 0 && (
+              <p className="pt-count">{from}–{to} of {total} cards{state === "loading" ? " · loading..." : ""}</p>
+            )}
+            {pager}
             {showResults && state === "loading" && results.length === 0 && <p className="pt-muted">Searching...</p>}
             {showResults && state === "error" && <p className="pt-muted">No connection. Check your signal and try again.</p>}
             {showResults && state === "idle" && results.length === 0 && <p className="pt-muted">No cards match. Try fewer words, or add it under Other item.</p>}
@@ -522,8 +578,9 @@ function AddSheet({ side, onSide, onClose, onAdd }: {
                 <span className="pt-result-val">{r.tcg_zar == null ? "TBC" : money(r.tcg_zar)}</span>
               </button>
             ))}
-            {showResults && total > results.length && (
-              <p className="pt-muted">Showing {results.length} of {total}. Add the set code or card number to narrow it down.</p>
+            {pager}
+            {showResults && pages > 1 && (
+              <p className="pt-muted">Tip: add the set code or card number to jump straight to it, e.g. &quot;pikachu bs&quot; or &quot;pikachu 58&quot;.</p>
             )}
           </div>
         </>
@@ -670,5 +727,13 @@ const CSS = `
 .pt-saved-main{flex:1;display:flex;flex-direction:column;align-items:flex-start;gap:2px;background:none;border:none;padding:12px 2px;text-align:left}
 .pt-saved-main span{font-size:13px;color:var(--mute)}
 .pt-steps{padding-left:20px;line-height:1.9}
+.pt-inapp{display:flex;flex-direction:column;gap:10px}
+.pt-inapp p{margin:0}
+.pt-link{display:block;text-align:center;text-decoration:none}
+.pt-count{margin:10px 2px 2px;font-size:13px;color:var(--mute)}
+.pt-pager{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:10px 0}
+.pt-pager span{font-size:14px;font-weight:600}
+.pt-pager button{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:10px 16px;font-size:14px;min-width:96px}
+.pt-pager button:disabled{opacity:.4}
 .pt-toast{position:fixed;left:50%;bottom:calc(24px + env(safe-area-inset-bottom));transform:translateX(-50%);z-index:10002;background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:999px;font-weight:600;font-size:14px;white-space:nowrap}
 `;
