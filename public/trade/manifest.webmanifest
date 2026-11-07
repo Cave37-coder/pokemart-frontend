@@ -3,7 +3,7 @@
   "short_name": "Poke-Trade",
   "description": "Build both sides of a Pokémon card trade and see who's up, valued at today's TCG market price in Rand.",
   "id": "/trade",
-  "start_url": "/trade",
+  "start_url": "/trade?app=1",
   "scope": "/trade",
   "display": "standalone",
   "orientation": "portrait",
