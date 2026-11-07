@@ -91,6 +91,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                 {["WotC Base Era","Scarlet & Violet Era","Sword & Shield Era","Sun & Moon Era","XY Era"].map((era) => (
                   <a key={era} href="/cards" style={{ color:"#a0a0b0", textDecoration:"none", fontSize:"13px" }}>{era}</a>
                 ))}
+                <a href="/trade" style={{ color:"#ff6b35", textDecoration:"none", fontSize:"13px", fontWeight:600 }}>📱 Poke-Trade app: value your trades</a>
               </div>
             </div>
           </div>

@@ -36,6 +36,8 @@ export default function PwaSetup() {
   useEffect(() => {
     registerServiceWorker().then(() => syncPushSubscription());
 
+    // Poke-Trade (/trade) is its own installable app with its own Install button.
+    if (window.location.pathname.startsWith("/trade")) return;
     if (isStandalone() || recentlyDismissed()) return;
 
     const onBeforeInstall = (e: Event) => {

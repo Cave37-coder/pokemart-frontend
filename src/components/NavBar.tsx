@@ -178,6 +178,7 @@ export default function NavBar() {
     // 2026-11-04, Michael: Accessories sits right beside Browse Cards; everything
     // collection-related lives under the single "My Collection" dropdown below.
     { href: "/accessories", label: "Accessories" },
+    { href: "/sealed", label: "Sealed" },
   ];
 
   const collectionLinks = [
@@ -196,6 +197,7 @@ export default function NavBar() {
   ];
 
   const moreLinks = [
+    { href: "/trade", label: "📱 Poke-Trade" },
     { href: "/decklist", label: "Deck Builder", beta: true },
     { href: "/calendar", label: "Calendar" },
     { href: "/bundles", label: "Bundles" },

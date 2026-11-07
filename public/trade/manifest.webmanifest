@@ -1,0 +1,19 @@
+{
+  "name": "Poke-Trade by PokeBulk SA",
+  "short_name": "Poke-Trade",
+  "description": "Build both sides of a Pokémon card trade and see who's up, valued at today's TCG market price in Rand.",
+  "id": "/trade",
+  "start_url": "/trade",
+  "scope": "/trade",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#15151f",
+  "theme_color": "#15151f",
+  "lang": "en-ZA",
+  "categories": ["utilities", "entertainment"],
+  "icons": [
+    { "src": "/trade/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/trade/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/trade/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
