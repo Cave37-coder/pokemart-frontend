@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
+import AddToPileButton from "@/components/AddToPileButton";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://pokemart-api-production.up.railway.app";
 
@@ -14,6 +15,8 @@ interface Accessory {
   price: string;
   stock: number;
   in_stock: boolean;
+  // Product id My Pile takes (2026-11-08) -- null until the accessory is linked.
+  cart_product_id: number | null;
 }
 
 const CATEGORIES: { value: string; label: string }[] = [
@@ -117,6 +120,11 @@ export default function AccessoriesPage() {
                   <span style={{ color: "#ff6b35", fontSize: "16px", fontWeight: 700 }}>R{parseFloat(a.price).toFixed(2)}</span>
                   <span style={{ color: "#66cc66", fontSize: "11px", fontWeight: 600 }}>{a.stock} in stock</span>
                 </div>
+                {a.cart_product_id ? (
+                  <AddToPileButton productId={a.cart_product_id} hasStock={a.stock > 0} price={parseFloat(a.price)} name={a.name} size="sm" />
+                ) : (
+                  <div style={{ color: "#a0a0b0", fontSize: "11px", textAlign: "center" }}>Ask us on WhatsApp to order this one</div>
+                )}
               </div>
             ))}
           </div>
