@@ -311,11 +311,33 @@ function DeliveryEditor({ order, onSaved }: { order: AdminOrder; onSaved: () => 
 // ORDERS TAB
 // ─────────────────────────────────────────────────────────────────────────
 
+// Courier picker (2026-11-08, Michael: "add drop down for Courier on status
+// update, Pudo - Collection - then add the tracking url supplied
+// automatically"). Picking a courier fills in its tracking page; "Other"
+// keeps the old free-text field for anything else.
+const PUDO_TRACK_URL = "https://customer.tcglocker.co.za/track";
+const COURIERS: { name: string; url: string }[] = [
+  { name: "Pudo", url: PUDO_TRACK_URL },
+  { name: "Collection", url: "" },
+];
+
 function OrderManageRow({ order, onSaved }: { order: AdminOrder; onSaved: () => void }) {
   const [status, setStatus] = useState(order.status);
   const [waybill, setWaybill] = useState(order.waybill_number);
-  const [courierName, setCourierName] = useState(order.courier_name);
-  const [courierUrl, setCourierUrl] = useState(order.courier_tracking_url);
+  // Blank courier on a new order: preselect from how the customer chose to receive it.
+  const defaultCourier = order.courier_name
+    || ((order.shipping_method || "").startsWith("pudo") ? "Pudo" : (order.shipping_method === "collection" || order.delivery_method === "collection") ? "Collection" : "");
+  const [courierName, setCourierName] = useState(defaultCourier);
+  const [courierUrl, setCourierUrl] = useState(
+    order.courier_tracking_url || COURIERS.find((c) => c.name === defaultCourier)?.url || ""
+  );
+  const [courierOther, setCourierOther] = useState(!!defaultCourier && !COURIERS.some((c) => c.name === defaultCourier));
+  const pickCourier = (v: string) => {
+    if (v === "__other__") { setCourierOther(true); setCourierName(""); setCourierUrl(""); return; }
+    setCourierOther(false);
+    setCourierName(v);
+    setCourierUrl(COURIERS.find((c) => c.name === v)?.url || "");
+  };
   const [note, setNote] = useState("");
   const [eftConfirmed, setEftConfirmed] = useState(order.eft_confirmed);
   const [cashConfirmed, setCashConfirmed] = useState(order.cash_confirmed);
@@ -383,7 +405,16 @@ function OrderManageRow({ order, onSaved }: { order: AdminOrder; onSaved: () => 
         </div>
         <div>
           <label style={{ fontSize: 10, color: "#888", display: "block", marginBottom: 3 }}>Courier</label>
-          <input style={inp} value={courierName} onChange={(e) => setCourierName(e.target.value)} placeholder="e.g. Pudo" />
+          <div style={{ display: "flex", gap: 6 }}>
+            <select style={inp} value={courierOther ? "__other__" : courierName} onChange={(e) => pickCourier(e.target.value)}>
+              <option value="">Choose...</option>
+              {COURIERS.map((c) => <option key={c.name} value={c.name}>{c.name}</option>)}
+              <option value="__other__">Other...</option>
+            </select>
+            {courierOther && (
+              <input style={{ ...inp, width: 130 }} value={courierName} onChange={(e) => setCourierName(e.target.value)} placeholder="Courier name" />
+            )}
+          </div>
         </div>
         <div>
           <label style={{ fontSize: 10, color: "#888", display: "block", marginBottom: 3 }}>Tracking URL</label>
