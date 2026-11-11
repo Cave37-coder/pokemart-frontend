@@ -100,6 +100,26 @@ export default async function HomePage() {
         </div>
       </div>
 
+      {/* ACCESSORIES CTA — 2026-11-11, new accessories range announcement */}
+      <div style={{ background:"linear-gradient(90deg, #1a1a24 0%, #1a2430 100%)", borderBottom:"1px solid #2a2a3a", padding:"28px 2rem" }}>
+        <div style={{ maxWidth:"900px", margin:"0 auto", display:"flex", alignItems:"center", justifyContent:"center", gap:"20px", flexWrap:"wrap", textAlign:"center" }}>
+          <div style={{ fontSize:"36px", flexShrink:0 }}>🛡️</div>
+          <div style={{ maxWidth:"560px" }}>
+            <div style={{ fontWeight:700, color:"#fff", fontSize:"16px", marginBottom:"4px" }}>
+              New: Accessories are here
+            </div>
+            <div style={{ color:"#a0a0b0", fontSize:"13px", lineHeight:1.6 }}>
+              Sleeves from <span style={{ color:"#ff6b35", fontWeight:700 }}>R35</span> a pack of 100, top loaders
+              with sleeves from <span style={{ color:"#ff6b35", fontWeight:700 }}>R8</span>, plus binders and deck
+              boxes. Add them to your Pile with your cards.
+            </div>
+          </div>
+          <Link href="/accessories" className="pb-btn-primary" style={{ background:"#ff6b35", color:"#fff", padding:"11px 22px", borderRadius:"10px", textDecoration:"none", fontSize:"14px", fontWeight:700, display:"inline-block", flexShrink:0 }}>
+            Shop Accessories
+          </Link>
+        </div>
+      </div>
+
       {/* LIVE STATS */}
       <div style={{ background:"#12121a", borderBottom:"1px solid #2a2a3a", padding:"32px 2rem" }}>
         <div style={{ maxWidth:"900px", margin:"0 auto", display:"grid", gridTemplateColumns:"repeat(3, 1fr)", gap:"20px", textAlign:"center" }}>
