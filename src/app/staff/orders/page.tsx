@@ -635,7 +635,7 @@ function OrdersTab() {
           <table style={{ width: "100%", borderCollapse: "collapse" }}>
             <thead>
               <tr style={{ borderBottom: "2px solid #2a2a3a" }}>
-                {["Order", "Customer", "Status", "Due", "Paid", "Total", "Discount", "Shipping", "Items", "Date", ""].map((h) => (
+                {["Order", "Customer", "Status", "Due", "Paid", "Total", "Discount", "Shipping", "Items", "Date"].map((h) => (
                   <th key={h} style={{ textAlign: "left", padding: "6px 8px", fontSize: 10, color: "#888", textTransform: "uppercase" }}>{h}</th>
                 ))}
               </tr>
@@ -643,7 +643,7 @@ function OrdersTab() {
             <tbody>
               {data.results.map((o) => (
                 <Fragment key={o.id}>
-                  <tr style={{ borderBottom: "1px solid #2a2a3a" }}>
+                  <tr>
                     <td style={{ padding: "8px", fontSize: 12 }}>
                       <a href={`${API_URL}/admin/orders/order/${o.id}/change/`} target="_blank" rel="noreferrer" style={{ color: "#ff6b35", fontWeight: 700 }}>#{o.id}</a>
                     </td>
@@ -672,7 +672,10 @@ function OrdersTab() {
                     <td style={{ padding: "8px", fontSize: 11, color: "#888" }}>{o.shipping_method}</td>
                     <td style={{ padding: "8px", fontSize: 12, color: "#888" }}>{o.item_count}</td>
                     <td style={{ padding: "8px", fontSize: 11, color: "#888" }}>{dateFmt(o.created_at)}</td>
-                    <td style={{ padding: "8px", whiteSpace: "nowrap" }}>
+                  </tr>
+                  {/* Action buttons run across the bottom of each order (2026-11-11, Michael: the right-hand column made the rows too tall) */}
+                  <tr style={{ borderBottom: "1px solid #2a2a3a" }}>
+                    <td colSpan={10} style={{ padding: "0 8px 10px" }}>
                       <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
                         <button style={btn} onClick={() => setExpanded(expanded === o.id ? null : o.id)}>{expanded === o.id ? "Close" : "Manage"}</button>
                         <a style={btn} href={`${API_URL}/api/print/order/${o.id}/`} target="_blank" rel="noreferrer">🖨 Pull Sheet</a>
@@ -707,7 +710,7 @@ function OrdersTab() {
                   </tr>
                   {expanded === o.id && (
                     <tr>
-                      <td colSpan={11} style={{ padding: "0 8px 10px" }}>
+                      <td colSpan={10} style={{ padding: "0 8px 10px" }}>
                         <OrderManageRow order={o} onSaved={() => { setExpanded(null); load(); }} />
                       </td>
                     </tr>
