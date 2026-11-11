@@ -11,7 +11,7 @@ import { authFetch, SessionExpiredError } from "@/lib/api";
 interface Acc {
   id: number; sku: string; name: string; category: string; category_display: string;
   manufacturer: string; description: string; image_url: string;
-  price: string; stock: number; is_active: boolean; price_locked: boolean;
+  price: string; stock: number; is_active: boolean; price_locked: boolean; pudo_size: string;
 }
 interface Cat { value: string; label: string }
 
@@ -20,26 +20,27 @@ const btn: React.CSSProperties = { background: "#12121a", border: "1px solid #2a
 const btnPrimary: React.CSSProperties = { ...btn, background: "#ff6b35", color: "#fff", border: "none", fontWeight: 600 };
 const inp: React.CSSProperties = { background: "#12121a", border: "1px solid #2a2a3a", borderRadius: 6, padding: "6px 8px", color: "#fff", fontSize: 12 };
 
-function Row({ a, cats, onSaved }: { a: Acc; cats: Cat[]; onSaved: (a: Acc) => void }) {
+function Row({ a, cats, sizes, onSaved }: { a: Acc; cats: Cat[]; sizes: Cat[]; onSaved: (a: Acc) => void }) {
   const [price, setPrice] = useState(a.price);
   const [stock, setStock] = useState(String(a.stock));
   const [active, setActive] = useState(a.is_active);
   const [name, setName] = useState(a.name);
   const [desc, setDesc] = useState(a.description);
   const [category, setCategory] = useState(a.category);
+  const [pudo, setPudo] = useState(a.pudo_size);
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
 
   const dirty = price !== a.price || stock !== String(a.stock) || active !== a.is_active ||
-    name !== a.name || desc !== a.description || category !== a.category;
+    name !== a.name || desc !== a.description || category !== a.category || pudo !== a.pudo_size;
 
   const save = async () => {
     setBusy(true); setMsg("");
     try {
       const res = await authFetch(`/api/accessories-admin/${a.id}/`, {
         method: "PATCH", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ price, stock: parseInt(stock) || 0, is_active: active, name, description: desc, category }),
+        body: JSON.stringify({ price, stock: parseInt(stock) || 0, is_active: active, name, description: desc, category, pudo_size: pudo }),
       });
       const d = await res.json();
       if (!res.ok) throw new Error(d.detail || "Save failed");
@@ -65,6 +66,11 @@ function Row({ a, cats, onSaved }: { a: Acc; cats: Cat[]; onSaved: (a: Acc) => v
           <input style={{ ...inp, width: 60 }} inputMode="numeric" value={stock} onChange={(e) => setStock(e.target.value)} />
         </td>
         <td style={{ padding: 8 }}>
+          <select style={{ ...inp, width: 100 }} value={pudo} onChange={(e) => setPudo(e.target.value)}>
+            {sizes.map((z) => <option key={z.value} value={z.value}>{z.label}</option>)}
+          </select>
+        </td>
+        <td style={{ padding: 8 }}>
           <label style={{ color: "#ccc", fontSize: 12, cursor: "pointer" }}>
             <input type="checkbox" checked={active} onChange={(e) => setActive(e.target.checked)} /> On sale
           </label>
@@ -77,7 +83,7 @@ function Row({ a, cats, onSaved }: { a: Acc; cats: Cat[]; onSaved: (a: Acc) => v
       </tr>
       {open && (
         <tr>
-          <td colSpan={6} style={{ padding: "0 8px 12px" }}>
+          <td colSpan={7} style={{ padding: "0 8px 12px" }}>
             <div style={{ display: "grid", gap: 8 }}>
               <input style={inp} value={name} onChange={(e) => setName(e.target.value)} placeholder="Name" />
               <select style={inp} value={category} onChange={(e) => setCategory(e.target.value)}>
@@ -97,6 +103,7 @@ export default function StaffAccessoriesPage() {
   const [isStaff, setIsStaff] = useState<boolean | null>(null);
   const [rows, setRows] = useState<Acc[]>([]);
   const [cats, setCats] = useState<Cat[]>([]);
+  const [sizes, setSizes] = useState<Cat[]>([]);
   const [search, setSearch] = useState("");
   const [cat, setCat] = useState("");
   const [loading, setLoading] = useState(true);
@@ -117,7 +124,7 @@ export default function StaffAccessoriesPage() {
     if (cat) qs.set("category", cat);
     authFetch(`/api/accessories-admin/?${qs}`)
       .then((r) => r.json())
-      .then((d) => { setRows(d.results || []); setCats(d.categories || []); setError(""); })
+      .then((d) => { setRows(d.results || []); setCats(d.categories || []); setSizes(d.pudo_sizes || []); setError(""); })
       .catch((e) => setError(e instanceof SessionExpiredError ? "Session expired — please log in again." : "Failed to load accessories."))
       .finally(() => setLoading(false));
   }, [search, cat]);
@@ -143,7 +150,7 @@ export default function StaffAccessoriesPage() {
       <div style={{ maxWidth: 1000, margin: "0 auto" }}>
         <h1 style={{ color: "#fff", fontSize: 22, fontWeight: 700, margin: 0 }}>🛡️ Accessories</h1>
         <p style={{ color: "#555", fontSize: 12, marginTop: 4, marginBottom: 16 }}>
-          Edit price, stock and On sale. Stock 0 or Off sale hides it from customers. A price you change here is kept (the sync won&apos;t overwrite it).
+          Edit price, stock, Pudo box size and On sale. An order ships in at least the biggest box any item needs. Stock 0 or Off sale hides it from customers. A price you change here is kept (the sync won&apos;t overwrite it).
           {" · "}<Link href="/accessories" style={{ color: "#ff6b35" }}>View shop →</Link>
         </p>
         <div style={{ display: "flex", gap: 8, marginBottom: 12, flexWrap: "wrap" }}>
@@ -164,12 +171,12 @@ export default function StaffAccessoriesPage() {
                     <tr style={{ textAlign: "left", color: "#888", borderBottom: "1px solid #2a2a3a" }}>
                       <th style={{ padding: "6px 8px" }}></th><th style={{ padding: "6px 8px" }}>Product</th>
                       <th style={{ padding: "6px 8px" }}>Price</th><th style={{ padding: "6px 8px" }}>Stock</th>
-                      <th style={{ padding: "6px 8px" }}>Status</th><th style={{ padding: "6px 8px" }}></th>
+                      <th style={{ padding: "6px 8px" }}>Pudo box</th><th style={{ padding: "6px 8px" }}>Status</th><th style={{ padding: "6px 8px" }}></th>
                     </tr>
                   </thead>
                   <tbody>
                     {rows.map((a) => (
-                      <Row key={a.id} a={a} cats={cats}
+                      <Row key={a.id} a={a} cats={cats} sizes={sizes}
                         onSaved={(n) => setRows((rs) => rs.map((r) => (r.id === n.id ? n : r)))} />
                     ))}
                   </tbody>
