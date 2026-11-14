@@ -2,7 +2,7 @@
 import { Fragment, useEffect, useState, useCallback, useRef } from "react";
 import { authFetch, SessionExpiredError } from "@/lib/api";
 import { downloadLabelPng } from "@/lib/downloadLabel";
-import WeightCounter from "./WeightCounter";
+import WeightCounter, { ERA_LABELS } from "./WeightCounter";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://pokemart-api-production.up.railway.app";
 
@@ -78,7 +78,11 @@ interface BuyInvoice {
   items: { id: number; product_id: number | null; accessory_id?: number | null; image_url?: string | null; description: string; set_name: string; card_number: string; variant: string; quantity: number; unit_price: string; line_total: string; live_stock: number | null; tcg_price?: string | null; condition?: string; sell_price?: string | null; sell_pct?: string | null; live_price?: string | null; effective_unit_cost: string; effective_rate: string | null; bundle_type?: string; sorted_qty?: number; remaining_qty?: number; sorts?: BulkSortRow[] }[];
 }
 
-const BUNDLE_TYPES: [string, string][] = [["common", "Commons"], ["holo", "Holos"], ["reverse", "Reverse Holos"]];
+const BUNDLE_TYPES: [string, string][] = [
+  ["common", "Commons"], ["holo", "Holos"], ["reverse", "Reverse Holos"], ["cosmos", "Cosmos Holo"],
+  ["energy", "Energy - Common"], ["energy_holo", "Energy - Holo"],
+  ["deck", "Deck Exclusive - Common"], ["deck_holo", "Deck Exclusive - Holo"], ["deck_cosmos", "Deck Exclusive - Cosmos Holo"],
+];
 const bundleLabel = (t?: string) => BUNDLE_TYPES.find(([k]) => k === t)?.[1] || "";
 
 interface ApiProduct {
@@ -1000,6 +1004,7 @@ function BulkEditor({ initial, onSaved, onCancel }: { initial?: BuyInvoice; onSa
   const [sets, setSets] = useState<SetOpt[]>([]);
   const [addType, setAddType] = useState("common");
   const [addSet, setAddSet] = useState("");
+  const [addEra, setAddEra] = useState("");   // era label for era-level bundles (e.g. energies per era)
   const [addQty, setAddQty] = useState("");
   const [addPrice, setAddPrice] = useState("");
   const [saving, setSaving] = useState(false);
@@ -1017,7 +1022,7 @@ function BulkEditor({ initial, onSaved, onCancel }: { initial?: BuyInvoice; onSa
     if (!q || q < 1) { setError("Enter how many cards."); return; }
     if (addPrice.trim() === "" || isNaN(parseFloat(addPrice))) { setError("Enter the price offered per card."); return; }
     setError("");
-    const setName = addSet ? (sets.find((s) => s.code === addSet)?.name || addSet) : "";
+    const setName = addSet ? (sets.find((s) => s.code === addSet)?.name || addSet) : (addEra ? `${addEra} era` : "");
     setLines((ls) => [...ls, { key: newKey(), bundle_type: addType, set_name: setName, quantity: String(q), unit_price: round2(parseFloat(addPrice)) }]);
     setAddQty(""); setAddPrice("");
   };
@@ -1050,7 +1055,7 @@ function BulkEditor({ initial, onSaved, onCancel }: { initial?: BuyInvoice; onSa
   return (
     <div style={{ ...card, marginBottom: 18, display: "flex", flexDirection: "column", gap: 14, borderColor: "#7c3aed" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-        <strong style={{ color: "#fff", fontSize: 14 }}>{initial ? `Edit ${initial.buy_number}` : "📦 New Bulk Buy-in"} <span style={{ color: "#a78bfa", fontSize: 11, fontWeight: 400 }}>— Commons / Holos / Reverse Holos, sorted into stock later</span></strong>
+        <strong style={{ color: "#fff", fontSize: 14 }}>{initial ? `Edit ${initial.buy_number}` : "📦 New Bulk Buy-in"} <span style={{ color: "#a78bfa", fontSize: 11, fontWeight: 400 }}>— Commons / Holos / Reverse Holos / Energies / Deck Exclusives, sorted into stock later</span></strong>
         <button style={btn} onClick={onCancel}>Close</button>
       </div>
 
@@ -1091,7 +1096,7 @@ function BulkEditor({ initial, onSaved, onCancel }: { initial?: BuyInvoice; onSa
 
       {!locked && (
         <WeightCounter sets={sets}
-          onUse={(bundleType, setCode, qty) => { setAddType(bundleType); setAddSet(setCode); setAddQty(String(qty)); }} />
+          onUse={(bundleType, setCode, qty, eraLabel) => { setAddType(bundleType); setAddSet(setCode); setAddEra(setCode ? "" : (eraLabel || "")); setAddQty(String(qty)); }} />
       )}
 
       {locked ? (
@@ -1103,13 +1108,18 @@ function BulkEditor({ initial, onSaved, onCancel }: { initial?: BuyInvoice; onSa
               {BUNDLE_TYPES.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
             </select></div>
           <div style={{ flex: 1, minWidth: 200 }}><label style={lbl}>Set (leave blank if mixed)</label>
-            <select style={{ ...inp, width: "100%" }} value={addSet} onChange={(e) => setAddSet(e.target.value)}>
+            <select style={{ ...inp, width: "100%" }} value={addSet} onChange={(e) => { setAddSet(e.target.value); if (e.target.value) setAddEra(""); }}>
               <option value="">Mixed / any set</option>
               {groupSets(sets).map((g) => (
                 <optgroup key={g.era} label={g.label}>
                   {g.sets.map((s) => <option key={s.code} value={s.code}>{s.name} [{s.code}]</option>)}
                 </optgroup>
               ))}
+            </select></div>
+          <div><label style={lbl}>Era (if no set)</label>
+            <select style={inp} value={addEra} disabled={!!addSet} onChange={(e) => setAddEra(e.target.value)}>
+              <option value="">Any era</option>
+              {Object.values(ERA_LABELS).map((l) => <option key={l} value={l}>{l}</option>)}
             </select></div>
           <div><label style={lbl}>Qty (cards)</label><input style={{ ...inp, width: 90 }} type="number" min="1" value={addQty} onChange={(e) => setAddQty(e.target.value)}
             onKeyDown={(e) => { if (e.key === "Enter") addLine(); }} /></div>

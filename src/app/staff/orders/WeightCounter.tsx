@@ -11,9 +11,13 @@ interface Pile { key: number; gross: string }
 
 const TYPES: [string, string, string][] = [   // [card_type, label, bundle it counts toward]
   ["common", "Commons", "common"], ["uncommon", "Uncommons", "common"], ["holo", "Holos", "holo"],
-  ["reverse", "Reverse Holos", "reverse"], ["energy", "Basic Energy", "common"],
+  ["reverse", "Reverse Holos", "reverse"], ["cosmos", "Cosmos Holo", "cosmos"],
+  // 2026-11-14: Energies (per era, common + holo) and Deck Exclusives (common, holo, Cosmos holo)
+  ["energy", "Energy - Common", "energy"], ["energy_holo", "Energy - Holo", "energy_holo"],
+  ["deck", "Deck Exclusive - Common", "deck"], ["deck_holo", "Deck Exclusive - Holo", "deck_holo"],
+  ["deck_cosmos", "Deck Exclusive - Cosmos Holo", "deck_cosmos"],
 ];
-const ERA_LABELS: Record<string, string> = {
+export const ERA_LABELS: Record<string, string> = {
   MEG: "Mega Evolution", SV: "Scarlet & Violet", SWSH: "Sword & Shield", SM: "Sun & Moon",
   XY: "XY Era", BW: "Black & White", HGSS: "HG&SS", DP: "D&P / Platinum", EX: "EX Era",
   WotCO: "e-Card", WotCL: "Legendary", WotCN: "Neo", WotC: "WotC Base", OTHER: "Special / Other", PROMO: "Promos",
@@ -29,7 +33,7 @@ let pileKey = 1;
 
 export default function WeightCounter({ sets, onUse }: {
   sets: WCSet[];
-  onUse: (bundleType: string, setCode: string, qty: number) => void;
+  onUse: (bundleType: string, setCode: string, qty: number, eraLabel?: string) => void;
 }) {
   const [open, setOpen] = useState(false);
   const [cals, setCals] = useState<Cal[]>([]);
@@ -180,7 +184,7 @@ export default function WeightCounter({ sets, onUse }: {
           <div style={{ marginTop: 8, display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
             <div style={{ color: "#fff", fontSize: 14 }}>Total ≈ <strong>{total}</strong> cards <span style={{ color: "#888", fontSize: 11 }}>(typically ±{err})</span></div>
             <button style={btnP} disabled={total < 1}
-              onClick={() => onUse(bundle, scope === "set" ? setCode : "", total)}
+              onClick={() => onUse(bundle, scope === "set" ? setCode : "", total, scope === "era" ? (ERA_LABELS[era] || era) : "")}
               title="Fills the bundle form below with this type, set and quantity">Use {total} as a bundle ↓</button>
           </div>
           <div style={{ fontSize: 11, color: "#888", marginTop: 4 }}>
