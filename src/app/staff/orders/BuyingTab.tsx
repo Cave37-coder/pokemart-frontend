@@ -2,7 +2,7 @@
 import { Fragment, useEffect, useState, useCallback, useRef } from "react";
 import { authFetch, SessionExpiredError } from "@/lib/api";
 import { downloadLabelPng } from "@/lib/downloadLabel";
-import WeightCounter, { ERA_LABELS } from "./WeightCounter";
+import WeightCounter from "./WeightCounter";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://pokemart-api-production.up.railway.app";
 
