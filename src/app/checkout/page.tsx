@@ -62,6 +62,7 @@ export default function CheckoutPage() {
   const [loading, setLoading]   = useState(true);
   const [placing, setPlacing]   = useState(false);
   const [error, setError]       = useState("");
+  const [stockIssue, setStockIssue] = useState(false);
   // Store credit (2026-10-27): balance from /api/auth/profile/; "use" is on by default when there is some.
   const [creditBalance, setCreditBalance] = useState(0);
   // Delivery prices come from the server (parcel size is decided by card count -- see orders/shipping.py).
@@ -154,6 +155,7 @@ export default function CheckoutPage() {
     }
     setPlacing(true);
     setError("");
+    setStockIssue(false);
 
     trackAddShippingInfo(
       items.map((item) => ({
@@ -192,6 +194,7 @@ export default function CheckoutPage() {
       });
       if (!orderRes.ok) {
         const err = await orderRes.json();
+        if (Array.isArray(err.stock_issues) && err.stock_issues.length) setStockIssue(true);
         throw new Error(err.error || "Failed to create order");
       }
       const order = await orderRes.json();
@@ -501,6 +504,18 @@ export default function CheckoutPage() {
             {error && (
               <div style={{ background:"#EF444420", border:"1px solid #EF444440", borderRadius:8, padding:"10px 12px", marginTop:12, color:"#EF4444", fontSize:12 }}>
                 {error}
+                {stockIssue && (
+                  <button
+                    onClick={async () => {
+                      const t = localStorage.getItem("access_token");
+                      await fetch(`${API_URL}/api/cart/fix-stock/`, { method: "POST", headers: { Authorization: `Bearer ${t}` } }).catch(() => {});
+                      window.dispatchEvent(new Event("pile-updated"));
+                      window.location.reload();
+                    }}
+                    style={{ display:"block", marginTop:10, background:"#ff6b35", color:"#fff", border:"none", borderRadius:8, padding:"8px 14px", fontWeight:700, cursor:"pointer", fontSize:13 }}>
+                    Fix my pile
+                  </button>
+                )}
               </div>
             )}
 

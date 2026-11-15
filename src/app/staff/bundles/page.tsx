@@ -67,6 +67,7 @@ const TIER_COLOR: Record<string, string> = {
   special_set_base: "#7c4dff",
   master_set: "#e67e22",
   full_master: "#ffd700",
+  grand_master: "#00e5ff",
   complete_set: "#ffd700",
 };
 

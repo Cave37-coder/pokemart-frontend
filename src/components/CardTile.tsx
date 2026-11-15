@@ -39,6 +39,8 @@ export function getVariantKey(card: { variant_override: string; rarity: string; 
     if (v === "TR" || v === "TT") return "BRH-R";
     if (v === "CC") return "MH";
     if (v === "CH") return "MH"; // Cosmos Holo blister/box print (2026-10-27)
+    if (v === "DE") return "N"; // Deck Exclusive non-holo print (2026-11-15)
+    if (v === "DEH" || v === "CI" || v === "TI" || v === "ST") return "MH"; // Deck Exclusive holo / Cracked Ice / Tinsel / 30th stamped
     // 2026-09-09, Michael (round 2): "HR-EX is incorrect - It's not Hyper
     // rare, but Double Rare" -- HR-EX is repurposed to mean Illustration
     // Rare (routes to the existing "IR" bucket: diagonal pattern + "IR"

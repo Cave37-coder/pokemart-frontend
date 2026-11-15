@@ -19,6 +19,7 @@ export const TIER_COLORS: Record<string, string> = {
   special_set_base: "#7c4dff",
   master_set: "#ffd700",
   full_master: "#e91e63",
+  grand_master: "#00e5ff",
   complete_set: "#ff6b35",
 };
 export const TIER_LABELS_FE: Record<string, string> = {
@@ -27,6 +28,7 @@ export const TIER_LABELS_FE: Record<string, string> = {
   special_set_base: "Special Set Base",
   master_set: "Master Set",
   full_master: "Full Master",
+  grand_master: "Grand Master",
   complete_set: "Complete Set",
 };
 // Mirrors products/completion.py's numbered-scope + Master Set
@@ -72,6 +74,11 @@ export const MASTER_SET_VARIANTS: string[] = [...BASE_SET_VARIANTS, ...FIRST_EDI
 export const FULL_VARIANTS: string[] = [
   ...BASE_SET_VARIANTS, ...BALL_VARIANTS, ...OTHER_TRACKED_VARIANTS, ...PATTERN_VARIANTS, ...FIRST_EDITION_VARIANTS,
 ];
+// Grand Master (2026-11-15): Full Master + linked promos ("PR-" cards) + extra prints on the parent card:
+// DE/DEH = Deck Exclusive (non-holo/holo), CI = Cracked Ice Holo, TI = Tinsel Holo, ST = 30th Celebration stamped.
+// Mirrors products/completion.py EXTRA_PRINT_VARIANTS / GRAND_VARIANTS. CH (Cosmos Holo) is already in FULL.
+export const EXTRA_PRINT_VARIANTS: string[] = ["DE", "DEH", "CI", "TI", "ST"];
+export const GRAND_VARIANTS: string[] = [...FULL_VARIANTS, ...EXTRA_PRINT_VARIANTS];
 
 // Which variant codes count toward each tier -- broke_base only requires
 // ANY ONE of {N,H} per card (see products/completion.py
@@ -84,6 +91,7 @@ export const TIER_VARIANT_SCOPE: Record<string, string[]> = {
   special_set_base: SPECIAL_SET_BASE_VARIANTS,
   master_set: MASTER_SET_VARIANTS,
   full_master: FULL_VARIANTS,
+  grand_master: GRAND_VARIANTS,
   complete_set: FULL_VARIANTS,
 };
 // Tiers restricted to numbered cards only (card_number <= the set's
@@ -97,6 +105,7 @@ export const TIER_NUMBERED_ONLY: Record<string, boolean> = {
   special_set_base: true,
   master_set: false,
   full_master: false,
+  grand_master: false,
   complete_set: false,
 };
 export const ERA_ORDER: string[] = ["WotC Base","WotC Neo","WotC Legendary","WotC Other","EX Era","Diamond & Pearl","HG&SS","Black & White","XY Era","Sun & Moon","Sword & Shield","Scarlet & Violet","Mega Evolution","Special - Prize Pack","Special - Trick or Trade"];

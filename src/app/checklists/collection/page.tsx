@@ -20,7 +20,7 @@ type SetOpt = { code: string; name: string; release_date?: string };
 
 const money = (n: number) => 'R ' + n.toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const box: React.CSSProperties = { background: '#14141c', border: '1px solid #262636', borderRadius: 12 };
-const VLABEL: Record<string, string> = { N: 'Normal', H: 'Holo', RH: 'Reverse Holo', CH: 'Cosmos Holo', PB: 'Poké Ball', MB: 'Master Ball', DB: 'Dusk Ball', LB: 'Love Ball', FB: 'Friend Ball', QB: 'Quick Ball', TR: 'Team Rocket' };
+const VLABEL: Record<string, string> = { N: 'Normal', H: 'Holo', RH: 'Reverse Holo', CH: 'Cosmos Holo', DE: 'Deck Exclusive', DEH: 'Deck Exclusive Holo', CI: 'Cracked Ice Holo', TI: 'Tinsel Holo', ST: '30th Stamped', PB: 'Poké Ball', MB: 'Master Ball', DB: 'Dusk Ball', LB: 'Love Ball', FB: 'Friend Ball', QB: 'Quick Ball', TR: 'Team Rocket' };
 
 function CollectionInner() {
   const router = useRouter();

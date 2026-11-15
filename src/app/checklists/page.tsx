@@ -11,7 +11,7 @@ import {
 import {
   SETS, SET_INDEX, ERA_COLORS, TIER_COLORS, TIER_LABELS_FE, ERA_ORDER, RSYM,
   TIER_VARIANT_SCOPE, TIER_NUMBERED_ONLY, MASTER_SET_CHASE_RARITIES, FULL_VARIANTS,
-  PATTERN_VARIANTS,
+  PATTERN_VARIANTS, EXTRA_PRINT_VARIANTS,
 } from '@/lib/checklistData';
 import type { Variant, Card, SetData, SetMeta } from '@/lib/checklistData';
 import CollectionHome from '@/components/CollectionHome';
@@ -39,6 +39,7 @@ const VARIANT_LABEL_FULL: Record<string, string> = {
   DB: 'Dusk Ball', TR: 'Team Rocket', SE: 'Secret',
   PBP: 'PB Pattern', MBP: 'MB Pattern',
   CC: 'Code Card', TT: 'Trick or Trade', CH: 'Cosmos Holo', 'HR-EX': 'Illustration Rare',
+  DE: 'Deck Exclusive', DEH: 'Deck Exclusive Holo', CI: 'Cracked Ice Holo', TI: 'Tinsel Holo', ST: '30th Stamped',
   EX: 'Double Rare', GX: 'GX', V: 'V', VMAX: 'VMAX', VSTAR: 'VSTAR',
   RR: 'Rainbow Rare', RAD: 'Radiant',
 };
@@ -496,7 +497,14 @@ function Checklist({ code, sub, onBack }: { code: string; sub?: 'pikachu' | null
   // in products/completion.py. The static SETS data here only ever contains
   // tracked/checkable variant codes to begin with, so this client-side check
   // reliably matches what the backend decides without needing an extra call.
-  const isSimpleSet = baseCards.every(c => c.variants.length <= 1);
+  // Grand Master (2026-11-15): linked promos ("PR-" cards) and the extra prints (DE/DEH/CI/TI/ST) only
+  // count in the Grand Master tier -- they must not change whether a set is "simple", nor appear in any
+  // lower tier. Mirrors completion.py get_core_card_map()/has_grand_extras().
+  const isPromoCard = (num: string) => num.startsWith('PR-');
+  const hasGrandExtras = baseCards.some(c => isPromoCard(c.num) || c.variants.some(v => EXTRA_PRINT_VARIANTS.includes(v.vc)));
+  const isSimpleSet = baseCards
+    .filter(c => !isPromoCard(c.num))
+    .every(c => c.variants.filter(v => !EXTRA_PRINT_VARIANTS.includes(v.vc)).length <= 1);
   // 2026-09-19, Michael: "we need to have the 'My Collection' syncing, the
   // site 'Browse Cards' is correct" -- checklistData.ts's v.zar is a static
   // snapshot from whenever generate_checklist_data was last run+pushed
@@ -515,6 +523,7 @@ function Checklist({ code, sub, onBack }: { code: string; sub?: 'pikachu' | null
         { key: 'special_set_base', label: 'Special Set Base' },
         { key: 'master_set', label: 'Master Set' },
         { key: 'full_master', label: 'Full Master' },
+        ...(hasGrandExtras ? [{ key: 'grand_master', label: 'Grand Master' }] : []),
       ];
   // The "everything, unfiltered" tier -- same tier the top stats bar has
   // always scored against (see topTierKey below). Used as the default
@@ -787,6 +796,7 @@ function Checklist({ code, sub, onBack }: { code: string; sub?: 'pikachu' | null
   const tierNumberedOnly = TIER_NUMBERED_ONLY[lbTier] ?? false;
   const tierFilteredSorted = sorted
     .filter(card => {
+      if (lbTier !== 'grand_master' && isPromoCard(card.num)) return false; // linked promos: Grand Master only
       if (tierNumberedOnly) return isNumberedCard(card.num);
       if (lbTier === 'master_set') return isNumberedCard(card.num) || MASTER_SET_CHASE_RARITIES.includes(card.rarity);
       return true; // full_master / complete_set -- every card
@@ -992,7 +1002,7 @@ function Checklist({ code, sub, onBack }: { code: string; sub?: 'pikachu' | null
     // uses -- see MASTER_SET_CHASE_RARITIES) gets its own button on Master
     // Set/Full Master/Complete Set, the only tiers whose scope ever
     // includes an unnumbered chase-rarity card at all.
-    if (lbTier === 'master_set' || lbTier === 'full_master' || lbTier === 'complete_set') {
+    if (lbTier === 'master_set' || lbTier === 'full_master' || lbTier === 'grand_master' || lbTier === 'complete_set') {
       if (has(c => MASTER_SET_CHASE_RARITIES.includes(c.rarity))) {
         groups.push({
           key: '__illustrations__', label: 'Illustrations', icon: '✨',
@@ -1439,6 +1449,7 @@ function Checklist({ code, sub, onBack }: { code: string; sub?: 'pikachu' | null
                       const owned = !!checks[key];
                       const vcColor: Record<string, string> = {
                         N: '#a0a0b0', RH: '#ff6b35', H: '#ffd700', ESH: '#1D9E75', CH: '#7F77DD', FE: '#10b981',
+                        DE: '#8d6e63', DEH: '#ff9800', CI: '#4dd0e1', TI: '#ec407a', ST: '#00e5ff',
                         PB: '#e040fb', MB: '#7c4dff', LB: '#00bcd4',
                         FB: '#4caf50', QB: '#f44336', UB: '#2196f3',
                         DB: '#795548', TR: '#607d8b', SE: '#ff9800',
@@ -1584,6 +1595,7 @@ function Checklist({ code, sub, onBack }: { code: string; sub?: 'pikachu' | null
                       const key = card.num + '_' + v.vc;
                       const vcColor: Record<string, string> = {
                         N: '#a0a0b0', RH: '#ff6b35', H: '#ffd700', ESH: '#1D9E75', CH: '#7F77DD', FE: '#10b981',
+                        DE: '#8d6e63', DEH: '#ff9800', CI: '#4dd0e1', TI: '#ec407a', ST: '#00e5ff',
                         PB: '#e040fb', MB: '#7c4dff', LB: '#00bcd4',
                         FB: '#4caf50', QB: '#f44336', UB: '#2196f3',
                         DB: '#795548', TR: '#607d8b', SE: '#ff9800',

@@ -126,7 +126,26 @@ function Pager({ count, page, setPage, pageSize = 32 }: { count: number; page: n
 
 interface BrowseCard {
   id: number; name: string; set_name: string; set_code: string; card_number: string | number;
-  variant: string; price: number; stock: number;
+  variant: string; price: number; stock: number; image_url?: string;
+}
+
+// Card thumbnail; click to see it large (click anywhere / it closes). 2026-11-15, Michael: card images on the
+// invoice screens so cards seen in a customer's video can be matched by sight.
+function CardThumb({ src, w = 44, h = 62 }: { src?: string | null; w?: number; h?: number }) {
+  const [open, setOpen] = useState(false);
+  if (!src) return <div style={{ width: w, height: h, background: "#12121a", borderRadius: 4, color: "#555", fontSize: 9, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>no image</div>;
+  return (
+    <>
+      <img src={src} alt="" loading="lazy" onClick={() => setOpen(true)}
+        style={{ width: w, height: h, objectFit: "contain", background: "#12121a", borderRadius: 4, cursor: "zoom-in", flexShrink: 0 }} />
+      {open && (
+        <div onClick={() => setOpen(false)}
+          style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.85)", zIndex: 9999, display: "flex", alignItems: "center", justifyContent: "center", cursor: "zoom-out" }}>
+          <img src={src} alt="" style={{ maxHeight: "92vh", maxWidth: "92vw", borderRadius: 10 }} />
+        </div>
+      )}
+    </>
+  );
 }
 interface SetOpt { code: string; name: string; release_date: string; era_code: string }
 
@@ -244,7 +263,9 @@ function CardBrowser({ onAdd, onAddMany, inInvoice }: {
         {shown.map((c) => {
           const qty = inInvoice[c.id] || 0;
           return (
-            <div key={c.id} style={{ background: "#1a1a24", border: `1px solid ${qty ? "#2fbf71" : "#2a2a3a"}`, borderRadius: 8, padding: 8 }}>
+            <div key={c.id} style={{ background: "#1a1a24", border: `1px solid ${qty ? "#2fbf71" : "#2a2a3a"}`, borderRadius: 8, padding: 8, display: "flex", gap: 8 }}>
+              <CardThumb src={c.image_url} w={56} h={78} />
+              <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontSize: 12, fontWeight: 700, color: "#fff", marginBottom: 2 }}>{c.name}</div>
               <div style={{ fontSize: 10, color: "#888", marginBottom: 6 }}>
                 {[!setCode && c.set_name, c.card_number && `#${c.card_number}`, c.variant].filter(Boolean).join(" · ")}
@@ -256,6 +277,7 @@ function CardBrowser({ onAdd, onAddMany, inInvoice }: {
               <button style={{ ...btnPrimary, width: "100%" }} onClick={() => onAdd(c)}>
                 {qty ? `+ Add another (${qty} on invoice)` : "+ Add"}
               </button>
+              </div>
             </div>
           );
         })}
@@ -507,7 +529,7 @@ function InvoiceEditor({ initial, onSaved, onCancel }: { initial?: BuyInvoice; o
     const bulk = bulkPrice !== "" && !isNaN(parseFloat(bulkPrice));
     const unit = bulk ? round2(parseFloat(bulkPrice)) : pctToR(defaultPct, tcg);
     return {
-      key: newKey(), product_id: p.id, accessory_id: null, image_url: null, description: p.name, set_name: p.set_name,
+      key: newKey(), product_id: p.id, accessory_id: null, image_url: p.image_url || null, description: p.name, set_name: p.set_name,
       card_number: p.card_number ? String(p.card_number) : "", variant,
       quantity: "1", unit_price: unit, live_stock: p.stock,
       tcg_price: tcg, base_tcg: tcg, pct: bulk ? rToPct(unit, tcg) : tcg ? defaultPct : "",
@@ -707,7 +729,12 @@ function InvoiceEditor({ initial, onSaved, onCancel }: { initial?: BuyInvoice; o
                           {l.image_url && <img src={l.image_url} alt="" style={{ height: 28, width: 28, objectFit: "contain" }} />}
                           {l.description}
                         </span>
-                      ) : l.product_id ? l.description : (
+                      ) : l.product_id ? (
+                        <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
+                          <CardThumb src={l.image_url} w={36} h={50} />
+                          {l.description}
+                        </span>
+                      ) : (
                         <input style={{ ...inp, width: "100%" }} value={l.description} disabled={locked}
                           onChange={(e) => upd(l.key, { description: e.target.value })} placeholder="e.g. Bulk lot of commons (no stock added)" />
                       )}
