@@ -771,7 +771,12 @@ function Checklist({ code, sub, onBack }: { code: string; sub?: 'pikachu' | null
   const totalDisplay = topTier ? topTier.required : totalVariants;
   const pct = topTier ? topTier.pct : (totalDisplay ? Math.round(ownedDisplay / totalDisplay * 100) : 0);
   const eraColor = ERA_COLORS[set.era] || '#ff6b35';
-  const sorted = [...baseCards].sort((a, b) => (parseInt(a.num) || 9999) - (parseInt(b.num) || 9999));
+  // Per-era Energy sets mix cards from many sets: keep the order the generator baked in (release date, then number)
+  // instead of re-sorting by number, which would scramble them.
+  const isEraEnergySet = ['MEE','SVE','SWSHE','SME','XYE','BWE','HGSSE','DPE','EXE','WOTCOE','WOTCLE','WOTCNE','WOTCE'].includes(code);
+  const sorted = isEraEnergySet
+    ? [...baseCards]
+    : [...baseCards].sort((a, b) => (parseInt(a.num) || 9999) - (parseInt(b.num) || 9999));
 
   // Michael, 2026-09-11: "the checklists are broken up into different
   // types, can we make the type selectable and the screen then reflects
