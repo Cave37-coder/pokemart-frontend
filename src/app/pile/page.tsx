@@ -16,6 +16,7 @@ interface CartItem {
     image_small_url: string;
     card_set: { code: string; name: string };
     rarity: string;
+    no_store_credit?: boolean;
   } | null;
 }
 
@@ -25,6 +26,8 @@ interface Cart {
   discount_percent: string;
   discount_amount: string;
   total: string;
+  no_credit_total?: string;
+  credit_max?: string;
   items: CartItem[];
 }
 
@@ -176,6 +179,12 @@ export default function PilePage() {
                       <div style={{ fontSize: 11, color: "#a0a0b0" }}>
                         Qty: {item.quantity} × R {parseFloat(item.product.price).toFixed(2)}
                       </div>
+                      {item.product.no_store_credit && (
+                        <div style={{ marginTop: 4, fontSize: 11, fontWeight: 700, color: "#fbbf24" }}
+                          title="High-value card: store credit can't be used to pay for it.">
+                          🚫 Not available for store credit
+                        </div>
+                      )}
                       {item.product.stock < item.quantity && (
                         <div style={{ marginTop: 4, fontSize: 11, fontWeight: 700, color: "#f87171" }}>
                           {item.product.stock <= 0 ? "⚠ Sold out" : `⚠ Only ${item.product.stock} left (you have ${item.quantity})`}

@@ -166,6 +166,11 @@ export default async function CardPage({ params }: { params: Promise<{ id: strin
             <div style={{ marginTop: "12px", fontSize: "13px", color: card.in_stock ? "#4ade80" : "#f43f5e" }}>
               {card.in_stock ? `In Stock (${card.stock})` : "Out of Stock"}
             </div>
+            {card.no_store_credit && (
+              <div style={{ marginTop: "8px", fontSize: "12px", fontWeight: 700, color: "#fbbf24" }}>
+                🚫 Not available for store credit — pay by EFT, card or cash.
+              </div>
+            )}
           </div>
 
           <AddToPileButton card={card} />

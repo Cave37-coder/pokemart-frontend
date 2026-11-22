@@ -37,6 +37,7 @@ interface BuyLine {
   sell_price: string;       // price the card is listed at on the site once completed ("" = leave as is)
   sell_pct: string;         // sell_price as % of tcg_price (entry aid)
   bulk: boolean;            // priced by the flat bulk rule (N / H / RH below the cut-off), not by %
+  no_store_credit: boolean; // card can never be paid for with store credit (marked on the card when the invoice completes)
 }
 
 // Same multipliers as PokemonProduct.CONDITION_MULTIPLIERS on the backend.
@@ -75,7 +76,7 @@ interface BuyInvoice {
   payment_made: boolean; payment_method: string; payment_method_display: string;
   total: string; item_count: number; off_catalogue_units: number;
   created_at: string; completed_at: string | null;
-  items: { id: number; product_id: number | null; accessory_id?: number | null; image_url?: string | null; description: string; set_name: string; card_number: string; variant: string; quantity: number; unit_price: string; line_total: string; live_stock: number | null; tcg_price?: string | null; condition?: string; sell_price?: string | null; sell_pct?: string | null; live_price?: string | null; effective_unit_cost: string; effective_rate: string | null; bundle_type?: string; sorted_qty?: number; remaining_qty?: number; sorts?: BulkSortRow[] }[];
+  items: { id: number; product_id: number | null; accessory_id?: number | null; image_url?: string | null; description: string; set_name: string; card_number: string; variant: string; quantity: number; unit_price: string; line_total: string; live_stock: number | null; tcg_price?: string | null; condition?: string; no_store_credit?: boolean; sell_price?: string | null; sell_pct?: string | null; live_price?: string | null; effective_unit_cost: string; effective_rate: string | null; bundle_type?: string; sorted_qty?: number; remaining_qty?: number; sorts?: BulkSortRow[] }[];
 }
 
 const BUNDLE_TYPES: [string, string][] = [
@@ -126,7 +127,7 @@ function Pager({ count, page, setPage, pageSize = 32 }: { count: number; page: n
 
 interface BrowseCard {
   id: number; name: string; set_name: string; set_code: string; card_number: string | number;
-  variant: string; price: number; stock: number; image_url?: string;
+  variant: string; price: number; stock: number; image_url?: string; no_store_credit?: boolean;
 }
 
 // Card thumbnail; click to see it large (click anywhere / it closes). 2026-11-15, Michael: card images on the
@@ -514,6 +515,7 @@ function InvoiceEditor({ initial, onSaved, onCancel }: { initial?: BuyInvoice; o
         card_number: i.card_number, variant: i.variant, quantity: String(i.quantity), unit_price: String(i.unit_price),
         live_stock: i.live_stock, tcg_price: tcg, base_tcg: base, pct: rToPct(String(i.unit_price), tcg),
         condition: i.condition || "NM", sell_price: i.sell_price ? String(i.sell_price) : "", sell_pct: i.sell_price ? rToPct(String(i.sell_price), tcg) : "", bulk: false,
+        no_store_credit: !!i.no_store_credit,
       };
     })
   );
@@ -533,7 +535,7 @@ function InvoiceEditor({ initial, onSaved, onCancel }: { initial?: BuyInvoice; o
       card_number: p.card_number ? String(p.card_number) : "", variant,
       quantity: "1", unit_price: unit, live_stock: p.stock,
       tcg_price: tcg, base_tcg: tcg, pct: bulk ? rToPct(unit, tcg) : tcg ? defaultPct : "",
-      condition: "NM", sell_price: "", sell_pct: "", bulk,
+      condition: "NM", sell_price: "", sell_pct: "", bulk, no_store_credit: !!p.no_store_credit,
     };
   };
   // Adding a card already on the invoice bumps its quantity instead of duplicating it.
@@ -557,7 +559,7 @@ function InvoiceEditor({ initial, onSaved, onCancel }: { initial?: BuyInvoice; o
       description: a.name, set_name: a.category_display, card_number: "", variant: "",
       quantity: "1", unit_price: pctToR(defaultPct, ref), live_stock: a.stock,
       tcg_price: ref, base_tcg: ref, pct: ref ? defaultPct : "",
-      condition: "NM", sell_price: "", sell_pct: "", bulk: false,
+      condition: "NM", sell_price: "", sell_pct: "", bulk: false, no_store_credit: false,
     };
   };
   const addAccessory = (a: BrowseAccessory) => setLines((ls) => {
@@ -570,7 +572,7 @@ function InvoiceEditor({ initial, onSaved, onCancel }: { initial?: BuyInvoice; o
   const addFree = () => setLines((ls) => [...ls, {
     key: newKey(), product_id: null, accessory_id: null, image_url: null, description: "", set_name: "", card_number: "", variant: "",
     quantity: "1", unit_price: "", live_stock: null, tcg_price: null, base_tcg: null, pct: "",
-    condition: "NM", sell_price: "", sell_pct: "", bulk: false,
+    condition: "NM", sell_price: "", sell_pct: "", bulk: false, no_store_credit: false,
   }]);
   const applyPctToAll = () => setLines((ls) => ls.map((l) =>
     isCatalogue(l) && l.tcg_price && !l.bulk ? { ...l, pct: defaultPct, unit_price: pctToR(defaultPct, l.tcg_price) } : l));
@@ -610,6 +612,7 @@ function InvoiceEditor({ initial, onSaved, onCancel }: { initial?: BuyInvoice; o
           product_id: l.product_id, accessory_id: l.accessory_id, description: l.description, set_name: l.set_name,
           card_number: l.card_number, variant: l.variant, quantity: l.quantity, unit_price: l.unit_price || "0",
           condition: l.condition, sell_price: isCatalogue(l) ? l.sell_price : "",
+          no_store_credit: !!l.product_id && l.no_store_credit,
         }));
       }
       const res = await authFetch(initial ? `/api/orders/admin/buy-invoices/${initial.id}/` : "/api/orders/admin/buy-invoices/", {
@@ -746,6 +749,14 @@ function InvoiceEditor({ initial, onSaved, onCancel }: { initial?: BuyInvoice; o
                           onChange={(e) => setCondition(l.key, e.target.value)}>
                           {CONDITIONS.map(([c, n]) => <option key={c} value={c}>{c} — {n} ({Math.round(COND_MULT[c] * 100)}%)</option>)}
                         </select>
+                      )}
+                      {l.product_id && (
+                        <label style={{ display: "flex", alignItems: "center", gap: 5, marginTop: 4, fontSize: 10, color: l.no_store_credit ? "#f87171" : "#888", cursor: locked ? "default" : "pointer" }}
+                          title="High-value card: customers can't pay for it with store credit (they pay cash / EFT / card). Marked on the card when you Complete the invoice.">
+                          <input type="checkbox" checked={l.no_store_credit} disabled={locked}
+                            onChange={(e) => upd(l.key, { no_store_credit: e.target.checked })} />
+                          No store credit
+                        </label>
                       )}
                     </td>
                     <td style={{ padding: "6px 8px", fontSize: 11, color: "#888" }}>{[l.set_name, l.card_number && `#${l.card_number}`, l.variant].filter(Boolean).join(" · ") || "—"}</td>

@@ -65,6 +65,7 @@ export interface Card {
   stock: number;
   in_stock: boolean;
   price_lock?: boolean;
+  no_store_credit?: boolean; // high-value card: can't be paid for with store credit
   tcgplayer_id: string;
   gengar_id: string;
   tcgcsv_product_id: number | null;

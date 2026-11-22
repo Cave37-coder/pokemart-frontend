@@ -289,6 +289,9 @@ export default function CardTile({
                     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "6px" }}>
                         <div>
                             <div style={{ fontWeight: 700, color: isPlayed ? "#fbbf24" : "#ff6b35", fontSize: "14px" }}>{formatPrice(card.price)}</div>
+                            {card.no_store_credit && (
+                                <span title="High-value card: store credit can't be used to pay for it" style={{ display: "inline-block", marginTop: 2, marginRight: 4, fontSize: "9px", fontWeight: 700, color: "#fbbf24", border: "1px solid #fbbf24", borderRadius: 4, padding: "1px 5px" }}>🚫 NO STORE CREDIT</span>
+                            )}
                             {card.price_lock && (
                                 <span title="Price held while our stock lasts" style={{ display: "inline-block", marginTop: 2, fontSize: "9px", fontWeight: 700, color: "#38bdf8", border: "1px solid #38bdf8", borderRadius: 4, padding: "1px 5px" }}>🔒 PRICE LOCK</span>
                             )}

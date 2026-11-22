@@ -41,7 +41,7 @@ interface Profile {
 
 interface CartItem {
   id: number; quantity: number; subtotal: string;
-  product: { id: number; name: string; price: string; image_small_url: string; card_set: { code: string; name: string } } | null;
+  product: { id: number; name: string; price: string; image_small_url: string; card_set: { code: string; name: string }; no_store_credit?: boolean } | null;
 }
 
 interface Cart {
@@ -50,6 +50,8 @@ interface Cart {
   discount_percent: string;
   discount_amount: string;
   total: string;
+  no_credit_total?: string;
+  credit_max?: string;
   items: CartItem[];
 }
 
@@ -125,7 +127,10 @@ export default function CheckoutPage() {
   const discountAmount   = parseFloat(cart?.discount_amount || "0");
   const cartTotal         = parseFloat(cart?.total || "0"); // post-discount
   const orderTotal        = cartTotal + shippingCost;
-  const creditApplied     = useCredit ? Math.min(creditBalance, orderTotal) : 0;
+  // Cards flagged "no store credit" can't be paid with credit: it only covers the rest (shipping included).
+  const noCreditTotal     = parseFloat(cart?.no_credit_total || "0") || 0;
+  const creditCap         = Math.max(orderTotal - noCreditTotal, 0);
+  const creditApplied     = useCredit ? Math.min(creditBalance, creditCap) : 0;
   const amountDue         = Math.max(orderTotal - creditApplied, 0);
   const fullyCredit       = creditApplied > 0 && amountDue < 0.005;
   const items        = (cart?.items || []).filter(
@@ -381,6 +386,9 @@ export default function CheckoutPage() {
                   <div style={{ fontWeight:700, color:"#fff", fontSize:14 }}>Use my store credit</div>
                   <div style={{ fontSize:12, color:"#a0a0b0" }}>
                     You have <strong style={{ color:"#10B981" }}>R {creditBalance.toFixed(2)}</strong> store credit.
+                    {noCreditTotal > 0 && (
+                      <span style={{ color:"#fbbf24" }}> R {noCreditTotal.toFixed(2)} of this order is high-value cards that can&apos;t be paid for with store credit — credit covers the rest.</span>
+                    )}
                     {useCredit && (fullyCredit
                       ? ` It covers this whole order — R ${(creditBalance - creditApplied).toFixed(2)} will be left over for next time.`
                       : ` R ${creditApplied.toFixed(2)} comes off this order; pay the remaining R ${amountDue.toFixed(2)} below.`)}
